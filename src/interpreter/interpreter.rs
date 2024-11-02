@@ -40,7 +40,7 @@ pub fn execute(stmt: &Statement, env: &mut Environment) -> Result<()> {
     match stmt {
         Statement::Assignment(name, exp) => {
             let value = eval(exp, env)?;
-            env.insert(*name.clone(), value);
+            env.insert(name.clone(), value);
         }
         Statement::IfThenElse(cond, stmt_then, stmt_else) => {
             let value = eval(cond, env)?;
@@ -60,7 +60,7 @@ pub fn execute(stmt: &Statement, env: &mut Environment) -> Result<()> {
         Statement::Sequence(s1, s2) => {
             execute(s1, env)?;
             execute(s2, env)?;
-        },
+        }
         _ => bail!("not implemented yet"),
     }
     Ok(())
@@ -175,8 +175,7 @@ mod tests {
     #[test]
     fn execute_assignment() -> Result<()> {
         let mut env = HashMap::new();
-        let assign_stmt =
-            Statement::Assignment(Box::from(String::from("x")), Box::new(Expression::CInt(42)));
+        let assign_stmt = Statement::Assignment(String::from("x"), Box::new(Expression::CInt(42)));
 
         match execute(&assign_stmt, &mut env) {
             Ok(()) => assert_eq!(env.get("x"), Some(&42)),
@@ -246,17 +245,17 @@ mod tests {
          */
         let mut env = HashMap::new();
 
-        let a1 = Statement::Assignment(Box::new(String::from("x")), Box::new(Expression::CInt(10)));
-        let a2 = Statement::Assignment(Box::new(String::from("y")), Box::new(Expression::CInt(0)));
+        let a1 = Statement::Assignment(String::from("x"), Box::new(Expression::CInt(10)));
+        let a2 = Statement::Assignment(String::from("y"), Box::new(Expression::CInt(0)));
         let a3 = Statement::Assignment(
-            Box::new(String::from("y")),
+            String::from("y"),
             Box::new(Expression::Add(
                 Box::new(Expression::Var(String::from("y"))),
                 Box::new(Expression::Var(String::from("x"))),
             )),
         );
         let a4 = Statement::Assignment(
-            Box::new(String::from("x")),
+            String::from("x"),
             Box::new(Expression::Sub(
                 Box::new(Expression::Var(String::from("x"))),
                 Box::new(Expression::CInt(1)),
@@ -296,10 +295,8 @@ mod tests {
         let mut env = HashMap::new();
 
         let condition = Expression::Var(String::from("x"));
-        let then_stmt =
-            Statement::Assignment(Box::new(String::from("y")), Box::new(Expression::CInt(1)));
-        let else_stmt =
-            Statement::Assignment(Box::new(String::from("y")), Box::new(Expression::CInt(0)));
+        let then_stmt = Statement::Assignment(String::from("y"), Box::new(Expression::CInt(1)));
+        let else_stmt = Statement::Assignment(String::from("y"), Box::new(Expression::CInt(0)));
 
         let if_statement = Statement::IfThenElse(
             Box::new(condition),
@@ -307,8 +304,7 @@ mod tests {
             Box::new(else_stmt),
         );
 
-        let setup_stmt =
-            Statement::Assignment(Box::new(String::from("x")), Box::new(Expression::CInt(10)));
+        let setup_stmt = Statement::Assignment(String::from("x"), Box::new(Expression::CInt(10)));
         let program = Statement::Sequence(Box::new(setup_stmt), Box::new(if_statement));
 
         match execute(&program, &mut env) {
@@ -332,17 +328,17 @@ mod tests {
          */
         let mut env = HashMap::new();
 
-        let a1 = Statement::Assignment(Box::new(String::from("x")), Box::new(Expression::CInt(3)));
-        let a2 = Statement::Assignment(Box::new(String::from("y")), Box::new(Expression::CInt(10)));
+        let a1 = Statement::Assignment(String::from("x"), Box::new(Expression::CInt(3)));
+        let a2 = Statement::Assignment(String::from("y"), Box::new(Expression::CInt(10)));
         let a3 = Statement::Assignment(
-            Box::new(String::from("y")),
+            String::from("y"),
             Box::new(Expression::Sub(
                 Box::new(Expression::Var(String::from("y"))),
                 Box::new(Expression::CInt(1)),
             )),
         );
         let a4 = Statement::Assignment(
-            Box::new(String::from("x")),
+            String::from("x"),
             Box::new(Expression::Sub(
                 Box::new(Expression::Var(String::from("x"))),
                 Box::new(Expression::CInt(1)),
@@ -385,9 +381,9 @@ mod tests {
         let mut env = HashMap::new();
 
         let inner_then_stmt =
-            Statement::Assignment(Box::new(String::from("y")), Box::new(Expression::CInt(1)));
+            Statement::Assignment(String::from("y"), Box::new(Expression::CInt(1)));
         let inner_else_stmt =
-            Statement::Assignment(Box::new(String::from("y")), Box::new(Expression::CInt(2)));
+            Statement::Assignment(String::from("y"), Box::new(Expression::CInt(2)));
         let inner_if_statement = Statement::IfThenElse(
             Box::new(Expression::Var(String::from("x"))),
             Box::new(inner_then_stmt),
@@ -395,15 +391,14 @@ mod tests {
         );
 
         let outer_else_stmt =
-            Statement::Assignment(Box::new(String::from("y")), Box::new(Expression::CInt(0)));
+            Statement::Assignment(String::from("y"), Box::new(Expression::CInt(0)));
         let outer_if_statement = Statement::IfThenElse(
             Box::new(Expression::Var(String::from("x"))),
             Box::new(inner_if_statement),
             Box::new(outer_else_stmt),
         );
 
-        let setup_stmt =
-            Statement::Assignment(Box::new(String::from("x")), Box::new(Expression::CInt(10)));
+        let setup_stmt = Statement::Assignment(String::from("x"), Box::new(Expression::CInt(10)));
         let program = Statement::Sequence(Box::new(setup_stmt), Box::new(outer_if_statement));
 
         match execute(&program, &mut env) {
@@ -425,10 +420,10 @@ mod tests {
          */
         let mut env = HashMap::new();
 
-        let a1 = Statement::Assignment(Box::new(String::from("x")), Box::new(Expression::CInt(5)));
-        let a2 = Statement::Assignment(Box::new(String::from("y")), Box::new(Expression::CInt(0)));
+        let a1 = Statement::Assignment(String::from("x"), Box::new(Expression::CInt(5)));
+        let a2 = Statement::Assignment(String::from("y"), Box::new(Expression::CInt(0)));
         let a3 = Statement::Assignment(
-            Box::new(String::from("z")),
+            String::from("z"),
             Box::new(Expression::Add(
                 Box::new(Expression::Mul(
                     Box::new(Expression::CInt(2)),
