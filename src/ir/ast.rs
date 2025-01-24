@@ -1,3 +1,5 @@
+use std::ffi::CString;
+
 pub type Name = String;
 
 #[derive(Debug, PartialEq)]
@@ -50,4 +52,8 @@ pub enum Statement {
     IfThenElse(Box<Expression>, Box<Statement>, Option<Box<Statement>>),
     While(Box<Expression>, Box<Statement>),
     Sequence(Box<Statement>, Box<Statement>),
+    AssertTrue(Box<Expression>, String),
+    AssertFalse(Box<Expression>, String),
+    AssertEQ(Box<Expression>, Box<Expression>, String),
+    AssertNEQ(Box<Expression>, Box<Expression>, String),
 }
