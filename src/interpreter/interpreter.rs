@@ -356,6 +356,13 @@ pub fn execute(stmt: Statement, env: Environment) -> Result<Environment, ErrorMe
             }
         }
 
+        Statement::AssertFails(error) => {
+            match error {
+                Expression::CString(msg) => Err(msg),
+                _ => Err(String::from("Test failed."))
+            }
+        }
+
         Statement::Sequence(s1, s2) => execute(*s1, env).and_then(|new_env| execute(*s2, new_env)),
         _ => Err(String::from("not implemented yet")),
     }
@@ -646,6 +653,16 @@ mod tests {
         match execute(func_teste, env) {
             Ok(_) => {}
             Err(s) => assert_eq!(s, str_erro),
+        }
+    }
+    #[test]
+    fn eval_fails() {
+        let env = HashMap::new();
+        let error_msg: String = String::from("Test failed.");
+        let test_fn = AssertFails(error_msg);
+
+        match execute(test_fn, env) {
+            Err(s) => assert!(false, "{}", s),
         }
     }
     #[test]

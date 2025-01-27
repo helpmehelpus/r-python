@@ -56,4 +56,5 @@ pub enum Statement {
     AssertFalse(Box<Expression>, String),
     AssertEQ(Box<Expression>, Box<Expression>, String),
     AssertNEQ(Box<Expression>, Box<Expression>, String),
+    AssertFails(String),
 }
