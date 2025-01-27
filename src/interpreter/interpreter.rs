@@ -629,7 +629,7 @@ mod tests {
     }
     #[test]
     fn eval_assert_eq() {
-        let n1 = Box::new(CReal(4.0));
+        let n1 = Box::new(CReal(4.5));
         let n2 = Box::new(CInt(4));
         let str_erro: String = String::from("Different values");
         let func_teste = AssertEQ(n1, n2, str_erro);
@@ -641,11 +641,11 @@ mod tests {
     }
 
     #[test]
-    fn eval_fail_assert_neq() {
+    fn eval_fail_assert_eq() {
         let n1 = Box::new(CReal(4.5));
         let n2 = Box::new(CInt(4));
-        let str_erro: String = String::from("Equal values");
-        let func_teste = AssertNEQ(n1, n2, str_erro.clone());
+        let str_erro: String = String::from("Different values");
+        let func_teste = AssertEQ(n1, n2, str_erro.clone());
         let env = HashMap::new();
         match execute(func_teste, env) {
             Ok(_) => {}
