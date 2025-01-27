@@ -357,10 +357,7 @@ pub fn execute(stmt: Statement, env: Environment) -> Result<Environment, ErrorMe
         }
 
         Statement::AssertFails(error) => {
-            match error {
-                Expression::CString(msg) => Err(msg),
-                _ => Err(String::from("Test failed."))
-            }
+            Err(error)
         }
 
         Statement::Sequence(s1, s2) => execute(*s1, env).and_then(|new_env| execute(*s2, new_env)),
