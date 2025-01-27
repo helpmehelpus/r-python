@@ -318,7 +318,7 @@ pub fn execute(stmt: Statement, env: Environment) -> Result<Environment, ErrorMe
             match value {
                 Expression::CTrue => Ok(env),
                 Expression::CFalse => Err(error),
-                _ => Err(String::from("expecting a boolean value."))
+                _ => Err(String::from("expecting a boolean value.")),
             }
         }
 
@@ -327,25 +327,32 @@ pub fn execute(stmt: Statement, env: Environment) -> Result<Environment, ErrorMe
             match value {
                 Expression::CFalse => Ok(env),
                 Expression::CTrue => Err(error),
-                _ => Err(String::from("expecting a boolean value."))
+                _ => Err(String::from("expecting a boolean value.")),
             }
         }
 
-       Statement::AssertEQ(value1, value2,error )=>{
-            let value = eq(*value1, *value2, &env)?;
-            match value {
-                Expression:: CTrue=> Ok(env),
-                Expression ::CFalse=> Err(error),
-                _ => Err(String::from("arguments are not of the same type")) 
-            }
-       }
+        Statement::AssertEQ(value1, value2, error) => {
 
-       Statement::AssertNEQ(value1, value2,error )=>{
-            let value=eq(*value1,*value2, &env)?;
-            match value {
-                Expression:: CFalse=> Ok(env),
-                Expression ::CTrue=> Err(error),
-                _ => Err(String::from("arguments are not of the same type")) 
+            match execute(
+                Statement::AssertTrue(
+                    Box::new(eq(*value1, *value2, &env)?), error),
+                env,
+            ) {
+                Ok(new_env) => Ok(new_env),
+                Err(err) => Err(err),
+                _ => Err(String::from("arguments are not of the same type")),
+            }
+        }
+
+        Statement::AssertNEQ(value1, value2, error) => {
+            match execute(
+                Statement::AssertFalse(
+                    Box::new(eq(*value1, *value2, &env)?), error),
+                env,
+            ) {
+                Ok(new_env) => Ok(new_env),
+                Err(err) => Err(err),
+                _ => Err(String::from("arguments are not of the same type")),
             }
         }
 
@@ -482,7 +489,6 @@ mod tests {
         let div1 = Div(Box::new(c21), Box::new(c3));
         assert_eq!(eval(div1, &env), Ok(CInt(7)));
     }
-
     #[test]
     fn eval_div_expression4() {
         let env = HashMap::new();
@@ -596,49 +602,58 @@ mod tests {
             Err(s) => assert!(false, "{}", s),
         }
     }
-    
+
     #[test]
-    fn eval_assert_true(){
+    fn eval_assert_true() {
         //let lb= Box::new (CTrue);
         //let rb= Box::new(CFalse);
-        let n1 = Box::new(CInt(3));
-        let n2: Box<Expression>= Box::new(CInt(4));
-        let armt = Box::new(EQ(n1,n2)); 
+        let n1 = Box::new(CInt(4));
+        let n2: Box<Expression> = Box::new(CInt(4));
+        let armt = Box::new(EQ(n1, n2));
         let str_erro: String = String::from("Nao foi");
         let env = HashMap::new();
         let func_teste = AssertTrue(armt, str_erro);
-        match execute (func_teste, env){
-            Ok(_) => {
-            }
+        match execute(func_teste, env) {
+            Ok(_) => {}
             Err(s) => assert!(false, "{}", s),
-        } 
+        }
     }
 
     #[test]
-    fn eval_assert_false(){
-        let verdade = Box:: new (CFalse);
+    fn eval_assert_false() {
+        let verdade = Box::new(CFalse);
         let str_erro = String::from("Nao foi");
         let func_teste = AssertFalse(verdade, str_erro);
         let env = HashMap::new();
-        match execute (func_teste, env){
-            Ok(_) => {
-            }
+        match execute(func_teste, env) {
+            Ok(_) => {}
             Err(s) => assert!(false, "{}", s),
-        } 
+        }
     }
     #[test]
-    fn eval_assert_eq(){
-        let n1 = Box::new(CReal(4.5));
-        let n2= Box::new(CInt(4));
+    fn eval_assert_eq() {
+        let n1 = Box::new(CReal(4.0));
+        let n2 = Box::new(CInt(4));
         let str_erro: String = String::from("Different values");
         let func_teste = AssertEQ(n1, n2, str_erro);
         let env = HashMap::new();
-        match execute (func_teste, env){
-            Ok(_) => {
-            }
+        match execute(func_teste, env) {
+            Ok(_) => {}
             Err(s) => assert!(false, "{}", s),
-        } 
+        }
+    }
 
+    #[test]
+    fn eval_fail_assert_eq() {
+        let n1 = Box::new(CReal(4.5));
+        let n2 = Box::new(CInt(4));
+        let str_erro: String = String::from("Different values");
+        let func_teste = AssertEQ(n1, n2, str_erro.clone());
+        let env = HashMap::new();
+        match execute(func_teste, env) {
+            Ok(_) => {}
+            Err(s) => assert_eq!(s, str_erro),
+        }
     }
     #[test]
     fn eval_fails() {
