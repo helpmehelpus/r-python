@@ -605,11 +605,12 @@ mod tests {
         //let lb= Box::new (CTrue);
         //let rb= Box::new(CFalse);
         let n1 = Box::new(CInt(4));
-        let n2: Box<Expression> = Box::new(CInt(4));
+        let n2: Box<Expression> = Box::new(CReal(0.54));
         let armt = Box::new(EQ(n1, n2));
-        let str_erro: String = String::from("Nao foi");
+        let str_erro: String = String::from("It didn't go");
         let env = HashMap::new();
-        let func_teste = AssertTrue(armt, str_erro);
+        let str = Box:: new(CString(String::from("")));
+        let func_teste = AssertTrue(str, str_erro);
         match execute(func_teste, env) {
             Ok(_) => {}
             Err(s) => assert!(false, "{}", s),
@@ -649,7 +650,20 @@ mod tests {
         let env = HashMap::new();
         match execute(func_teste, env) {
             Ok(_) => {}
-            Err(s) => assert_eq!(s, str_erro),
+            Err(s) => assert!(false, "{}", s),
+        }
+    }
+
+    #[test]
+    fn eval_assert_neq() {
+        let n1 = Box::new(CReal(4.0));
+        let n2 = Box::new(CString(String::from("Teste")));
+        let str_erro: String = String::from("Equal values");
+        let func_teste = AssertNEQ(n1, n2, str_erro);
+        let env = HashMap::new();
+        match execute(func_teste, env) {
+            Ok(_) => {}
+            Err(s) => assert!(false, "{}", s),
         }
     }
     #[test]
