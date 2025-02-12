@@ -1,4 +1,4 @@
-use std::{collections::HashMap, hash::Hash};
+use std::{collections::HashMap, collections::HashSet};
 
 use crate::ir::ast::{Expression, Name, Statement};
 
@@ -312,7 +312,8 @@ pub fn execute(
             let mut new_env = env;
             let mut new_test_env = test_env;
             while value == Expression::CTrue {
-                (new_env, new_test_env) = execute(*stmt.clone(), new_env.clone(), new_test_env.clone())?;
+                (new_env, new_test_env) =
+                    execute(*stmt.clone(), new_env.clone(), new_test_env.clone())?;
                 value = eval(*cond.clone(), &new_env.clone())?;
             }
 
@@ -376,9 +377,24 @@ pub fn execute(
     }
 }
 
-// pub fn execute_tests(){
+pub fn run_tests(
+    tests_to_be_exec: Vec<String>,
+    test_env: TestEnvironment,
+) -> HashSet<(String, String, Option<String>)> {
+    let mut results: HashSet<(String, String, Option<String>)> = HashSet::new();
+    let env = HashMap::new();
 
-// }
+    for test_name in tests_to_be_exec {
+        let statement = test_env.get(&test_name).unwrap().clone();
+
+        let result = match execute(*statement, env.clone(), test_env.clone()) {
+            Ok(_) => ("Passou".to_string(), None),
+            Err(e) => ("Falhou".to_string(), Some(format!("Erro: {}", e))),
+        };
+        results.insert((test_name, result.0, result.1));
+    }
+    results
+}
 #[cfg(test)]
 mod tests {
 
