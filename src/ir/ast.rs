@@ -56,5 +56,6 @@ pub enum Statement {
     AssertFalse(Box<Expression>, String),
     AssertEQ(Box<Expression>, Box<Expression>, String),
     AssertNEQ(Box<Expression>, Box<Expression>, String),
+    ModTestDef(Name, Box<Statement>),
     AssertFails(String),
 }
