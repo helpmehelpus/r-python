@@ -74,6 +74,67 @@ pub fn execute(stmt: Statement, env: &Environment<EnvValue>) -> Result<ControlFl
                 }
             }
         }
+        Statement::AssertTrue(cond, error) => {
+            let value = eval(*cond, &env)?;
+            match value {
+                EnvValue::Exp(Expression::CTrue) => Ok(ControlFlow::Return(value)),
+                EnvValue::Exp(Expression::CFalse) => Err(error),
+                _ => Err(String::from("expecting a boolean value.")),
+            }
+        }
+
+        Statement::AssertFalse(cond, error) => {
+            let value = eval(*cond, &env)?;
+            match value {
+                EnvValue::Exp(Expression::CFalse) => Ok(ControlFlow::Return(value)),
+                EnvValue::Exp(Expression::CTrue) => Err(error),
+                _ => Err(String::from("expecting a boolean value.")),
+            }
+        }
+
+        Statement::AssertEQ(value1, value2, error) => {
+            match execute(
+                Statement::AssertTrue(
+                    Box::new(match eq(*value1, *value2, &env)? {
+                        EnvValue::Exp(Expression::CTrue) => Expression::CTrue,
+                        EnvValue::Exp(Expression::CFalse) => Expression::CFalse,
+                        _ => return Err(String::from("")),
+                    }),
+                    error,
+                ),
+                env,
+            ) {
+                Ok(ControlFlow::Return(value)) => Ok(ControlFlow::Return(value)),
+                Err(err) => Err(err),
+                _ => Err(String::from("arguments are not of the same type")),
+            }
+        }
+
+        Statement::AssertNEQ(value1, value2, error) => {
+            match execute(
+                Statement::AssertFalse(
+                    Box::new(match eq(*value1, *value2, &env)? {
+                        EnvValue::Exp(Expression::CTrue) => Expression::CTrue,
+                        EnvValue::Exp(Expression::CFalse) => Expression::CFalse,
+                        _ => return Err(String::from("")),
+                    }),
+                    error,
+                ),
+                env,
+            ) {
+                Ok(ControlFlow::Return(value)) => Ok(ControlFlow::Return(value)),
+                Err(err) => Err(err),
+                _ => Err(String::from("arguments are not of the same type")),
+            }
+        }
+
+        Statement::AssertFails(error) => Err(error),
+
+        // Statement::ModTestDef(name, stmt) => {
+
+        //     new_test_env.insert(name, stmt);
+        //     Ok(env)
+        // }
         Statement::Sequence(s1, s2) => match execute(*s1, &new_env)? {
             ControlFlow::Continue(control_env) => {
                 new_env = control_env;
@@ -753,7 +814,7 @@ mod tests {
         let str_erro: String = String::from("Different values");
         let func_teste = AssertEQ(n1, n2, str_erro);
         let env: Environment<EnvValue> = Environment::new();
-        
+
         match execute(func_teste, &env) {
             Ok(_) => {}
             Err(s) => assert!(false, "{}", s),
@@ -781,7 +842,7 @@ mod tests {
         let str_erro: String = String::from("Equal values");
         let func_teste = AssertNEQ(n1, n2, str_erro.clone());
         let env: Environment<EnvValue> = Environment::new();
-  
+
         match execute(func_teste, &env) {
             Ok(_) => {}
             Err(s) => assert_eq!(s, str_erro),
@@ -792,7 +853,7 @@ mod tests {
         let env: Environment<EnvValue> = Environment::new();
         let error_msg: String = String::from("Test failed.");
         let test_fn = AssertFails(error_msg.clone());
-    
+
         match execute(test_fn, &env) {
             Ok(_) => {}
             Err(s) => assert_eq!(s, error_msg),
