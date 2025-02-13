@@ -753,7 +753,7 @@ mod tests {
         let str_erro: String = String::from("Different values");
         let func_teste = AssertEQ(n1, n2, str_erro);
         let env: Environment<EnvValue> = Environment::new();
-
+        
         match execute(func_teste, &env) {
             Ok(_) => {}
             Err(s) => assert!(false, "{}", s),
@@ -781,7 +781,7 @@ mod tests {
         let str_erro: String = String::from("Equal values");
         let func_teste = AssertNEQ(n1, n2, str_erro.clone());
         let env: Environment<EnvValue> = Environment::new();
-
+  
         match execute(func_teste, &env) {
             Ok(_) => {}
             Err(s) => assert_eq!(s, str_erro),
@@ -792,7 +792,7 @@ mod tests {
         let env: Environment<EnvValue> = Environment::new();
         let error_msg: String = String::from("Test failed.");
         let test_fn = AssertFails(error_msg.clone());
-
+    
         match execute(test_fn, &env) {
             Ok(_) => {}
             Err(s) => assert_eq!(s, error_msg),
