@@ -29,7 +29,6 @@ pub enum Expression {
     Sub(Box<Expression>, Box<Expression>),
     Mul(Box<Expression>, Box<Expression>),
     Div(Box<Expression>, Box<Expression>),
-    Rmd(Box<Expression>, Box<Expression>),
 
     /* boolean expressions over booleans */
     And(Box<Expression>, Box<Expression>),
@@ -46,9 +45,9 @@ pub enum Expression {
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Statement {
-    VarDeclaration(Name),
-    ValDeclaration(Name),
-    Assignment(Name, Box<Expression>),
+    VarDeclaration(Box<Name>),
+    ValDeclaration(Box<Name>),
+    Assignment(Box<Name>, Box<Expression>),
     IfThenElse(Box<Expression>, Box<Statement>, Option<Box<Statement>>),
     While(Box<Expression>, Box<Statement>),
     Sequence(Box<Statement>, Box<Statement>),

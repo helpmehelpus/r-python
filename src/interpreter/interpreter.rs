@@ -1,6 +1,8 @@
 use std::{collections::HashMap, collections::HashSet};
 
-use crate::ir::ast::{Expression, Name, Statement};
+use crate::ir::ast::Expression;
+use crate::ir::ast::Name;
+use crate::ir::ast::Statement;
 
 type ErrorMessage = String;
 
@@ -13,7 +15,6 @@ pub fn eval(exp: Expression, env: &Environment) -> Result<Expression, ErrorMessa
         Expression::Sub(lhs, rhs) => sub(*lhs, *rhs, env),
         Expression::Mul(lhs, rhs) => mul(*lhs, *rhs, env),
         Expression::Div(lhs, rhs) => div(*lhs, *rhs, env),
-        Expression::Rmd(lhs, rhs) => rmd(*lhs, *rhs, env),
         Expression::And(lhs, rhs) => and(*lhs, *rhs, env),
         Expression::Or(lhs, rhs) => or(*lhs, *rhs, env),
         Expression::Not(lhs) => not(*lhs, env),
@@ -110,15 +111,6 @@ fn div(lhs: Expression, rhs: Expression, env: &Environment) -> Result<Expression
     )
 }
 
-fn rmd(lhs: Expression, rhs: Expression, env: &Environment) -> Result<Expression, ErrorMessage> {
-    eval_binary_arith_op(
-        lhs,
-        rhs,
-        env,
-        |a, b| a % b,
-        "Remainder operation '(%)' is only defined for numbers (integers and real).",
-    )
-}
 /* Boolean Expressions */
 fn eval_binary_boolean_op<F>(
     lhs: Expression,
@@ -293,8 +285,8 @@ pub fn execute(
         Statement::Assignment(name, exp) => {
             let value = eval(*exp, &env)?;
             let mut new_env = env;
-            new_env.insert(name.clone(), value);
-            Ok((new_env.clone(), test_env))
+            new_env.insert(*name.clone(), value);
+            Ok(new_env.clone())
         }
         Statement::IfThenElse(cond, stmt_then, stmt_else) => {
             let value = eval(*cond, &env)?;
@@ -310,14 +302,29 @@ pub fn execute(
         Statement::While(cond, stmt) => {
             let mut value = eval(*cond.clone(), &env)?;
             let mut new_env = env;
-            let mut new_test_env = test_env;
-            while value == Expression::CTrue {
-                (new_env, new_test_env) =
-                    execute(*stmt.clone(), new_env.clone(), new_test_env.clone())?;
-                value = eval(*cond.clone(), &new_env.clone())?;
-            }
 
-            Ok((new_env, new_test_env))
+            match (value) {
+                Expression::CTrue => {
+                    while value == Expression::CTrue {
+                        new_env = execute(*stmt.clone(), new_env.clone())?;
+                        value = eval(*cond.clone(), &new_env.clone())?;
+                    }
+                }
+                Expression::CReal(_) => {
+                    while value != Expression::CReal(0.0) {
+                        new_env = execute(*stmt.clone(), new_env.clone())?;
+                        value = eval(*cond.clone(), &new_env.clone())?;
+                    }
+                }
+                Expression::CInt(_) => {
+                    while value != Expression::CInt(0) {
+                        new_env = execute(*stmt.clone(), new_env.clone())?;
+                        value = eval(*cond.clone(), &new_env.clone())?;
+                    }
+                }
+                _ => {}
+            }
+            Ok(new_env)
         }
 
         Statement::AssertTrue(cond, error) => {
@@ -397,10 +404,6 @@ pub fn run_tests(
 }
 #[cfg(test)]
 mod tests {
-
-    use std::ffi::CString;
-    use std::ops::Add;
-
     use super::*;
     use crate::ir::ast::Expression::*;
     use crate::ir::ast::Statement::*;
@@ -573,8 +576,7 @@ mod tests {
     #[test]
     fn execute_assignment() {
         let env = HashMap::new();
-        let test_env = HashMap::new();
-        let assign_stmt = Assignment(String::from("x"), Box::new(CInt(42)));
+        let assign_stmt = Assignment(Box::from(String::from("x")), Box::new(CInt(42)));
 
         match execute(assign_stmt, env, test_env) {
             Ok((new_env, _)) => assert_eq!(new_env.get("x"), Some(&CInt(42))),
@@ -599,29 +601,29 @@ mod tests {
         let env = HashMap::new();
         let test_env = HashMap::new();
 
-        let a1: Statement = Assignment(String::from("x"), Box::new(CInt(10)));
-        let a2 = Assignment(String::from("y"), Box::new(CInt(0)));
-        let a3 = Assignment(
-            String::from("y"),
+        let a1 = Statement::Assignment(Box::new(String::from("x")), Box::new(CInt(10)));
+        let a2 = Statement::Assignment(Box::new(String::from("y")), Box::new(CInt(0)));
+        let a3 = Statement::Assignment(
+            Box::new(String::from("y")),
             Box::new(Add(
                 Box::new(Var(String::from("y"))),
                 Box::new(Var(String::from("x"))),
             )),
         );
-        let a4 = Assignment(
-            String::from("x"),
+        let a4 = Statement::Assignment(
+            Box::new(String::from("x")),
             Box::new(Sub(Box::new(Var(String::from("x"))), Box::new(CInt(1)))),
         );
 
-        let seq1 = Sequence(Box::new(a3), Box::new(a4));
+        let seq1 = Statement::Sequence(Box::new(a3), Box::new(a4));
 
-        let while_statement = While(
+        let while_statement = Statement::While(
             Box::new(GT(Box::new(Var(String::from("x"))), Box::new(CInt(0)))),
             Box::new(seq1),
         );
 
-        let seq2 = Sequence(Box::new(a2), Box::new(while_statement));
-        let program = Sequence(Box::new(a1), Box::new(seq2));
+        let seq2 = Statement::Sequence(Box::new(a2), Box::new(while_statement));
+        let program = Statement::Sequence(Box::new(a1), Box::new(seq2));
 
         match execute(program, env, test_env) {
             Ok((new_env, _)) => {
@@ -729,17 +731,17 @@ mod tests {
         let env = HashMap::new();
         let test_env = HashMap::new();
         let condition = GT(Box::new(Var(String::from("x"))), Box::new(CInt(5)));
-        let then_stmt = Assignment(String::from("y"), Box::new(CInt(1)));
-        let else_stmt = Assignment(String::from("y"), Box::new(CInt(0)));
+        let then_stmt = Statement::Assignment(Box::new(String::from("y")), Box::new(CInt(1)));
+        let else_stmt = Statement::Assignment(Box::new(String::from("y")), Box::new(CInt(0)));
 
-        let if_statement = IfThenElse(
+        let if_statement = Statement::IfThenElse(
             Box::new(condition),
             Box::new(then_stmt),
             Some(Box::new(else_stmt)),
         );
 
-        let setup_stmt = Assignment(String::from("x"), Box::new(CInt(10)));
-        let program = Sequence(Box::new(setup_stmt), Box::new(if_statement));
+        let setup_stmt = Statement::Assignment(Box::new(String::from("x")), Box::new(CInt(10)));
+        let program = Statement::Sequence(Box::new(setup_stmt), Box::new(if_statement));
 
         match execute(program, env, test_env) {
             Ok((new_env, _)) => assert_eq!(new_env.get("y"), Some(&CInt(1))),
@@ -767,19 +769,19 @@ mod tests {
         let env = HashMap::new();
         let test_env = HashMap::new();
         let second_condition = LT(Box::new(Var(String::from("x"))), Box::new(CInt(0)));
-        let second_then_stmt = Assignment(String::from("y"), Box::new(CInt(5)));
+        let second_then_stmt = Assignment(Box::new(String::from("y")), Box::new(CInt(5)));
 
         let second_if_stmt =
             IfThenElse(Box::new(second_condition), Box::new(second_then_stmt), None);
 
-        let else_setup_stmt = Assignment(String::from("y"), Box::new(CInt(2)));
+        let else_setup_stmt = Assignment(Box::new(String::from("y")), Box::new(CInt(2)));
         let else_stmt = Sequence(Box::new(else_setup_stmt), Box::new(second_if_stmt));
 
         let first_condition = EQ(
             Box::new(Var(String::from("x"))),
             Box::new(Var(String::from("y"))),
         );
-        let first_then_stmt = Assignment(String::from("y"), Box::new(CInt(1)));
+        let first_then_stmt = Assignment(Box::new(String::from("y")), Box::new(CInt(1)));
 
         let first_if_stmt = IfThenElse(
             Box::new(first_condition),
@@ -787,114 +789,14 @@ mod tests {
             Some(Box::new(else_stmt)),
         );
 
-        let second_assignment = Assignment(String::from("y"), Box::new(CInt(0)));
+        let second_assignment = Assignment(Box::new(String::from("y")), Box::new(CInt(0)));
         let setup_stmt = Sequence(Box::new(second_assignment), Box::new(first_if_stmt));
 
-        let first_assignment = Assignment(String::from("x"), Box::new(CInt(1)));
+        let first_assignment = Assignment(Box::new(String::from("x")), Box::new(CInt(1)));
         let program = Sequence(Box::new(first_assignment), Box::new(setup_stmt));
 
         match execute(program, env, test_env) {
             Ok((new_env, _)) => assert_eq!(new_env.get("y"), Some(&CInt(2))),
-            Err(s) => assert!(false, "{}", s),
-        }
-    }
-
-    #[test]
-    fn eval_while_using_rmd() {
-        /*
-         *   Test for remainder operator using while
-         *
-         *   x = 1
-         *   y = 1800
-         *   z = 0
-         *   while x*x <= y:
-         *       if y % x == 0:
-         *           if x % 2 == 0:
-         *               z = z + 1
-         *           if (y / x) % 2 == 0:
-         *               z = z + 1
-         *       x = x + 1
-         *
-         *   After processing 'x' must be 43
-         *   and 'z' must be 27
-         */
-
-        let env = HashMap::new();
-        let test_env = HashMap::new();
-        let a1 = Assignment(String::from("x"), Box::new(CInt(1)));
-        let a2 = Assignment(String::from("y"), Box::new(CInt(1800)));
-        let a3 = Assignment(String::from("z"), Box::new(CInt(0)));
-        let a4 = Assignment(
-            String::from("z"),
-            Box::new(Add(Box::new(Var(String::from("z"))), Box::new(CInt(1)))),
-        );
-        let a5 = Assignment(
-            String::from("z"),
-            Box::new(Add(Box::new(Var(String::from("z"))), Box::new(CInt(1)))),
-        );
-        let a6 = Assignment(
-            String::from("x"),
-            Box::new(Add(Box::new(Var(String::from("x"))), Box::new(CInt(1)))),
-        );
-
-        let if_statement1 = IfThenElse(
-            Box::new(EQ(
-                Box::new(Rmd(Box::new(Var(String::from("x"))), Box::new(CInt(2)))),
-                Box::new(CInt(0)),
-            )),
-            Box::new(a4),
-            None,
-        );
-        let if_statement2 = IfThenElse(
-            Box::new(EQ(
-                Box::new(Rmd(
-                    Box::new(Div(
-                        Box::new(Var(String::from("y"))),
-                        Box::new(Var(String::from("x"))),
-                    )),
-                    Box::new(CInt(2)),
-                )),
-                Box::new(CInt(0)),
-            )),
-            Box::new(a5),
-            None,
-        );
-
-        let seq = Sequence(Box::new(if_statement1), Box::new(if_statement2));
-        let if_statement = IfThenElse(
-            Box::new(EQ(
-                Box::new(Rmd(
-                    Box::new(Var(String::from("y"))),
-                    Box::new(Var(String::from("x"))),
-                )),
-                Box::new(CInt(0)),
-            )),
-            Box::new(seq),
-            None,
-        );
-
-        let seq1 = Sequence(Box::new(if_statement), Box::new(a6));
-
-        let while_statement = While(
-            Box::new(LTE(
-                Box::new(Mul(
-                    Box::new(Var(String::from("x"))),
-                    Box::new(Var(String::from("x"))),
-                )),
-                Box::new(Var(String::from("y"))),
-            )),
-            Box::new(seq1),
-        );
-
-        let seq2 = Sequence(Box::new(Sequence(Box::new(a1), Box::new(a2))), Box::new(a3));
-
-        let program = Sequence(Box::new(seq2), Box::new(while_statement));
-
-        match execute(program, env, test_env) {
-            Ok((new_env, _)) => {
-                assert_eq!(new_env.get("x"), Some(&CInt(43)));
-                assert_eq!(new_env.get("z"), Some(&CInt(27)));
-            }
             Err(s) => assert!(false, "{}", s),
         }
     }
@@ -905,93 +807,50 @@ mod tests {
          *   Test for more complex while statement
          *
          *   x = 1
-         *   y = 16
-         *   z = 16
-         *   a = 0
-         *   while x <= y && a*a != z:
-         *       m = (x + y) / 2
-         *       if m*m <= z:
-         *          a = m
-         *          x = mid + 1
-         *       else:
-         *          y = mid - 1
+         *   y = 1.0
+         *   while x <= 10:
+         *       if x == 10:
+         *           y = y / 1024
+         *       x = x + 1
          *
-         *   After executing this program, 'x' must be 5,
-         *   'y' must be 7 and 'a' must be 4
+         *   After executing this program, 'x' must be 11
+         *   and 'y' must be 0.0009765625
          */
 
         let env = HashMap::new();
-        let test_env = HashMap::new();
-        let a1 = Assignment(String::from("x"), Box::new(CInt(1)));
-        let a2 = Assignment(String::from("y"), Box::new(CInt(16)));
-        let a3 = Assignment(String::from("z"), Box::new(CInt(16)));
-        let a4 = Assignment(String::from("a"), Box::new(CInt(0)));
-        let a5 = Assignment(
-            String::from("m"),
-            Box::new(Div(
-                Box::new(Add(
-                    Box::new(Var(String::from("x"))),
-                    Box::new(Var(String::from("y"))),
-                )),
-                Box::new(CInt(2)),
-            )),
-        );
-        let a6 = Assignment(String::from("a"), Box::new(Var(String::from("m"))));
-        let a7 = Assignment(
-            String::from("x"),
-            Box::new(Add(Box::new(Var(String::from("m"))), Box::new(CInt(1)))),
-        );
-        let a8 = Assignment(
-            String::from("y"),
-            Box::new(Sub(Box::new(Var(String::from("m"))), Box::new(CInt(1)))),
-        );
 
-        let seq = Sequence(Box::new(a6), Box::new(a7));
+        let a1 = Assignment(Box::new(String::from("x")), Box::new(CInt(1)));
+        let a2 = Assignment(Box::new(String::from("y")), Box::new(CReal(1.0)));
+        let a3 = Assignment(
+            Box::new(String::from("y")),
+            Box::new(Div(Box::new(Var(String::from("y"))), Box::new(CInt(1024)))),
+        );
+        let a4 = Assignment(
+            Box::new(String::from("x")),
+            Box::new(Add(Box::new(Var(String::from("x"))), Box::new(CInt(1)))),
+        );
 
         let if_statement: Statement = IfThenElse(
-            Box::new(LTE(
-                Box::new(Mul(
-                    Box::new(Var(String::from("m"))),
-                    Box::new(Var(String::from("m"))),
-                )),
-                Box::new(Var(String::from("z"))),
-            )),
-            Box::new(seq),
-            Some(Box::new(a8)),
+            Box::new(EQ(Box::new(Var(String::from("x"))), Box::new(CInt(10)))),
+            Box::new(a3),
+            None,
         );
+
+        let seq_in_while = Sequence(Box::new(if_statement), Box::new(a4));
 
         let while_statement = While(
-            Box::new(And(
-                Box::new(LTE(
-                    Box::new(Var(String::from("x"))),
-                    Box::new(Var(String::from("y"))),
-                )),
-                Box::new(Not(Box::new(EQ(
-                    Box::new(Mul(
-                        Box::new(Var(String::from("a"))),
-                        Box::new(Var(String::from("a"))),
-                    )),
-                    Box::new(Var(String::from("z"))),
-                )))),
-            )),
-            Box::new(Sequence(Box::new(a5), Box::new(if_statement))),
+            Box::new(LTE(Box::new(Var(String::from("x"))), Box::new(CInt(10)))),
+            Box::new(seq_in_while),
         );
 
-        let seq1 = Sequence(
-            Box::new(a1),
-            Box::new(Sequence(
-                Box::new(a2),
-                Box::new(Sequence(Box::new(a3), Box::new(a4))),
-            )),
-        );
+        let seq = Sequence(Box::new(a1), Box::new(a2));
 
-        let program = Sequence(Box::new(seq1), Box::new(while_statement));
+        let program = Sequence(Box::new(seq), Box::new(while_statement));
 
-        match execute(program, env, test_env) {
-            Ok((new_env, _)) => {
-                assert_eq!(new_env.get("x"), Some(&CInt(5)));
-                assert_eq!(new_env.get("y"), Some(&CInt(7)));
-                assert_eq!(new_env.get("a"), Some(&CInt(4)));
+        match execute(program, env) {
+            Ok(new_env) => {
+                assert_eq!(new_env.get("x"), Some(&CInt(11)));
+                assert_eq!(new_env.get("y"), Some(&CReal(0.0009765625)));
             }
             Err(s) => assert!(false, "{}", s),
         }
@@ -1014,12 +873,11 @@ mod tests {
          */
 
         let env = HashMap::new();
-        let test_env = HashMap::new();
-        let a1 = Assignment(String::from("x"), Box::new(CTrue));
-        let a2 = Assignment(String::from("y"), Box::new(CInt(1)));
-        let a3 = Assignment(String::from("x"), Box::new(CFalse));
+        let a1 = Assignment(Box::new(String::from("x")), Box::new(CTrue));
+        let a2 = Assignment(Box::new(String::from("y")), Box::new(CInt(1)));
+        let a3 = Assignment(Box::new(String::from("x")), Box::new(CFalse));
         let a4 = Assignment(
-            String::from("y"),
+            Box::new(String::from("y")),
             Box::new(Mul(Box::new(Var(String::from("y"))), Box::new(CInt(2)))),
         );
 
@@ -1050,52 +908,76 @@ mod tests {
             Err(s) => assert!(false, "{}", s),
         }
     }
+    #[test]
+    fn eval_while_loop_decrement() {
+        /*
+         * Test for while loop that decrements a variable
+         *
+         * > x = 3
+         * > y = 10
+         * > while x:
+         * >   y = y - 1
+         * >   x = x - 1
+         *
+         * After executing, 'y' should be 7 and 'x' should be 0.
+         */
+        let env = HashMap::new();
 
-    // #[test]
-    // fn eval_while_loop_decrement() {
-    //     /*
-    //      * Test for while loop that decrements a variable
-    //      *
-    //      * > x = 3
-    //      * > y = 10
-    //      * > while x:
-    //      * >   y = y - 1
-    //      * >   x = x - 1
-    //      *
-    //      * After executing, 'y' should be 7 and 'x' should be 0.
-    //      */
-    //     let env = HashMap::new();
+        let a1 = Statement::Assignment(Box::new(String::from("x")), Box::new(CInt(3)));
+        let a2 = Statement::Assignment(Box::new(String::from("y")), Box::new(CInt(10)));
+        let a3 = Statement::Assignment(
+            Box::new(String::from("y")),
+            Box::new(Sub(Box::new(Var(String::from("y"))), Box::new(CInt(1)))),
+        );
+        let a4 = Statement::Assignment(
+            Box::new(String::from("x")),
+            Box::new(Sub(Box::new(Var(String::from("x"))), Box::new(CInt(1)))),
+        );
 
-    //     let a1 = Statement::Assignment(Box::new(String::from("x")), Box::new(CInt(3)));
-    //     let a2 = Statement::Assignment(Box::new(String::from("y")), Box::new(CInt(10)));
-    //     let a3 = Statement::Assignment(
-    //         Box::new(String::from("y")),
-    //         Box::new(Sub(Box::new(Var(String::from("y"))), Box::new(CInt(1)))),
-    //     );
-    //     let a4 = Statement::Assignment(
-    //         Box::new(String::from("x")),
-    //         Box::new(Sub(
-    //             Box::new(Var(String::from("x"))),
-    //             Box::new(CInt(1)),
-    //         )),
-    //     );
+        let seq1 = Statement::Sequence(Box::new(a3), Box::new(a4));
+        let while_statement = Statement::While(Box::new(Var(String::from("x"))), Box::new(seq1));
+        let program = Statement::Sequence(
+            Box::new(a1),
+            Box::new(Statement::Sequence(Box::new(a2), Box::new(while_statement))),
+        );
 
-    //     let seq1 = Statement::Sequence(Box::new(a3), Box::new(a4));
-    //     let while_statement =
-    //         Statement::While(Box::new(Var(String::from("x"))), Box::new(seq1));
-    //     let program = Statement::Sequence(
-    //         Box::new(a1),
-    //         Box::new(Sequence(Box::new(a2), Box::new(while_statement))),
-    //     );
+        match execute(program, env) {
+            Ok(new_env) => {
+                assert_eq!(new_env.get("y"), Some(&CInt(7)));
+                assert_eq!(new_env.get("x"), Some(&CInt(0)));
+            }
+            Err(s) => assert!(false, "{}", s),
+        }
+    }
 
-    //     match execute(program, env) {
-    //         Ok(new_env) => {
-    //             assert_eq!(new_env.get("y"), Some(&CInt(7)));
-    //             assert_eq!(new_env.get("x"), Some(&CInt(0)));
-    //         }
-    //         Err(s) => assert!(false, "{}", s),
-    //     }
-    // }
+    #[test]
+    fn eval_while_decrements_creal() {
+        /*
+         *   Test for while loop decrementing a real variable
+         *
+         *   x = 1.5
+         *   while x:
+         *       x -= 0.5
+         *
+         *   After executing 'x' must be 0.0
+         */
+
+        let env = HashMap::new();
+        let a1 = Assignment(Box::new(String::from("x")), Box::new(CReal(1.5)));
+        let a2 = Assignment(
+            Box::new(String::from("x")),
+            Box::new(Sub(Box::new(Var(String::from("x"))), Box::new(CReal(0.5)))),
+        );
+
+        let while_statement = While(Box::new(Var(String::from("x"))), Box::new(a2));
+
+        let program = Sequence(Box::new(a1), Box::new(while_statement));
+
+        match execute(program, env) {
+            Ok(new_env) => assert_eq!(new_env.get("x"), Some(&CReal(0.0))),
+            Err(s) => assert!(false, "{}", s),
+        }
+    }
     // #[test]
     // fn eval_nested_if_statements() {
     //     /*
@@ -1115,9 +997,9 @@ mod tests {
     //     let env = HashMap::new();
 
     //     let inner_then_stmt =
-    //         Assignment(String::from("y")), Box:new(CInt(1)));
+    //         Statement::Assignment(Box::new(String::from("y")), Box::new(CInt(1)));
     //     let inner_else_stmt =
-    //         Assignment(String::from("y")), Box:new(CInt(2)));
+    //         Statement::Assignment(Box::new(String::from("y")), Box::new(CInt(2)));
     //     let inner_if_statement = Statement::IfThenElse(
     //         Box::new(Var(String::from("x"))),
     //         Box::new(inner_then_stmt),
@@ -1125,7 +1007,7 @@ mod tests {
     //     );
 
     //     let outer_else_stmt =
-    //         Assignment(String::from("y")), Box:new(CInt(0)));
+    //         Statement::Assignment(Box::new(String::from("y")), Box::new(CInt(0)));
     //     let outer_if_statement = Statement::IfThenElse(
     //         Box::new(Var(String::from("x"))),
     //         Box::new(inner_if_statement),
@@ -1133,8 +1015,8 @@ mod tests {
     //     );
 
     //     let setup_stmt =
-    //         Assignment(String::from("x")), Box:new(CInt(10)));
-    //     let program = Sequence(Box::new(setup_stmt), Box::new(outer_if_statement));
+    //         Statement::Assignment(Box::new(String::from("x")), Box::new(CInt(10)));
+    //     let program = Statement::Sequence(Box::new(setup_stmt), Box::new(outer_if_statement));
 
     //     match execute(&program, env) {
     //         Ok(new_env) => assert_eq!(new_env.get("y"), Some(&1)),
@@ -1154,18 +1036,21 @@ mod tests {
          * After executing, 'x' should be 5, 'y' should be 0, and 'z' should be 13.
          */
         let env = HashMap::new();
-        let test_env = HashMap::new();
-        let a1 = Assignment(String::from("x"), Box::new(CInt(5)));
-        let a2 = Assignment(String::from("y"), Box::new(CInt(0)));
+
+        let a1 = Assignment(Box::new(String::from("x")), Box::new(CInt(5)));
+        let a2 = Assignment(Box::new(String::from("y")), Box::new(CInt(0)));
         let a3 = Assignment(
-            String::from("z"),
+            Box::new(String::from("z")),
             Box::new(Add(
                 Box::new(Mul(Box::new(CInt(2)), Box::new(Var(String::from("x"))))),
                 Box::new(CInt(3)),
             )),
         );
 
-        let program = Sequence(Box::new(a1), Box::new(Sequence(Box::new(a2), Box::new(a3))));
+        let program = Statement::Sequence(
+            Box::new(a1),
+            Box::new(Statement::Sequence(Box::new(a2), Box::new(a3))),
+        );
 
         match execute(program, env, test_env) {
             Ok((new_env, _)) => {
