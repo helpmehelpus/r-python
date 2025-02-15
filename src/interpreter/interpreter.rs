@@ -1,4 +1,6 @@
-use crate::ir::ast::{Environment, Expression, Function, Name, Statement};
+use std::collections::HashSet;
+
+use crate::ir::ast::{Environment, Expression, Function, ModTest, Name, Statement};
 
 type ErrorMessage = String;
 
@@ -6,6 +8,7 @@ type ErrorMessage = String;
 pub enum EnvValue {
     Exp(Expression),
     Func(Function),
+    ModTest(ModTest<EnvValue>),
 }
 
 pub enum ControlFlow {
@@ -77,7 +80,7 @@ pub fn execute(stmt: Statement, env: &Environment<EnvValue>) -> Result<ControlFl
         Statement::AssertTrue(cond, error) => {
             let value = eval(*cond, &env)?;
             match value {
-                EnvValue::Exp(Expression::CTrue) => Ok(ControlFlow::Return(value)),
+                EnvValue::Exp(Expression::CTrue) => Ok(ControlFlow::Continue(env.clone())),
                 EnvValue::Exp(Expression::CFalse) => Err(error),
                 _ => Err(String::from("expecting a boolean value.")),
             }
@@ -86,7 +89,7 @@ pub fn execute(stmt: Statement, env: &Environment<EnvValue>) -> Result<ControlFl
         Statement::AssertFalse(cond, error) => {
             let value = eval(*cond, &env)?;
             match value {
-                EnvValue::Exp(Expression::CFalse) => Ok(ControlFlow::Return(value)),
+                EnvValue::Exp(Expression::CFalse) => Ok(ControlFlow::Continue(env.clone())),
                 EnvValue::Exp(Expression::CTrue) => Err(error),
                 _ => Err(String::from("expecting a boolean value.")),
             }
@@ -104,7 +107,7 @@ pub fn execute(stmt: Statement, env: &Environment<EnvValue>) -> Result<ControlFl
                 ),
                 env,
             ) {
-                Ok(ControlFlow::Return(value)) => Ok(ControlFlow::Return(value)),
+                Ok(ControlFlow::Continue(new_env)) => Ok(ControlFlow::Continue(new_env)),
                 Err(err) => Err(err),
                 _ => Err(String::from("arguments are not of the same type")),
             }
@@ -122,7 +125,7 @@ pub fn execute(stmt: Statement, env: &Environment<EnvValue>) -> Result<ControlFl
                 ),
                 env,
             ) {
-                Ok(ControlFlow::Return(value)) => Ok(ControlFlow::Return(value)),
+                Ok(ControlFlow::Continue(new_env)) => Ok(ControlFlow::Continue(new_env)),
                 Err(err) => Err(err),
                 _ => Err(String::from("arguments are not of the same type")),
             }
@@ -130,11 +133,33 @@ pub fn execute(stmt: Statement, env: &Environment<EnvValue>) -> Result<ControlFl
 
         Statement::AssertFails(error) => Err(error),
 
-        // Statement::ModTestDef(name, stmt) => {
+        Statement::TestDef(mut test) => {
+            test.body = Some(Box::new(Statement::Sequence(
+                test.body.unwrap(),
+                Box::new(Statement::Return(Box::new(Expression::CVoid))),
+            )));
 
-        //     new_test_env.insert(name, stmt);
-        //     Ok(env)
-        // }
+            new_env.insert_test(test.name.clone(), test);
+            Ok(ControlFlow::Continue(new_env))
+        }
+
+        Statement::ModTestDef(name, stmt) => {
+            let mut mod_test: ModTest<EnvValue> = ModTest::new();
+
+            let new_mod_test_env;
+
+            match execute(*stmt, &mod_test.env) {
+                Ok(ControlFlow::Continue(new_env)) => new_mod_test_env = new_env,
+                Ok(ControlFlow::Return(value)) => return Ok(ControlFlow::Return(value)),
+                Err(e) => return Err(e),
+            }
+
+            mod_test.env = new_mod_test_env;
+
+            new_env.insert_variable(name, EnvValue::ModTest(mod_test));
+
+            Ok(ControlFlow::Continue(new_env))
+        }
         Statement::Sequence(s1, s2) => match execute(*s1, &new_env)? {
             ControlFlow::Continue(control_env) => {
                 new_env = control_env;
@@ -187,10 +212,79 @@ fn call(
     unreachable!()
 }
 
+fn execute_tests(
+    tests_set: Vec<(String, Option<String>)>,
+    env: &Environment<EnvValue>,
+) -> Result<HashSet<(String, String, Option<String>)>, ErrorMessage> {
+    let mut results = HashSet::new();
+    let cur_scope = env.scope_key();
+    let frame = env.get_frame(cur_scope.clone()).clone();
+
+    for (mod_test, test) in tests_set {
+        match frame.variables.get(&mod_test) {
+            Some(EnvValue::ModTest(test_module)) => {
+                let mut test_env = test_module.env.clone();
+                let mod_test_scope = test_env.scope_key();
+                let test_frame = test_env.get_frame(mod_test_scope);
+
+                if test != None {
+                    test_env = match execute(
+                        Statement::FuncDef(match test_frame.clone().tests.get(&test.clone().unwrap()) {
+                            Some(real_test) => real_test.clone(),
+                            None => {
+                                return Err(format!(
+                                    "{teste} is not a test",
+                                    teste = &test.clone().unwrap()
+                                ))
+                            }
+                        }),
+                        &test_env,
+                    ) {
+                        Ok(ControlFlow::Continue(new_env)) => new_env,
+                        Err(e) => return Err(e),
+                        Ok(ControlFlow::Return(_)) => return Ok(results),
+                    };
+
+                    let result = match eval(Expression::FuncCall(test.clone().unwrap(), Vec::<Expression>::new()), &test_env) {
+
+                        Ok(_) => ("Passou".to_string(), None),
+                        Err(e) => ("Falhou".to_string(), Some(format!("Erro: {}", e))),
+                    };
+
+                    results.insert((format!("{modulo}::{teste}", teste = test.clone().unwrap(), modulo = mod_test.clone()), result.0, result.1));
+                    continue;
+                }
+
+                for (test, real_test) in test_frame.clone().tests.into_iter() {
+
+                    test_env = match execute(
+                        Statement::FuncDef(real_test),
+                        &test_env,
+                    ) {
+                        Ok(ControlFlow::Continue(new_env)) => new_env,
+                        Err(e) => return Err(e),
+                        Ok(ControlFlow::Return(_)) => return Ok(results),
+                    };
+
+                    let result = match eval(Expression::FuncCall(test.clone(), Vec::<Expression>::new()), &test_env) {
+
+                        Ok(_) => ("Passou".to_string(), None),
+                        Err(e) => ("Falhou".to_string(), Some(format!("Erro: {}", e))),
+                    };
+
+                    results.insert((format!("{modulo}::{teste}", teste = test.clone(), modulo = mod_test.clone()), result.0, result.1));
+                }
+            }
+            _ => return Err(format!("{modulo} is not a ModTest", modulo = mod_test.clone())),
+        }
+    }
+    Ok(results)
+}
 fn is_constant(exp: Expression) -> bool {
     match exp {
         Expression::CTrue => true,
         Expression::CFalse => true,
+        Expression::CVoid => true,
         Expression::CInt(_) => true,
         Expression::CReal(_) => true,
         Expression::CString(_) => true,
