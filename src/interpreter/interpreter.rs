@@ -229,15 +229,17 @@ fn execute_tests(
 
                 if test != None {
                     test_env = match execute(
-                        Statement::FuncDef(match test_frame.clone().tests.get(&test.clone().unwrap()) {
-                            Some(real_test) => real_test.clone(),
-                            None => {
-                                return Err(format!(
-                                    "{teste} is not a test",
-                                    teste = &test.clone().unwrap()
-                                ))
-                            }
-                        }),
+                        Statement::FuncDef(
+                            match test_frame.clone().tests.get(&test.clone().unwrap()) {
+                                Some(real_test) => real_test.clone(),
+                                None => {
+                                    return Err(format!(
+                                        "{teste} is not a test",
+                                        teste = &test.clone().unwrap()
+                                    ))
+                                }
+                            },
+                        ),
                         &test_env,
                     ) {
                         Ok(ControlFlow::Continue(new_env)) => new_env,
@@ -245,37 +247,58 @@ fn execute_tests(
                         Ok(ControlFlow::Return(_)) => return Ok(results),
                     };
 
-                    let result = match eval(Expression::FuncCall(test.clone().unwrap(), Vec::<Expression>::new()), &test_env) {
-
+                    let result = match eval(
+                        Expression::FuncCall(test.clone().unwrap(), Vec::<Expression>::new()),
+                        &test_env,
+                    ) {
                         Ok(_) => ("Passou".to_string(), None),
                         Err(e) => ("Falhou".to_string(), Some(format!("Erro: {}", e))),
                     };
 
-                    results.insert((format!("{modulo}::{teste}", teste = test.clone().unwrap(), modulo = mod_test.clone()), result.0, result.1));
+                    results.insert((
+                        format!(
+                            "{modulo}::{teste}",
+                            teste = test.clone().unwrap(),
+                            modulo = mod_test.clone()
+                        ),
+                        result.0,
+                        result.1,
+                    ));
                     continue;
                 }
 
                 for (test, real_test) in test_frame.clone().tests.into_iter() {
-
-                    test_env = match execute(
-                        Statement::FuncDef(real_test),
-                        &test_env,
-                    ) {
+                    test_env = match execute(Statement::FuncDef(real_test), &test_env) {
                         Ok(ControlFlow::Continue(new_env)) => new_env,
                         Err(e) => return Err(e),
                         Ok(ControlFlow::Return(_)) => return Ok(results),
                     };
 
-                    let result = match eval(Expression::FuncCall(test.clone(), Vec::<Expression>::new()), &test_env) {
-
+                    let result = match eval(
+                        Expression::FuncCall(test.clone(), Vec::<Expression>::new()),
+                        &test_env,
+                    ) {
                         Ok(_) => ("Passou".to_string(), None),
                         Err(e) => ("Falhou".to_string(), Some(format!("Erro: {}", e))),
                     };
 
-                    results.insert((format!("{modulo}::{teste}", teste = test.clone(), modulo = mod_test.clone()), result.0, result.1));
+                    results.insert((
+                        format!(
+                            "{modulo}::{teste}",
+                            teste = test.clone(),
+                            modulo = mod_test.clone()
+                        ),
+                        result.0,
+                        result.1,
+                    ));
                 }
             }
-            _ => return Err(format!("{modulo} is not a ModTest", modulo = mod_test.clone())),
+            _ => {
+                return Err(format!(
+                    "{modulo} is not a ModTest",
+                    modulo = mod_test.clone()
+                ))
+            }
         }
     }
     Ok(results)
