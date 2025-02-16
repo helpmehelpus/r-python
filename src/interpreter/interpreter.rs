@@ -149,7 +149,7 @@ pub fn execute(stmt: Statement, env: &Environment<EnvValue>) -> Result<ControlFl
             let new_mod_test_env;
 
             mod_test.env = new_env.clone();
-            
+
             match execute(*stmt, &mod_test.env) {
                 Ok(ControlFlow::Continue(new_env)) => new_mod_test_env = new_env,
                 Ok(ControlFlow::Return(value)) => return Ok(ControlFlow::Return(value)),
@@ -220,7 +220,7 @@ fn execute_tests(
 ) -> Result<HashSet<(String, String, Option<String>)>, ErrorMessage> {
     let mut results = HashSet::new();
     let cur_scope = env.scope_key();
-    let frame = env.get_frame(cur_scope.clone()).clone();
+    let frame: crate::ir::ast::Frame<EnvValue> = env.get_frame(cur_scope.clone()).clone();
 
     for (mod_test, test) in tests_set {
         match frame.variables.get(&mod_test) {
@@ -628,7 +628,6 @@ fn lte(
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
-
     use super::*;
     use crate::ir::ast::Expression::*;
     use crate::ir::ast::Function;
@@ -1392,6 +1391,164 @@ mod tests {
                     _ => assert!(false),
                 }
             }
+            Ok(ControlFlow::Return(_)) => assert!(false),
+            Err(s) => assert!(false, "{}", s),
+        }
+    }
+
+    #[test]
+    fn eval_more_than_one_test() {
+        /*
+         * Test for more than one function inside modTest definition
+         *
+         *
+         *   def soma1(a, b):
+         *       return a+b
+         *   def soma_mut(a, b, m):
+         *       return(a+b)*m
+         *   def sub (a,b):
+         *      return a-b
+         *   def sub_mut (a,b,m):
+         *      return (a-b)*m
+         *
+         *   modTest teste {
+         *
+         *       deftest test {
+         *
+         *           assertEQ(soma1(1, 2), soma_mut(1, 2, 3))
+         *           assertNEQ(sub(1,2), submut(1,2,3))
+         *       }
+         *   }
+         */
+
+        let env: Environment<EnvValue> = Environment::new();
+
+        let func_soma1 = FuncDef(Function {
+            name: "soma1".to_string(),
+            kind: Some(TInteger),
+            params: Some(vec![
+                ("a".to_string(), TInteger),
+                ("b".to_string(), TInteger),
+            ]),
+            body: Some(Box::new(Return(Box::new(Add(
+                Box::new(Var("a".to_string())),
+                Box::new(Var("b".to_string())),
+            ))))),
+        });
+
+        let func_soma_mut = FuncDef(Function {
+            name: "soma_mut".to_string(),
+            kind: Some(TInteger),
+            params: Some(vec![
+                ("a".to_string(), TInteger),
+                ("b".to_string(), TInteger),
+                ("m".to_string(), TInteger),
+            ]),
+            body: Some(Box::new(Return(Box::new(Mul(
+                Box::new(Add(
+                    Box::new(Var("a".to_string())),
+                    Box::new(Var("b".to_string())),
+                )),
+                Box::new(Var("m".to_string())),
+            ))))),
+        });
+
+        let func_sub = FuncDef(Function {
+            name: "sub".to_string(),
+            kind: Some(TInteger),
+            params: Some(vec![
+                ("a".to_string(), TInteger),
+                ("b".to_string(), TInteger),
+            ]),
+            body: Some(Box::new(Return(Box::new(Sub(
+                Box::new(Var("a".to_string())),
+                Box::new(Var("b".to_string())),
+            ))))),
+        });
+
+        let func_sub_mut = FuncDef(Function {
+            name: "sub_mut".to_string(),
+            kind: Some(TInteger),
+            params: Some(vec![
+                ("a".to_string(), TInteger),
+                ("b".to_string(), TInteger),
+                ("m".to_string(), TInteger),
+            ]),
+            body: Some(Box::new(Return(Box::new(Mul(
+                Box::new(Sub(
+                    Box::new(Var("a".to_string())),
+                    Box::new(Var("b".to_string())),
+                )),
+                Box::new(Var("m".to_string())),
+            ))))),
+        });
+
+        let body_test = Box::new(AssertEQ(
+            Box::new(FuncCall("soma1".to_string(), vec![CInt(1), CInt(2)])),
+            Box::new(FuncCall(
+                "soma_mut".to_string(),
+                vec![CInt(1), CInt(2), CInt(3)],
+            )),
+            "Somas diferentes".to_string(),
+        ));
+
+        let body_test_1 = Box::new(AssertNEQ(
+            Box::new(FuncCall("sub".to_string(), vec![CInt(1), CInt(2)])),
+            Box::new(FuncCall(
+                "sub_mut".to_string(),
+                vec![CInt(1), CInt(2), CInt(3)],
+            )),
+            "Subtrações diferentes".to_string(),
+        ));
+
+        let mut body_mod_test = Box::new(TestDef(Function {
+            name: "teste".to_string(),
+            kind: Some(TVoid),
+            params: None,
+            body: Some(body_test.clone()),
+        }));
+
+        body_mod_test = Box::new(Sequence(
+            body_mod_test.clone(),
+            Box::new(TestDef(
+                Function {
+                    name: "teste_1".to_string(),
+                    kind: Some(TVoid),
+                    params: None,
+                    body: Some(body_test_1.clone()),
+                }),
+            ),
+        ));
+
+        let mod_test_def = Box::new(ModTestDef("testes".to_string(), body_mod_test));
+        let program: Box<Statement> = Box::new(Sequence(
+            Box::new(func_soma1),
+            Box::new(Sequence(
+                Box::new(func_soma_mut),
+                Box::new(Sequence(
+                    Box::new(func_sub),
+                    Box::new(Sequence(Box::new(func_sub_mut), mod_test_def)),
+                )),
+            )),
+        ));
+
+        let tests_set: Vec<(String, Option<String>)> = vec![("testes".to_string(), None)];
+        let results: HashSet<(String, String, Option<String>)> = HashSet::from([
+            (
+                "testes::teste".to_string(),
+                "Falhou".to_string(),
+                Some("Erro: Somas diferentes".to_string()),
+            ),
+            ("testes::teste_1".to_string(), "Passou".to_string(), None),
+        ]);
+
+        match execute(*program, &env) {
+            Ok(ControlFlow::Continue(new_env)) => match execute_tests(tests_set, &new_env) {
+                Ok(result) => {
+                    assert_eq!(results, result)
+                }
+                Err(e) => assert!(false, "{}", e),
+            },
             Ok(ControlFlow::Return(_)) => assert!(false),
             Err(s) => assert!(false, "{}", s),
         }
