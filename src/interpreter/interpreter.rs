@@ -148,6 +148,8 @@ pub fn execute(stmt: Statement, env: &Environment<EnvValue>) -> Result<ControlFl
 
             let new_mod_test_env;
 
+            mod_test.env = new_env.clone();
+            
             match execute(*stmt, &mod_test.env) {
                 Ok(ControlFlow::Continue(new_env)) => new_mod_test_env = new_env,
                 Ok(ControlFlow::Return(value)) => return Ok(ControlFlow::Return(value)),
@@ -625,6 +627,8 @@ fn lte(
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use super::*;
     use crate::ir::ast::Expression::*;
     use crate::ir::ast::Function;
@@ -1281,6 +1285,113 @@ mod tests {
                 new_env.search_frame("fib".to_string()),
                 Some(&EnvValue::Exp(CInt(34)))
             ),
+            Ok(ControlFlow::Return(_)) => assert!(false),
+            Err(s) => assert!(false, "{}", s),
+        }
+    }
+
+    #[test]
+    fn eval_mod_test_def() {
+        /*
+         * Test for modTest definition
+         *
+         *
+         *   def soma1(a, b):
+         *       return a+b
+         *   def soma_mut(a, b, m):
+         *       return(a+b)*m
+         *
+         *   modTest teste {
+         *
+         *       deftest test {
+         *
+         *           assertEQ(soma1(1, 2), soma_mut(1, 2, 3))
+         *       }
+         *   }
+         */
+
+        let env: Environment<EnvValue> = Environment::new();
+
+        let func_soma1 = FuncDef(Function {
+            name: "soma1".to_string(),
+            kind: Some(TInteger),
+            params: Some(vec![
+                ("a".to_string(), TInteger),
+                ("b".to_string(), TInteger),
+            ]),
+            body: Some(Box::new(Return(Box::new(Add(
+                Box::new(Var("a".to_string())),
+                Box::new(Var("b".to_string())),
+            ))))),
+        });
+
+        let func_soma_mut = FuncDef(Function {
+            name: "soma_mut".to_string(),
+            kind: Some(TInteger),
+            params: Some(vec![
+                ("a".to_string(), TInteger),
+                ("b".to_string(), TInteger),
+                ("m".to_string(), TInteger),
+            ]),
+            body: Some(Box::new(Return(Box::new(Mul(
+                Box::new(Add(
+                    Box::new(Var("a".to_string())),
+                    Box::new(Var("b".to_string())),
+                )),
+                Box::new(Var("m".to_string())),
+            ))))),
+        });
+
+        let body_test = Box::new(AssertEQ(
+            Box::new(FuncCall("soma1".to_string(), vec![CInt(1), CInt(2)])),
+            Box::new(FuncCall(
+                "soma_mut".to_string(),
+                vec![CInt(1), CInt(2), CInt(3)],
+            )),
+            "Somas diferentes".to_string(),
+        ));
+
+        let body_mod_test = Box::new(TestDef(Function {
+            name: "test".to_string(),
+            kind: Some(TVoid),
+            params: None,
+            body: Some(body_test.clone()),
+        }));
+
+        let mod_test_def = Box::new(ModTestDef("teste".to_string(), body_mod_test));
+
+        let program = Box::new(Sequence(
+            Box::new(func_soma1),
+            Box::new(Sequence(Box::new(func_soma_mut), mod_test_def)),
+        ));
+
+        let real_hash: HashMap<String, Function> = HashMap::from([(
+            "test".to_string(),
+            Function {
+                name: "test".to_string(),
+                kind: Some(TVoid),
+                params: None,
+                body: Some(Box::new(Sequence(
+                    body_test,
+                    Box::new(Return(Box::new(CVoid))),
+                ))),
+            },
+        )]);
+
+        match execute(*program, &env) {
+            Ok(ControlFlow::Continue(new_env)) => {
+                let cur_scope = new_env.scope_key().clone();
+                let frame = new_env.get_frame(cur_scope).clone();
+                match frame.variables.get("teste") {
+                    Some(EnvValue::ModTest(mod_test)) => {
+                        let cur_scope1 = mod_test.env.scope_key();
+                        let frame1 = mod_test.env.get_frame(cur_scope1);
+
+                        assert_eq!(frame1.tests, real_hash);
+                    }
+                    _ => assert!(false),
+                }
+            }
             Ok(ControlFlow::Return(_)) => assert!(false),
             Err(s) => assert!(false, "{}", s),
         }
