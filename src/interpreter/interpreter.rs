@@ -328,7 +328,7 @@ fn propagate_error(
 fn execute_tests(
     tests_set: Vec<(String, Option<String>)>,
     env: &Environment<EnvValue>,
-) -> Result<HashSet<(String, String, Option<String>)>, ErrorMessage> {
+) -> Result<HashSet<(String, String, Option<String>)>, String> {
     let mut results = HashSet::new();
     let cur_scope = env.scope_key();
     let frame: crate::ir::ast::Frame<EnvValue> = env.get_frame(cur_scope.clone()).clone();
@@ -341,17 +341,14 @@ fn execute_tests(
                 let test_frame = test_env.get_frame(mod_test_scope);
 
                 if test != None {
-                    test_env = match execute(
+                    test_env = match run(
                         Statement::FuncDef(
                             match test_frame.clone().tests.get(&test.clone().unwrap()) {
                                 Some(real_test) => real_test.clone(),
                                 None => {
-                                    return Err((
-                                        format!(
-                                            "{teste} is not a test",
-                                            teste = &test.clone().unwrap()
-                                        ),
-                                        None,
+                                    return Err(format!(
+                                        "{teste} is not a test",
+                                        teste = &test.clone().unwrap()
                                     ))
                                 }
                             },
@@ -384,7 +381,7 @@ fn execute_tests(
                 }
 
                 for (test, real_test) in test_frame.clone().tests.into_iter() {
-                    test_env = match execute(Statement::FuncDef(real_test), &test_env) {
+                    test_env = match run(Statement::FuncDef(real_test), &test_env) {
                         Ok(ControlFlow::Continue(new_env)) => new_env,
                         Err(e) => return Err(e),
                         Ok(ControlFlow::Return(_)) => return Ok(results),
@@ -410,9 +407,9 @@ fn execute_tests(
                 }
             }
             _ => {
-                return Err((
-                    format!("{modulo} is not a ModTest", modulo = mod_test.clone()),
-                    None,
+                return Err(format!(
+                    "{modulo} is not a ModTest",
+                    modulo = mod_test.clone()
                 ))
             }
         }
@@ -1219,9 +1216,9 @@ mod tests {
         let str_erro: String = String::from("It didn't go");
         let env: Environment<EnvValue> = Environment::new();
         let func_teste = AssertTrue(armt, str_erro.clone());
-        match execute(func_teste, &env) {
+        match run(func_teste, &env) {
             Ok(_) => {}
-            Err((s, _)) => assert_eq!(s, str_erro),
+            Err(s) => assert_eq!(s, str_erro),
         }
     }
 
@@ -1231,9 +1228,9 @@ mod tests {
         let str_erro = String::from("Nao foi");
         let func_teste = AssertFalse(verdade, str_erro);
         let env: Environment<EnvValue> = Environment::new();
-        match execute(func_teste, &env) {
+        match run(func_teste, &env) {
             Ok(_) => {}
-            Err((s, _)) => assert!(false, "{}", s),
+            Err(s) => assert!(false, "{}", s),
         }
     }
     #[test]
@@ -1244,9 +1241,9 @@ mod tests {
         let func_teste = AssertEQ(n1, n2, str_erro);
         let env: Environment<EnvValue> = Environment::new();
 
-        match execute(func_teste, &env) {
+        match run(func_teste, &env) {
             Ok(_) => {}
-            Err((s, _)) => assert!(false, "{}", s),
+            Err(s) => assert!(false, "{}", s),
         }
     }
 
@@ -1258,9 +1255,9 @@ mod tests {
         let func_teste = AssertEQ(n1, n2, str_erro.clone());
         let env: Environment<EnvValue> = Environment::new();
 
-        match execute(func_teste, &env) {
+        match run(func_teste, &env) {
             Ok(_) => {}
-            Err((s, _)) => assert_eq!(s, str_erro),
+            Err(s) => assert_eq!(s, str_erro),
         }
     }
 
@@ -1272,9 +1269,9 @@ mod tests {
         let func_teste = AssertNEQ(n1, n2, str_erro.clone());
         let env: Environment<EnvValue> = Environment::new();
 
-        match execute(func_teste, &env) {
+        match run(func_teste, &env) {
             Ok(_) => {}
-            Err((s, _)) => assert_eq!(s, str_erro),
+            Err(s) => assert_eq!(s, str_erro),
         }
     }
     #[test]
@@ -1283,9 +1280,9 @@ mod tests {
         let error_msg: String = String::from("Test failed.");
         let test_fn = AssertFails(error_msg.clone());
 
-        match execute(test_fn, &env) {
+        match run(test_fn, &env) {
             Ok(_) => {}
-            Err((s, _)) => assert_eq!(s, error_msg),
+            Err(s) => assert_eq!(s, error_msg),
         }
     }
     #[test]
@@ -1686,7 +1683,7 @@ mod tests {
             },
         )]);
 
-        match execute(*program, &env) {
+        match run(*program, &env) {
             Ok(ControlFlow::Continue(new_env)) => {
                 let cur_scope = new_env.scope_key().clone();
                 let frame = new_env.get_frame(cur_scope).clone();
@@ -1701,7 +1698,7 @@ mod tests {
                 }
             }
             Ok(ControlFlow::Return(_)) => assert!(false),
-            Err((s, _)) => assert!(false, "{}", s),
+            Err(s) => assert!(false, "{}", s),
         }
     }
 
@@ -1849,15 +1846,15 @@ mod tests {
             ("testes::teste_1".to_string(), "Passou".to_string(), None),
         ]);
 
-        match execute(*program, &env) {
+        match run(*program, &env) {
             Ok(ControlFlow::Continue(new_env)) => match execute_tests(tests_set, &new_env) {
                 Ok(result) => {
                     assert_eq!(results, result)
                 }
-                Err((e, _)) => assert!(false, "{}", e),
+                Err(e) => assert!(false, "{}", e),
             },
             Ok(ControlFlow::Return(_)) => assert!(false),
-            Err((s, _)) => assert!(false, "{}", s),
+            Err(s) => assert!(false, "{}", s),
         }
     }
     #[test]
@@ -1998,15 +1995,15 @@ mod tests {
         let results: HashSet<(String, String, Option<String>)> =
             HashSet::from([("testes::teste_1".to_string(), "Passou".to_string(), None)]);
 
-        match execute(*program, &env) {
+        match run(*program, &env) {
             Ok(ControlFlow::Continue(new_env)) => match execute_tests(tests_set, &new_env) {
                 Ok(result) => {
                     assert_eq!(results, result)
                 }
-                Err((e, _)) => assert!(false, "{}", e),
+                Err(e) => assert!(false, "{}", e),
             },
             Ok(ControlFlow::Return(_)) => assert!(false),
-            Err((s, _)) => assert!(false, "{}", s),
+            Err(s) => assert!(false, "{}", s),
         }
     }
 
@@ -2151,15 +2148,15 @@ mod tests {
             Some("Erro: Somas diferentes".to_string()),
         )]);
 
-        match execute(*program, &env) {
+        match run(*program, &env) {
             Ok(ControlFlow::Continue(new_env)) => match execute_tests(tests_set, &new_env) {
                 Ok(result) => {
                     assert_eq!(results, result)
                 }
-                Err((e, _)) => assert!(false, "{}", e),
+                Err(e) => assert!(false, "{}", e),
             },
             Ok(ControlFlow::Return(_)) => assert!(false),
-            Err((s, _)) => assert!(false, "{}", s),
+            Err(s) => assert!(false, "{}", s),
         }
     }
 }
