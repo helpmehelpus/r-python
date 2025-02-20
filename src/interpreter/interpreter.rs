@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use crate::ir::ast::{Environment, Expression, Function, ModTest, Name, Statement};
+use crate::ir::ast::{Environment, Expression, Function, TestEnvironment, Name, Statement};
 
 type ErrorMessage = String;
 
@@ -8,7 +8,7 @@ type ErrorMessage = String;
 pub enum EnvValue {
     Exp(Expression),
     Func(Function),
-    ModTest(ModTest<EnvValue>),
+    TestEnvironment(TestEnvironment<EnvValue>),
 }
 
 pub enum ControlFlow {
@@ -144,7 +144,7 @@ pub fn execute(stmt: Statement, env: &Environment<EnvValue>) -> Result<ControlFl
         }
 
         Statement::ModTestDef(name, stmt) => {
-            let mut mod_test: ModTest<EnvValue> = ModTest::new();
+            let mut mod_test: TestEnvironment<EnvValue> = TestEnvironment::new();
 
             let new_mod_test_env;
 
@@ -158,7 +158,7 @@ pub fn execute(stmt: Statement, env: &Environment<EnvValue>) -> Result<ControlFl
 
             mod_test.env = new_mod_test_env;
 
-            new_env.insert_variable(name, EnvValue::ModTest(mod_test));
+            new_env.insert_variable(name, EnvValue::TestEnvironment(mod_test));
 
             Ok(ControlFlow::Continue(new_env))
         }
@@ -224,7 +224,7 @@ fn execute_tests(
 
     for (mod_test, test) in tests_set {
         match frame.variables.get(&mod_test) {
-            Some(EnvValue::ModTest(test_module)) => {
+            Some(EnvValue::TestEnvironment(test_module)) => {
                 let mut test_env = test_module.env.clone();
                 let mod_test_scope = test_env.scope_key();
                 let test_frame = test_env.get_frame(mod_test_scope);
@@ -1382,7 +1382,7 @@ mod tests {
                 let cur_scope = new_env.scope_key().clone();
                 let frame = new_env.get_frame(cur_scope).clone();
                 match frame.variables.get("teste") {
-                    Some(EnvValue::ModTest(mod_test)) => {
+                    Some(EnvValue::TestEnvironment(mod_test)) => {
                         let cur_scope1 = mod_test.env.scope_key();
                         let frame1 = mod_test.env.get_frame(cur_scope1);
 

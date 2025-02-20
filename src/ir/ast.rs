@@ -120,14 +120,14 @@ impl Function {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct ModTest<A> {
+pub struct TestEnvironment<A> {
     pub name: Name,
     pub env: Environment<A>,
 }
 
-impl<A> ModTest<A> {
-    pub fn new() -> ModTest<A> {
-        return ModTest {
+impl<A> TestEnvironment<A> {
+    pub fn new() -> TestEnvironment<A> {
+        return TestEnvironment {
             name: "__test__".to_string(),
             env: Environment::<A>::new(),
         };
