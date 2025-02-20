@@ -1,4 +1,6 @@
-use crate::ir::ast::{Environment, Expression, Function, Name, Statement};
+use std::collections::HashSet;
+
+use crate::ir::ast::{Environment, Expression, Function, Name, Statement, TestEnvironment};
 
 type ErrorMessage = (String, Option<Expression>);
 
@@ -6,6 +8,7 @@ type ErrorMessage = (String, Option<Expression>);
 pub enum EnvValue {
     Exp(Expression),
     Func(Function),
+    TestEnvironment(TestEnvironment<EnvValue>),
 }
 
 pub enum ControlFlow {
@@ -96,7 +99,91 @@ fn execute(stmt: Statement, env: &Environment<EnvValue>) -> Result<ControlFlow, 
                 }
             }
         }
+        Statement::AssertTrue(cond, error) => {
+            let value = eval(*cond, &env)?;
+            match value {
+                EnvValue::Exp(Expression::CTrue) => Ok(ControlFlow::Continue(env.clone())),
+                EnvValue::Exp(Expression::CFalse) => Err((error, None)),
+                _ => Err((String::from("expecting a boolean value."), None)),
+            }
+        }
 
+        Statement::AssertFalse(cond, error) => {
+            let value = eval(*cond, &env)?;
+            match value {
+                EnvValue::Exp(Expression::CFalse) => Ok(ControlFlow::Continue(env.clone())),
+                EnvValue::Exp(Expression::CTrue) => Err((error, None)),
+                _ => Err((String::from("expecting a boolean value."), None)),
+            }
+        }
+
+        Statement::AssertEQ(value1, value2, error) => {
+            match execute(
+                Statement::AssertTrue(
+                    Box::new(match eq(*value1, *value2, &env)? {
+                        EnvValue::Exp(Expression::CTrue) => Expression::CTrue,
+                        EnvValue::Exp(Expression::CFalse) => Expression::CFalse,
+                        _ => return Err((String::from(""), None)),
+                    }),
+                    error,
+                ),
+                env,
+            ) {
+                Ok(ControlFlow::Continue(new_env)) => Ok(ControlFlow::Continue(new_env)),
+                Err(err) => Err(err),
+                _ => Err((String::from("arguments are not of the same type"), None)),
+            }
+        }
+
+        Statement::AssertNEQ(value1, value2, error) => {
+            match execute(
+                Statement::AssertFalse(
+                    Box::new(match eq(*value1, *value2, &env)? {
+                        EnvValue::Exp(Expression::CTrue) => Expression::CTrue,
+                        EnvValue::Exp(Expression::CFalse) => Expression::CFalse,
+                        _ => return Err((String::from(""), None)),
+                    }),
+                    error,
+                ),
+                env,
+            ) {
+                Ok(ControlFlow::Continue(new_env)) => Ok(ControlFlow::Continue(new_env)),
+                Err(err) => Err(err),
+                _ => Err((String::from("arguments are not of the same type"), None)),
+            }
+        }
+
+        Statement::AssertFails(error) => Err((error, None)),
+
+        Statement::TestDef(mut test) => {
+            test.body = Some(Box::new(Statement::Sequence(
+                test.body.unwrap(),
+                Box::new(Statement::Return(Box::new(Expression::CVoid))),
+            )));
+
+            new_env.insert_test(test.name.clone(), test);
+            Ok(ControlFlow::Continue(new_env))
+        }
+
+        Statement::ModTestDef(name, stmt) => {
+            let mut mod_test: TestEnvironment<EnvValue> = TestEnvironment::new();
+
+            let new_mod_test_env;
+
+            mod_test.env = new_env.clone();
+
+            match execute(*stmt, &mod_test.env) {
+                Ok(ControlFlow::Continue(new_env)) => new_mod_test_env = new_env,
+                Ok(ControlFlow::Return(value)) => return Ok(ControlFlow::Return(value)),
+                Err(e) => return Err(e),
+            }
+
+            mod_test.env = new_mod_test_env;
+
+            new_env.insert_variable(name, EnvValue::TestEnvironment(mod_test));
+
+            Ok(ControlFlow::Continue(new_env))
+        }
         Statement::Sequence(s1, s2) => match execute(*s1, &new_env)? {
             ControlFlow::Continue(control_env) => {
                 new_env = control_env;
@@ -238,10 +325,102 @@ fn propagate_error(
     }
 }
 
+fn execute_tests(
+    tests_set: Vec<(String, Option<String>)>,
+    env: &Environment<EnvValue>,
+) -> Result<HashSet<(String, String, Option<String>)>, String> {
+    let mut results = HashSet::new();
+    let cur_scope = env.scope_key();
+    let frame: crate::ir::ast::Frame<EnvValue> = env.get_frame(cur_scope.clone()).clone();
+
+    for (mod_test, test) in tests_set {
+        match frame.variables.get(&mod_test) {
+            Some(EnvValue::TestEnvironment(test_module)) => {
+                let mut test_env = test_module.env.clone();
+                let mod_test_scope = test_env.scope_key();
+                let test_frame = test_env.get_frame(mod_test_scope);
+
+                if test != None {
+                    test_env = match run(
+                        Statement::FuncDef(
+                            match test_frame.clone().tests.get(&test.clone().unwrap()) {
+                                Some(real_test) => real_test.clone(),
+                                None => {
+                                    return Err(format!(
+                                        "{teste} is not a test",
+                                        teste = &test.clone().unwrap()
+                                    ))
+                                }
+                            },
+                        ),
+                        &test_env,
+                    ) {
+                        Ok(ControlFlow::Continue(new_env)) => new_env,
+                        Err(e) => return Err(e),
+                        Ok(ControlFlow::Return(_)) => return Ok(results),
+                    };
+
+                    let result = match eval(
+                        Expression::FuncCall(test.clone().unwrap(), Vec::<Expression>::new()),
+                        &test_env,
+                    ) {
+                        Ok(_) => ("Passou".to_string(), None),
+                        Err((e, _)) => ("Falhou".to_string(), Some(format!("Erro: {}", e))),
+                    };
+
+                    results.insert((
+                        format!(
+                            "{modulo}::{teste}",
+                            teste = test.clone().unwrap(),
+                            modulo = mod_test.clone()
+                        ),
+                        result.0,
+                        result.1,
+                    ));
+                    continue;
+                }
+
+                for (test, real_test) in test_frame.clone().tests.into_iter() {
+                    test_env = match run(Statement::FuncDef(real_test), &test_env) {
+                        Ok(ControlFlow::Continue(new_env)) => new_env,
+                        Err(e) => return Err(e),
+                        Ok(ControlFlow::Return(_)) => return Ok(results),
+                    };
+
+                    let result = match eval(
+                        Expression::FuncCall(test.clone(), Vec::<Expression>::new()),
+                        &test_env,
+                    ) {
+                        Ok(_) => ("Passou".to_string(), None),
+                        Err((e, _)) => ("Falhou".to_string(), Some(format!("Erro: {}", e))),
+                    };
+
+                    results.insert((
+                        format!(
+                            "{modulo}::{teste}",
+                            teste = test.clone(),
+                            modulo = mod_test.clone()
+                        ),
+                        result.0,
+                        result.1,
+                    ));
+                }
+            }
+            _ => {
+                return Err(format!(
+                    "{modulo} is not a ModTest",
+                    modulo = mod_test.clone()
+                ))
+            }
+        }
+    }
+    Ok(results)
+}
 fn is_constant(exp: Expression) -> bool {
     match exp {
         Expression::CTrue => true,
         Expression::CFalse => true,
+        Expression::CVoid => true,
         Expression::CInt(_) => true,
         Expression::CReal(_) => true,
         Expression::CString(_) => true,
@@ -649,6 +828,7 @@ mod tests {
     use crate::ir::ast::Expression::*;
     use crate::ir::ast::Function;
     use crate::ir::ast::Statement::*;
+    use std::collections::HashMap;
     //use crate::ir::ast::Type;
     use crate::ir::ast::Type::*;
     use approx::relative_eq;
@@ -894,7 +1074,6 @@ mod tests {
 
         assert_eq!(eval(div1, &env), Ok(EnvValue::Exp(CInt(7))));
     }
-
     #[test]
     fn eval_div_expression4() {
         let env: Environment<EnvValue> = Environment::new();
@@ -1027,6 +1206,85 @@ mod tests {
         }
     }
 
+    #[test]
+    fn eval_assert_true() {
+        //let lb= Box::new (CTrue);
+        //let rb= Box::new(CFalse);
+        let n1 = Box::new(CInt(4));
+        let n2: Box<Expression> = Box::new(CReal(0.54));
+        let armt = Box::new(EQ(n1, n2));
+        let str_erro: String = String::from("It didn't go");
+        let env: Environment<EnvValue> = Environment::new();
+        let func_teste = AssertTrue(armt, str_erro.clone());
+        match run(func_teste, &env) {
+            Ok(_) => {}
+            Err(s) => assert_eq!(s, str_erro),
+        }
+    }
+
+    #[test]
+    fn eval_assert_false() {
+        let verdade = Box::new(CFalse);
+        let str_erro = String::from("Nao foi");
+        let func_teste = AssertFalse(verdade, str_erro);
+        let env: Environment<EnvValue> = Environment::new();
+        match run(func_teste, &env) {
+            Ok(_) => {}
+            Err(s) => assert!(false, "{}", s),
+        }
+    }
+    #[test]
+    fn eval_assert_eq() {
+        let n1 = Box::new(CReal(4.0));
+        let n2 = Box::new(CInt(4));
+        let str_erro: String = String::from("Different values");
+        let func_teste = AssertEQ(n1, n2, str_erro);
+        let env: Environment<EnvValue> = Environment::new();
+
+        match run(func_teste, &env) {
+            Ok(_) => {}
+            Err(s) => assert!(false, "{}", s),
+        }
+    }
+
+    #[test]
+    fn eval_fail_assert_eq() {
+        let n1 = Box::new(CReal(4.5));
+        let n2 = Box::new(CInt(4));
+        let str_erro: String = String::from("Different values");
+        let func_teste = AssertEQ(n1, n2, str_erro.clone());
+        let env: Environment<EnvValue> = Environment::new();
+
+        match run(func_teste, &env) {
+            Ok(_) => {}
+            Err(s) => assert_eq!(s, str_erro),
+        }
+    }
+
+    #[test]
+    fn eval_assert_neq() {
+        let n1 = Box::new(CReal(4.0));
+        let n2 = Box::new(CInt(3));
+        let str_erro: String = String::from("Equal values");
+        let func_teste = AssertNEQ(n1, n2, str_erro.clone());
+        let env: Environment<EnvValue> = Environment::new();
+
+        match run(func_teste, &env) {
+            Ok(_) => {}
+            Err(s) => assert_eq!(s, str_erro),
+        }
+    }
+    #[test]
+    fn eval_fails() {
+        let env: Environment<EnvValue> = Environment::new();
+        let error_msg: String = String::from("Test failed.");
+        let test_fn = AssertFails(error_msg.clone());
+
+        match run(test_fn, &env) {
+            Ok(_) => {}
+            Err(s) => assert_eq!(s, error_msg),
+        }
+    }
     #[test]
     fn eval_simple_if_then_else() {
         /*
@@ -1338,676 +1596,567 @@ mod tests {
     }
 
     #[test]
-    fn eval_complex_unwrap() {
+    fn eval_mod_test_def() {
         /*
-         * Test for an unwrap check alongside with errors
+         * Test for modTest definition
          *
-         * > x = Ok(1)
-         * > y = Nothing
-         * > z = 0
-         * > if !IsError(x):
-         * >   y = Just(2)
-         * > if !IsNothing(y):
-         * >   z = Unwrap(x) + Unwrap(y)
          *
-         * After executing, 'z' should be 3.
-         */
-        let env: Environment<EnvValue> = Environment::new();
-
-        let setup_x = Assignment(
-            String::from("x"),
-            Box::new(COk(Box::new(CInt(1)))),
-            Some(TResult(Box::new(TInteger), Box::new(TAny))),
-        );
-        let setup_y = Assignment(
-            String::from("y"),
-            Box::new(CNothing),
-            Some(TMaybe(Box::new(TAny))),
-        );
-        let setup_z = Assignment(String::from("z"), Box::new(CInt(0)), Some(TInteger));
-
-        let setup_stmt = Sequence(
-            Box::new(setup_x),
-            Box::new(Sequence(Box::new(setup_y), Box::new(setup_z))),
-        );
-
-        let error_chk = Not(Box::new(IsError(Box::new(Var(String::from("x"))))));
-        let then_error_chk = Assignment(
-            String::from("y"),
-            Box::new(CJust(Box::new(CInt(2)))),
-            Some(TMaybe(Box::new(TInteger))),
-        );
-
-        let if_stmt_first = IfThenElse(Box::new(error_chk), Box::new(then_error_chk), None);
-
-        let nothing_chk = Not(Box::new(IsNothing(Box::new(Var(String::from("y"))))));
-        let unwrap_stmt = Add(
-            Box::new(Unwrap(Box::new(Var(String::from("x"))))),
-            Box::new(Unwrap(Box::new(Var(String::from("y"))))),
-        );
-
-        let then_nothing_chk = Assignment(String::from("z"), Box::new(unwrap_stmt), Some(TInteger));
-
-        let if_stmt_second = IfThenElse(Box::new(nothing_chk), Box::new(then_nothing_chk), None);
-
-        let program = Sequence(
-            Box::new(setup_stmt),
-            Box::new(Sequence(Box::new(if_stmt_first), Box::new(if_stmt_second))),
-        );
-
-        match run(program, &env) {
-            Ok(ControlFlow::Continue(new_env)) => {
-                assert_eq!(
-                    new_env.search_frame("x".to_string()),
-                    Some(&EnvValue::Exp(COk(Box::new(CInt(1)))))
-                );
-                assert_eq!(
-                    new_env.search_frame("y".to_string()),
-                    Some(&EnvValue::Exp(CJust(Box::new(CInt(2)))))
-                );
-                assert_eq!(
-                    new_env.search_frame("z".to_string()),
-                    Some(&EnvValue::Exp(CInt(3)))
-                );
-            }
-            Ok(ControlFlow::Return(_)) => assert!(false),
-            Err(s) => assert!(false, "{:?}", s),
-        }
-    }
-
-    #[test]
-    fn eval_unwrap_error_propagation() {
-        /*
-         * Test for an unwrap check alongside with errors
+         *   def soma1(a, b):
+         *       return a+b
+         *   def soma_mut(a, b, m):
+         *       return(a+b)*m
          *
-         * > x = Err(1)
-         * > x = x?
+         *   modTest teste {
          *
-         * After executing, program should be terminated
-         */
-        let env: Environment<EnvValue> = Environment::new();
-
-        let setup_stmt = Assignment(
-            String::from("x"),
-            Box::new(CErr(Box::new(CString("Test error message".to_string())))),
-            Some(TResult(Box::new(TAny), Box::new(TString))),
-        );
-
-        let unwrap_stmt = Assignment(
-            String::from("x"),
-            Box::new(Propagate(Box::new(Var(String::from("x"))))),
-            Some(TInteger),
-        );
-
-        let program = Sequence(Box::new(setup_stmt), Box::new(unwrap_stmt));
-
-        match run(program, &env) {
-            Err(s) => assert_eq!(
-                s,
-                "Program terminated with errors: Test error message".to_string(),
-            ),
-            _ => assert!(false, "The program was suposed to terminate"),
-        }
-    }
-
-    #[test]
-    fn eval_unwrap_error_propagation_if() {
-        /*
-         * Test for an unwrap check alongside with errors
+         *       deftest test {
          *
-         * > x = Ok(true)
-         * > if x?:
-         * >    x = Err("Oops")
-         * >    if x?:
-         * >        y = 1
-         * After executing, program should be terminated
-         */
-        let env: Environment<EnvValue> = Environment::new();
-
-        let setup_stmt = Assignment(
-            String::from("x"),
-            Box::new(COk(Box::new(CTrue))),
-            Some(TResult(Box::new(TBool), Box::new(TAny))),
-        );
-
-        let unwrap_cond_2 = Propagate(Box::new(Var(String::from("x"))));
-        let then_unwrap_cond_2 = Assignment(
-            String::from("y"),
-            Box::new(COk(Box::new(CInt(1)))),
-            Some(TResult(Box::new(TBool), Box::new(TAny))),
-        );
-        let if_stmt_2 = IfThenElse(Box::new(unwrap_cond_2), Box::new(then_unwrap_cond_2), None);
-
-        let unwrap_cond_1 = Propagate(Box::new(Var(String::from("x"))));
-        let then_unwrap_cond_1 = Sequence(
-            Box::new(Assignment(
-                String::from("x"),
-                Box::new(CErr(Box::new(CString("Oops".to_string())))),
-                Some(TResult(Box::new(TAny), Box::new(TString))),
-            )),
-            Box::new(if_stmt_2),
-        );
-        let if_stmt_1 = IfThenElse(Box::new(unwrap_cond_1), Box::new(then_unwrap_cond_1), None);
-
-        let program = Sequence(Box::new(setup_stmt), Box::new(if_stmt_1));
-
-        match run(program, &env) {
-            Err(s) => assert_eq!(s, "Program terminated with errors: Oops".to_string()),
-            _ => assert!(false, "The program was suposed to terminate"),
-        }
-    }
-
-    #[test]
-    fn eval_unwrap_error_propagation_while() {
-        /*
-         * Test for an unwrap check alongside with errors
-         *
-         * > x = Ok(true)
-         * > y = 0
-         * > while x?:
-         * >   y = y + 1
-         * >   if y > 10:
-         * >      x = Ok(false)
-         * > x = Ok(true)
-         * > z = 10
-         * > while x?:
-         * >   z = z - 1
-         * >   if z < 0:
-         * >      x = Err("ErrorMsg")
-         *
-         * After executing this program, it will terminate with an error
+         *           assertEQ(soma1(1, 2), soma_mut(1, 2, 3))
+         *       }
+         *   }
          */
 
         let env: Environment<EnvValue> = Environment::new();
 
-        let a1 = Assignment(
-            String::from("x"),
-            Box::new(COk(Box::new(CTrue))),
-            Some(TResult(Box::new(TBool), Box::new(TAny))),
-        );
-        let a2 = Assignment(String::from("y"), Box::new(CInt(0)), Some(TInteger));
-        let a3 = Assignment(
-            String::from("y"),
-            Box::new(Add(Box::new(Var(String::from("y"))), Box::new(CInt(1)))),
-            None,
-        );
-        let a4 = Assignment(
-            String::from("x"),
-            Box::new(COk(Box::new(CTrue))),
-            Some(TResult(Box::new(TBool), Box::new(TAny))),
-        );
-        let a5 = Assignment(String::from("z"), Box::new(CInt(10)), Some(TInteger));
-        let a6 = Assignment(
-            String::from("z"),
-            Box::new(Sub(Box::new(Var(String::from("z"))), Box::new(CInt(1)))),
-            None,
-        );
-
-        let cond_1 = GT(Box::new(Var(String::from("y"))), Box::new(CInt(10)));
-        let then_cond_1 = Assignment(
-            String::from("x"),
-            Box::new(COk(Box::new(CFalse))),
-            Some(TResult(Box::new(TBool), Box::new(TAny))),
-        );
-        let if_stmt_1 = IfThenElse(Box::new(cond_1), Box::new(then_cond_1), None);
-
-        let cond_2 = LT(Box::new(Var(String::from("z"))), Box::new(CInt(0)));
-        let then_cond_2 = Assignment(
-            String::from("x"),
-            Box::new(CErr(Box::new(CString("ErrorMsg".to_string())))),
-            Some(TResult(Box::new(TAny), Box::new(TString))),
-        );
-        let if_stmt_2 = IfThenElse(Box::new(cond_2), Box::new(then_cond_2), None);
-
-        let seq6 = Sequence(Box::new(a6), Box::new(if_stmt_2));
-
-        let while_statement_2 = While(
-            Box::new(Propagate(Box::new(Var(String::from("x"))))),
-            Box::new(seq6),
-        );
-
-        let seq5 = Sequence(Box::new(a4), Box::new(a5));
-        let seq4 = Sequence(Box::new(seq5), Box::new(while_statement_2));
-
-        let seq3 = Sequence(Box::new(a3), Box::new(if_stmt_1));
-
-        let while_statement_1 = While(
-            Box::new(Propagate(Box::new(Var(String::from("x"))))),
-            Box::new(seq3),
-        );
-
-        let seq2 = Sequence(Box::new(while_statement_1), Box::new(seq4));
-
-        let seq1 = Sequence(Box::new(a1), Box::new(a2));
-        let program = Sequence(Box::new(seq1), Box::new(seq2));
-
-        match run(program, &env) {
-            Ok(ControlFlow::Continue(_)) => assert!(false),
-            Ok(ControlFlow::Return(_)) => assert!(false),
-            Err(s) => assert_eq!(s, "Program terminated with errors: ErrorMsg".to_string()),
-        }
-    }
-
-    #[test]
-    fn eval_unwrap_while() {
-        /*
-         * Exactally like the previous test, except it won't throw an error
-         *
-         * > x = Ok(true)
-         * > y = 0
-         * > while unwrap(x):
-         * >   y = y + 1
-         * >   if y > 10:
-         * >      x = Ok(false)
-         * > x = Ok(true)
-         * > z = 10
-         * > while unwrap(x):
-         * >   z = z - 1
-         * >   if z < 0:
-         * >      x = Ok(false)
-         *
-         * After executing this program, 'x' must be Ok(false)
-         * 'y' must be 11 and 'z' must be -1
-         */
-
-        let env: Environment<EnvValue> = Environment::new();
-
-        let a1 = Assignment(
-            String::from("x"),
-            Box::new(COk(Box::new(CTrue))),
-            Some(TResult(Box::new(TBool), Box::new(TAny))),
-        );
-        let a2 = Assignment(String::from("y"), Box::new(CInt(0)), Some(TInteger));
-        let a3 = Assignment(
-            String::from("y"),
-            Box::new(Add(Box::new(Var(String::from("y"))), Box::new(CInt(1)))),
-            None,
-        );
-        let a4 = Assignment(
-            String::from("x"),
-            Box::new(COk(Box::new(CTrue))),
-            Some(TResult(Box::new(TBool), Box::new(TAny))),
-        );
-        let a5 = Assignment(String::from("z"), Box::new(CInt(10)), Some(TInteger));
-        let a6 = Assignment(
-            String::from("z"),
-            Box::new(Sub(Box::new(Var(String::from("z"))), Box::new(CInt(1)))),
-            None,
-        );
-
-        let cond_1 = GT(Box::new(Var(String::from("y"))), Box::new(CInt(10)));
-        let then_cond_1 = Assignment(
-            String::from("x"),
-            Box::new(COk(Box::new(CFalse))),
-            Some(TResult(Box::new(TBool), Box::new(TAny))),
-        );
-        let if_stmt_1 = IfThenElse(Box::new(cond_1), Box::new(then_cond_1), None);
-
-        let cond_2 = LT(Box::new(Var(String::from("z"))), Box::new(CInt(0)));
-        let then_cond_2 = Assignment(
-            String::from("x"),
-            Box::new(COk(Box::new(CFalse))),
-            Some(TResult(Box::new(TAny), Box::new(TString))),
-        );
-        let if_stmt_2 = IfThenElse(Box::new(cond_2), Box::new(then_cond_2), None);
-
-        let seq6 = Sequence(Box::new(a6), Box::new(if_stmt_2));
-
-        let while_statement_2 = While(
-            Box::new(Unwrap(Box::new(Var(String::from("x"))))),
-            Box::new(seq6),
-        );
-
-        let seq5 = Sequence(Box::new(a4), Box::new(a5));
-        let seq4 = Sequence(Box::new(seq5), Box::new(while_statement_2));
-
-        let seq3 = Sequence(Box::new(a3), Box::new(if_stmt_1));
-
-        let while_statement_1 = While(
-            Box::new(Unwrap(Box::new(Var(String::from("x"))))),
-            Box::new(seq3),
-        );
-
-        let seq2 = Sequence(Box::new(while_statement_1), Box::new(seq4));
-
-        let seq1 = Sequence(Box::new(a1), Box::new(a2));
-        let program = Sequence(Box::new(seq1), Box::new(seq2));
-
-        match run(program, &env) {
-            Ok(ControlFlow::Continue(new_env)) => {
-                assert_eq!(
-                    new_env.search_frame("x".to_string()),
-                    Some(&EnvValue::Exp(COk(Box::new(CFalse))))
-                );
-                assert_eq!(
-                    new_env.search_frame("y".to_string()),
-                    Some(&EnvValue::Exp(CInt(11)))
-                );
-                assert_eq!(
-                    new_env.search_frame("z".to_string()),
-                    Some(&EnvValue::Exp(CInt(-1)))
-                );
-            }
-            Ok(ControlFlow::Return(_)) => assert!(false),
-            Err(s) => assert!(false, "{:?}", s),
-        }
-    }
-
-    #[test]
-    fn eval_func_err_propagation() {
-        /*
-         * Test for a recursive function
-         *
-         * > def add(n: TInteger) -> TResult<TInteger, TString>:
-         * >    if n <= 0:
-         * >        return CErr("Expected a positive number")
-         * >    if n < 1:
-         * >        return COk(0)
-         * >
-         * >    if n <= 2:
-         * >        return COk(n - 1)
-         * >
-         * >    return Ok(fibonacci(n - 1)? + fibonacci(n - 2)?)
-         * >
-         * > fib: TInteger = fibonacci(10)
-         *
-         * After executing, 'fib' should be 34.
-         */
-
-        let env: Environment<EnvValue> = Environment::new();
-
-        let func = FuncDef(Function {
-            name: "fibonacci".to_string(),
+        let func_soma1 = FuncDef(Function {
+            name: "soma1".to_string(),
             kind: Some(TInteger),
-            params: Some(vec![("n".to_string(), TInteger)]),
-            body: Some(Box::new(Sequence(
-                Box::new(IfThenElse(
-                    Box::new(LTE(Box::new(Var("n".to_string())), Box::new(CInt(0)))),
-                    Box::new(Return(Box::new(CErr(Box::new(CString(
-                        "Expected a positive number".to_string(),
-                    )))))),
-                    None,
-                )),
-                Box::new(Sequence(
-                    Box::new(IfThenElse(
-                        Box::new(LT(Box::new(Var("n".to_string())), Box::new(CInt(1)))),
-                        Box::new(Return(Box::new(COk(Box::new(CInt(0)))))),
-                        None,
-                    )),
-                    Box::new(Sequence(
-                        Box::new(IfThenElse(
-                            Box::new(LTE(Box::new(Var("n".to_string())), Box::new(CInt(2)))),
-                            Box::new(Return(Box::new(COk(Box::new(Sub(
-                                Box::new(Var("n".to_string())),
-                                Box::new(CInt(1)),
-                            )))))),
-                            None,
-                        )),
-                        Box::new(Return(Box::new(COk(Box::new(Add(
-                            Box::new(Propagate(Box::new(FuncCall(
-                                "fibonacci".to_string(),
-                                vec![Sub(Box::new(Var("n".to_string())), Box::new(CInt(1)))],
-                            )))),
-                            Box::new(Propagate(Box::new(FuncCall(
-                                "fibonacci".to_string(),
-                                vec![Sub(Box::new(Var("n".to_string())), Box::new(CInt(2)))],
-                            )))),
-                        )))))),
-                    )),
-                )),
-            ))),
+            params: Some(vec![
+                ("a".to_string(), TInteger),
+                ("b".to_string(), TInteger),
+            ]),
+            body: Some(Box::new(Return(Box::new(Add(
+                Box::new(Var("a".to_string())),
+                Box::new(Var("b".to_string())),
+            ))))),
         });
 
-        let program = Sequence(
-            Box::new(func),
-            Box::new(Assignment(
-                "fib".to_string(),
-                Box::new(Propagate(Box::new(FuncCall(
-                    "fibonacci".to_string(),
-                    vec![CInt(-1)],
-                )))),
-                Some(TResult(Box::new(TInteger), Box::new(TString))),
+        let func_soma_mut = FuncDef(Function {
+            name: "soma_mut".to_string(),
+            kind: Some(TInteger),
+            params: Some(vec![
+                ("a".to_string(), TInteger),
+                ("b".to_string(), TInteger),
+                ("m".to_string(), TInteger),
+            ]),
+            body: Some(Box::new(Return(Box::new(Mul(
+                Box::new(Add(
+                    Box::new(Var("a".to_string())),
+                    Box::new(Var("b".to_string())),
+                )),
+                Box::new(Var("m".to_string())),
+            ))))),
+        });
+
+        let body_test = Box::new(AssertEQ(
+            Box::new(FuncCall("soma1".to_string(), vec![CInt(1), CInt(2)])),
+            Box::new(FuncCall(
+                "soma_mut".to_string(),
+                vec![CInt(1), CInt(2), CInt(3)],
             )),
-        );
+            "Somas diferentes".to_string(),
+        ));
 
-        match run(program, &env) {
-            Err(s) => assert_eq!(
-                s,
-                "Program terminated with errors: Expected a positive number".to_string(),
-            ),
-            _ => assert!(false, "The program was suposed to terminate"),
-        }
-    }
+        let body_mod_test = Box::new(TestDef(Function {
+            name: "test".to_string(),
+            kind: Some(TVoid),
+            params: None,
+            body: Some(body_test.clone()),
+        }));
 
-    #[test]
-    fn test_block_functionality() {
-        /*
-         * Test for block functionality
-         *
-         * > x: TInteger = 10
-         * > if x > 5:
-         * >   y = Ok(1)
-         * >   x = unwrap(y)
-         * >   y = Err("Test Error Message")
-         * >   x = unwrap(y)
-         * > else:
-         * >   y: TInteger = 0
-         *
-         * After executing, 'y' should be 1.
-         */
+        let mod_test_def = Box::new(ModTestDef("teste".to_string(), body_mod_test));
 
-        let env: Environment<EnvValue> = Environment::new();
+        let program = Box::new(Sequence(
+            Box::new(func_soma1),
+            Box::new(Sequence(Box::new(func_soma_mut), mod_test_def)),
+        ));
 
-        let condition = GT(Box::new(Var(String::from("x"))), Box::new(CInt(5)));
-        let then_stmt_1 = Assignment(String::from("y"), Box::new(CInt(2)), Some(TInteger));
-        let then_stmt_2 = Assignment(
-            String::from("x"),
-            Box::new(Add(
-                Box::new(Var(String::from("x"))),
-                Box::new(Var(String::from("y"))),
-            )),
-            Some(TInteger),
-        );
+        let real_hash: HashMap<String, Function> = HashMap::from([(
+            "test".to_string(),
+            Function {
+                name: "test".to_string(),
+                kind: Some(TVoid),
+                params: None,
+                body: Some(Box::new(Sequence(
+                    body_test,
+                    Box::new(Return(Box::new(CVoid))),
+                ))),
+            },
+        )]);
 
-        let else_stmt = Assignment(String::from("y"), Box::new(CInt(0)), Some(TInteger));
-
-        let if_statement = IfThenElse(
-            Box::new(condition),
-            Box::new(Block(vec![then_stmt_1, then_stmt_2])),
-            Some(Box::new(Block(vec![else_stmt]))),
-        );
-
-        let setup_stmt = Assignment(String::from("x"), Box::new(CInt(10)), Some(TInteger));
-        let program = Sequence(Box::new(setup_stmt), Box::new(if_statement));
-
-        match run(program, &env) {
+        match run(*program, &env) {
             Ok(ControlFlow::Continue(new_env)) => {
-                assert_eq!(
-                    new_env.search_frame("x".to_string()),
-                    Some(&EnvValue::Exp(CInt(12)))
-                );
-                assert_eq!(
-                    new_env.search_frame("y".to_string()),
-                    Some(&EnvValue::Exp(CInt(2)))
-                );
+                let cur_scope = new_env.scope_key().clone();
+                let frame = new_env.get_frame(cur_scope).clone();
+                match frame.variables.get("teste") {
+                    Some(EnvValue::TestEnvironment(mod_test)) => {
+                        let cur_scope1 = mod_test.env.scope_key();
+                        let frame1 = mod_test.env.get_frame(cur_scope1);
+
+                        assert_eq!(frame1.tests, real_hash);
+                    }
+                    _ => assert!(false),
+                }
             }
             Ok(ControlFlow::Return(_)) => assert!(false),
-            Err(s) => assert!(false, "{:?}", s),
+            Err(s) => assert!(false, "{}", s),
         }
     }
 
     #[test]
-    fn test_block_functionality_unwrap_error() {
+    fn eval_more_than_one_test() {
         /*
-         * Test for block functionality and error compatibility
+         * Test for more than one function inside modTest definition
          *
-         * > x: TInteger = 10
-         * > if x > 5:
-         * >   y = Ok(1)
-         * >   x = y?
-         * >   y = Err("Test Error Message")
-         * >   x = y?
-         * > else:
-         * >   y: TInteger = 0
          *
-         * After executing, 'x' should be 12 and 'y' should be 2.
+         *   def soma1(a, b):
+         *       return a+b
+         *   def soma_mut(a, b, m):
+         *       return(a+b)*m
+         *   def sub (a,b):
+         *      return a-b
+         *   def sub_mut (a,b,m):
+         *      return (a-b)*m
+         *
+         *   modTest teste {
+         *
+         *       deftest test {
+         *
+         *           assertEQ(soma1(1, 2), soma_mut(1, 2, 3))
+         *           assertNEQ(sub(1,2), submut(1,2,3))
+         *       }
+         *   }
          */
 
         let env: Environment<EnvValue> = Environment::new();
 
-        let condition = GT(Box::new(Var(String::from("x"))), Box::new(CInt(5)));
-        let then_stmt_1 = Assignment(
-            String::from("y"),
-            Box::new(COk(Box::new(CInt(1)))),
-            Some(TResult(Box::new(TInteger), Box::new(TAny))),
-        );
-        let then_stmt_2 = Assignment(
-            String::from("x"),
-            Box::new(Propagate(Box::new(Var(String::from("y"))))),
-            Some(TInteger),
-        );
-        let then_stmt_3 = Assignment(
-            String::from("y"),
-            Box::new(CErr(Box::new(CString("Test Error Message".to_string())))),
-            Some(TResult(Box::new(TAny), Box::new(TString))),
-        );
-        let then_stmt_4 = Assignment(
-            String::from("x"),
-            Box::new(Propagate(Box::new(Var(String::from("y"))))),
-            Some(TInteger),
-        );
+        let func_soma1 = FuncDef(Function {
+            name: "soma1".to_string(),
+            kind: Some(TInteger),
+            params: Some(vec![
+                ("a".to_string(), TInteger),
+                ("b".to_string(), TInteger),
+            ]),
+            body: Some(Box::new(Return(Box::new(Add(
+                Box::new(Var("a".to_string())),
+                Box::new(Var("b".to_string())),
+            ))))),
+        });
 
-        let else_stmt = Assignment(String::from("y"), Box::new(CInt(0)), Some(TInteger));
+        let func_soma_mut = FuncDef(Function {
+            name: "soma_mut".to_string(),
+            kind: Some(TInteger),
+            params: Some(vec![
+                ("a".to_string(), TInteger),
+                ("b".to_string(), TInteger),
+                ("m".to_string(), TInteger),
+            ]),
+            body: Some(Box::new(Return(Box::new(Mul(
+                Box::new(Add(
+                    Box::new(Var("a".to_string())),
+                    Box::new(Var("b".to_string())),
+                )),
+                Box::new(Var("m".to_string())),
+            ))))),
+        });
 
-        let if_statement = IfThenElse(
-            Box::new(condition),
-            Box::new(Block(vec![
-                then_stmt_1,
-                then_stmt_2,
-                then_stmt_3,
-                then_stmt_4,
-            ])),
-            Some(Box::new(Block(vec![else_stmt]))),
-        );
+        let func_sub = FuncDef(Function {
+            name: "sub".to_string(),
+            kind: Some(TInteger),
+            params: Some(vec![
+                ("a".to_string(), TInteger),
+                ("b".to_string(), TInteger),
+            ]),
+            body: Some(Box::new(Return(Box::new(Sub(
+                Box::new(Var("a".to_string())),
+                Box::new(Var("b".to_string())),
+            ))))),
+        });
 
-        let setup_stmt = Assignment(String::from("x"), Box::new(CInt(10)), Some(TInteger));
-        let program = Sequence(Box::new(setup_stmt), Box::new(if_statement));
+        let func_sub_mut = FuncDef(Function {
+            name: "sub_mut".to_string(),
+            kind: Some(TInteger),
+            params: Some(vec![
+                ("a".to_string(), TInteger),
+                ("b".to_string(), TInteger),
+                ("m".to_string(), TInteger),
+            ]),
+            body: Some(Box::new(Return(Box::new(Mul(
+                Box::new(Sub(
+                    Box::new(Var("a".to_string())),
+                    Box::new(Var("b".to_string())),
+                )),
+                Box::new(Var("m".to_string())),
+            ))))),
+        });
 
-        match run(program, &env) {
-            Err(s) => assert_eq!(
-                s,
-                "Program terminated with errors: Test Error Message".to_string(),
+        let body_test = Box::new(AssertEQ(
+            Box::new(FuncCall("soma1".to_string(), vec![CInt(1), CInt(2)])),
+            Box::new(FuncCall(
+                "soma_mut".to_string(),
+                vec![CInt(1), CInt(2), CInt(3)],
+            )),
+            "Somas diferentes".to_string(),
+        ));
+
+        let body_test_1 = Box::new(AssertNEQ(
+            Box::new(FuncCall("sub".to_string(), vec![CInt(1), CInt(2)])),
+            Box::new(FuncCall(
+                "sub_mut".to_string(),
+                vec![CInt(1), CInt(2), CInt(3)],
+            )),
+            "Subtrações diferentes".to_string(),
+        ));
+
+        let mut body_mod_test = Box::new(TestDef(Function {
+            name: "teste".to_string(),
+            kind: Some(TVoid),
+            params: None,
+            body: Some(body_test.clone()),
+        }));
+
+        body_mod_test = Box::new(Sequence(
+            body_mod_test.clone(),
+            Box::new(TestDef(Function {
+                name: "teste_1".to_string(),
+                kind: Some(TVoid),
+                params: None,
+                body: Some(body_test_1.clone()),
+            })),
+        ));
+
+        let mod_test_def = Box::new(ModTestDef("testes".to_string(), body_mod_test));
+        let program: Box<Statement> = Box::new(Sequence(
+            Box::new(func_soma1),
+            Box::new(Sequence(
+                Box::new(func_soma_mut),
+                Box::new(Sequence(
+                    Box::new(func_sub),
+                    Box::new(Sequence(Box::new(func_sub_mut), mod_test_def)),
+                )),
+            )),
+        ));
+
+        let tests_set: Vec<(String, Option<String>)> = vec![("testes".to_string(), None)];
+        let results: HashSet<(String, String, Option<String>)> = HashSet::from([
+            (
+                "testes::teste".to_string(),
+                "Falhou".to_string(),
+                Some("Erro: Somas diferentes".to_string()),
             ),
-            _ => assert!(false, "The program was suposed to terminate"),
+            ("testes::teste_1".to_string(), "Passou".to_string(), None),
+        ]);
+
+        match run(*program, &env) {
+            Ok(ControlFlow::Continue(new_env)) => match execute_tests(tests_set, &new_env) {
+                Ok(result) => {
+                    assert_eq!(results, result)
+                }
+                Err(e) => assert!(false, "{}", e),
+            },
+            Ok(ControlFlow::Return(_)) => assert!(false),
+            Err(s) => assert!(false, "{}", s),
+        }
+    }
+    #[test]
+    fn eval_only_test_1() {
+        /*
+         * Test for function test_1 inside modTest definition
+         *
+         *
+         *   def soma1(a, b):
+         *       return a+b
+         *   def soma_mut(a, b, m):
+         *       return(a+b)*m
+         *   def sub (a,b):
+         *      return a-b
+         *   def sub_mut (a,b,m):
+         *      return (a-b)*m
+         *
+         *   modTest testes {
+         *       modTest teste {
+         *           assertEQ(soma1(1, 2), soma_mut(1, 2, 3))
+         *       }
+         *      modTest teste_1{
+         *          assertNEQ(sub(1,2), submut(1,2,3))}
+         *      }
+         *  }
+         */
+        let env: Environment<EnvValue> = Environment::new();
+
+        let func_soma1 = FuncDef(Function {
+            name: "soma1".to_string(),
+            kind: Some(TInteger),
+            params: Some(vec![
+                ("a".to_string(), TInteger),
+                ("b".to_string(), TInteger),
+            ]),
+            body: Some(Box::new(Return(Box::new(Add(
+                Box::new(Var("a".to_string())),
+                Box::new(Var("b".to_string())),
+            ))))),
+        });
+
+        let func_soma_mut = FuncDef(Function {
+            name: "soma_mut".to_string(),
+            kind: Some(TInteger),
+            params: Some(vec![
+                ("a".to_string(), TInteger),
+                ("b".to_string(), TInteger),
+                ("m".to_string(), TInteger),
+            ]),
+            body: Some(Box::new(Return(Box::new(Mul(
+                Box::new(Add(
+                    Box::new(Var("a".to_string())),
+                    Box::new(Var("b".to_string())),
+                )),
+                Box::new(Var("m".to_string())),
+            ))))),
+        });
+
+        let func_sub = FuncDef(Function {
+            name: "sub".to_string(),
+            kind: Some(TInteger),
+            params: Some(vec![
+                ("a".to_string(), TInteger),
+                ("b".to_string(), TInteger),
+            ]),
+            body: Some(Box::new(Return(Box::new(Sub(
+                Box::new(Var("a".to_string())),
+                Box::new(Var("b".to_string())),
+            ))))),
+        });
+
+        let func_sub_mut = FuncDef(Function {
+            name: "sub_mut".to_string(),
+            kind: Some(TInteger),
+            params: Some(vec![
+                ("a".to_string(), TInteger),
+                ("b".to_string(), TInteger),
+                ("m".to_string(), TInteger),
+            ]),
+            body: Some(Box::new(Return(Box::new(Mul(
+                Box::new(Sub(
+                    Box::new(Var("a".to_string())),
+                    Box::new(Var("b".to_string())),
+                )),
+                Box::new(Var("m".to_string())),
+            ))))),
+        });
+
+        let body_test = Box::new(AssertEQ(
+            Box::new(FuncCall("soma1".to_string(), vec![CInt(1), CInt(2)])),
+            Box::new(FuncCall(
+                "soma_mut".to_string(),
+                vec![CInt(1), CInt(2), CInt(3)],
+            )),
+            "Somas diferentes".to_string(),
+        ));
+
+        let body_test_1 = Box::new(AssertNEQ(
+            Box::new(FuncCall("sub".to_string(), vec![CInt(1), CInt(2)])),
+            Box::new(FuncCall(
+                "sub_mut".to_string(),
+                vec![CInt(1), CInt(2), CInt(3)],
+            )),
+            "Subtrações diferentes".to_string(),
+        ));
+
+        let body_mod_test = Box::new(Sequence(
+            Box::new(TestDef(Function {
+                name: "teste".to_string(),
+                kind: Some(TVoid),
+                params: None,
+                body: Some(body_test.clone()),
+            })),
+            Box::new(TestDef(Function {
+                name: "teste_1".to_string(),
+                kind: Some(TVoid),
+                params: None,
+                body: Some(body_test_1.clone()),
+            })),
+        ));
+
+        let mod_test_def = Box::new(ModTestDef("testes".to_string(), body_mod_test));
+
+        let program: Box<Statement> = Box::new(Sequence(
+            Box::new(func_soma1),
+            Box::new(Sequence(
+                Box::new(func_soma_mut),
+                Box::new(Sequence(
+                    Box::new(func_sub),
+                    Box::new(Sequence(Box::new(func_sub_mut), mod_test_def)),
+                )),
+            )),
+        ));
+
+        let tests_set: Vec<(String, Option<String>)> =
+            vec![("testes".to_string(), Some("teste_1".to_string()))];
+
+        let results: HashSet<(String, String, Option<String>)> =
+            HashSet::from([("testes::teste_1".to_string(), "Passou".to_string(), None)]);
+
+        match run(*program, &env) {
+            Ok(ControlFlow::Continue(new_env)) => match execute_tests(tests_set, &new_env) {
+                Ok(result) => {
+                    assert_eq!(results, result)
+                }
+                Err(e) => assert!(false, "{}", e),
+            },
+            Ok(ControlFlow::Return(_)) => assert!(false),
+            Err(s) => assert!(false, "{}", s),
         }
     }
 
     #[test]
-    fn test_recursive_propagate_equal() {
+    fn eval_only_test() {
+        /*
+         * Test for function test inside modTest definition
+         *
+         *
+         *   def soma1(a, b):
+         *       return a+b
+         *   def soma_mut(a, b, m):
+         *       return(a+b)*m
+         *   def sub (a,b):
+         *      return a-b
+         *   def sub_mut (a,b,m):
+         *      return (a-b)*m
+         *
+         *   modTest testes {
+         *       modTest teste {
+         *           assertEQ(soma1(1, 2), soma_mut(1, 2, 3))
+         *       }
+         *      modTest teste_1{
+         *          assertNEQ(sub(1,2), submut(1,2,3))}
+         *      }
+         *  }
+         */
         let env: Environment<EnvValue> = Environment::new();
 
-        let equal_expr = Propagate(Box::new(Expression::CJust(Box::new(Expression::EQ(
-            Box::new(Expression::CInt(5)),
-            Box::new(Expression::CInt(5)),
-        )))));
-        let unwrap_expr = Expression::Unwrap(Box::new(Expression::COk(Box::new(equal_expr))));
+        let func_soma1 = FuncDef(Function {
+            name: "soma1".to_string(),
+            kind: Some(TInteger),
+            params: Some(vec![
+                ("a".to_string(), TInteger),
+                ("b".to_string(), TInteger),
+            ]),
+            body: Some(Box::new(Return(Box::new(Add(
+                Box::new(Var("a".to_string())),
+                Box::new(Var("b".to_string())),
+            ))))),
+        });
 
-        let result = eval(unwrap_expr, &env);
-        assert_eq!(result, Ok(EnvValue::Exp(Expression::CTrue)));
-    }
+        let func_soma_mut = FuncDef(Function {
+            name: "soma_mut".to_string(),
+            kind: Some(TInteger),
+            params: Some(vec![
+                ("a".to_string(), TInteger),
+                ("b".to_string(), TInteger),
+                ("m".to_string(), TInteger),
+            ]),
+            body: Some(Box::new(Return(Box::new(Mul(
+                Box::new(Add(
+                    Box::new(Var("a".to_string())),
+                    Box::new(Var("b".to_string())),
+                )),
+                Box::new(Var("m".to_string())),
+            ))))),
+        });
 
-    #[test]
-    fn test_recursive_propagate_boolean() {
-        let env: Environment<EnvValue> = Environment::new();
+        let func_sub = FuncDef(Function {
+            name: "sub".to_string(),
+            kind: Some(TInteger),
+            params: Some(vec![
+                ("a".to_string(), TInteger),
+                ("b".to_string(), TInteger),
+            ]),
+            body: Some(Box::new(Return(Box::new(Sub(
+                Box::new(Var("a".to_string())),
+                Box::new(Var("b".to_string())),
+            ))))),
+        });
 
-        let just_expr =
-            Expression::Propagate(Box::new(Expression::CJust(Box::new(Expression::CTrue))));
-        let and_expr = Expression::And(Box::new(Expression::CTrue), Box::new(just_expr));
-        let unwrap_expr = Expression::Unwrap(Box::new(Expression::COk(Box::new(and_expr))));
+        let func_sub_mut = FuncDef(Function {
+            name: "sub_mut".to_string(),
+            kind: Some(TInteger),
+            params: Some(vec![
+                ("a".to_string(), TInteger),
+                ("b".to_string(), TInteger),
+                ("m".to_string(), TInteger),
+            ]),
+            body: Some(Box::new(Return(Box::new(Mul(
+                Box::new(Sub(
+                    Box::new(Var("a".to_string())),
+                    Box::new(Var("b".to_string())),
+                )),
+                Box::new(Var("m".to_string())),
+            ))))),
+        });
 
-        let result = eval(unwrap_expr, &env);
-        assert_eq!(result, Ok(EnvValue::Exp(Expression::CTrue)));
-    }
+        let body_test = Box::new(AssertEQ(
+            Box::new(FuncCall("soma1".to_string(), vec![CInt(1), CInt(2)])),
+            Box::new(FuncCall(
+                "soma_mut".to_string(),
+                vec![CInt(1), CInt(2), CInt(3)],
+            )),
+            "Somas diferentes".to_string(),
+        ));
 
-    #[test]
-    fn test_recursive_propagate_int() {
-        let env: Environment<EnvValue> = Environment::new();
+        let body_test_1 = Box::new(AssertNEQ(
+            Box::new(FuncCall("sub".to_string(), vec![CInt(1), CInt(2)])),
+            Box::new(FuncCall(
+                "sub_mut".to_string(),
+                vec![CInt(1), CInt(2), CInt(3)],
+            )),
+            "Subtrações diferentes".to_string(),
+        ));
 
-        let inner_propagate =
-            Expression::Unwrap(Box::new(Expression::COk(Box::new(Expression::CInt(1)))));
-        let add_expr = Expression::Add(Box::new(Expression::CInt(2)), Box::new(inner_propagate));
-        let outer_expr = Expression::Propagate(Box::new(Expression::COk(Box::new(add_expr))));
+        let body_mod_test = Box::new(Sequence(
+            Box::new(TestDef(Function {
+                name: "teste".to_string(),
+                kind: Some(TVoid),
+                params: None,
+                body: Some(body_test.clone()),
+            })),
+            Box::new(TestDef(Function {
+                name: "teste_1".to_string(),
+                kind: Some(TVoid),
+                params: None,
+                body: Some(body_test_1.clone()),
+            })),
+        ));
 
-        let result = eval(outer_expr, &env);
-        assert_eq!(result, Ok(EnvValue::Exp(Expression::CInt(3))));
-    }
+        let mod_test_def = Box::new(ModTestDef("testes".to_string(), body_mod_test));
 
-    #[test]
-    fn test_recursive_unwrap() {
-        let env: Environment<EnvValue> = Environment::new();
+        let program: Box<Statement> = Box::new(Sequence(
+            Box::new(func_soma1),
+            Box::new(Sequence(
+                Box::new(func_soma_mut),
+                Box::new(Sequence(
+                    Box::new(func_sub),
+                    Box::new(Sequence(Box::new(func_sub_mut), mod_test_def)),
+                )),
+            )),
+        ));
 
-        let base_expr = Expression::COk(Box::new(Expression::CInt(1)));
-        let propagate_1 = Expression::Unwrap(Box::new(Expression::COk(Box::new(base_expr))));
-        let propagate_2 = Expression::Unwrap(Box::new(Expression::COk(Box::new(propagate_1))));
+        let tests_set: Vec<(String, Option<String>)> =
+            vec![("testes".to_string(), Some("teste".to_string()))];
 
-        let result = eval_propagate_expression(propagate_2, &env);
-        assert_eq!(result, Ok(EnvValue::Exp(Expression::CInt(1))));
-    }
+        let results: HashSet<(String, String, Option<String>)> = HashSet::from([(
+            "testes::teste".to_string(),
+            "Falhou".to_string(),
+            Some("Erro: Somas diferentes".to_string()),
+        )]);
 
-    #[test]
-    fn test_recursive_propagation() {
-        let env: Environment<EnvValue> = Environment::new();
-
-        let base_expr = Expression::COk(Box::new(Expression::CInt(1)));
-        let propagate_1 = Expression::Propagate(Box::new(Expression::COk(Box::new(COk(
-            Box::new(base_expr),
-        )))));
-        let propagate_2 =
-            Expression::Propagate(Box::new(Expression::Propagate(Box::new(propagate_1))));
-
-        let result = eval(propagate_2, &env);
-        assert_eq!(result, Ok(EnvValue::Exp(Expression::CInt(1))));
-    }
-
-    #[test]
-    fn test_propagate_err() {
-        let env: Environment<EnvValue> = Environment::new();
-        let exp = CErr(Box::new(CString("error".to_string())));
-
-        let result = eval_propagate_expression(exp, &env);
-        assert_eq!(
-            result,
-            Err((
-                "Propagate".to_string(),
-                Some(Expression::CString("error".to_string()))
-            ))
-        );
-    }
-
-    #[test]
-    fn test_propagate_nothing() {
-        let env: Environment<EnvValue> = Environment::new();
-        let exp = Expression::CNothing;
-
-        let result = eval_propagate_expression(exp, &env);
-        assert_eq!(
-            result,
-            Err((
-                "Propagate".to_string(),
-                Some(Expression::CString("Couldn't unwrap Nothing".to_string()))
-            ))
-        );
-    }
-
-    #[test]
-    fn test_propagate_unexpected() {
-        let env: Environment<EnvValue> = Environment::new();
-        let exp = Expression::CInt(100);
-
-        let result = eval_propagate_expression(exp, &env);
-        assert_eq!(
-            result,
-            Err((String::from("'propagate' is expects a Just or Ok."), None))
-        );
+        match run(*program, &env) {
+            Ok(ControlFlow::Continue(new_env)) => match execute_tests(tests_set, &new_env) {
+                Ok(result) => {
+                    assert_eq!(results, result)
+                }
+                Err(e) => assert!(false, "{}", e),
+            },
+            Ok(ControlFlow::Return(_)) => assert!(false),
+            Err(s) => assert!(false, "{}", s),
+        }
     }
 }
