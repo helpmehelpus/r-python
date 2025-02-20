@@ -1,5 +1,6 @@
 pub type Name = String;
 
+use nom::IResult;
 use std::collections::HashMap;
 
 #[derive(Debug, PartialEq, Clone)]
@@ -143,6 +144,9 @@ pub enum Type {
     TFunction(Box<Option<Type>>, Vec<Type>),
     TList(Box<Type>),
     TTuple(Vec<Type>),
+    TMaybe(Box<Type>),
+    TResult(Box<Type>, Box<Type>), // Ok, Error
+    TAny,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -178,6 +182,18 @@ pub enum Expression {
     LT(Box<Expression>, Box<Expression>),
     GTE(Box<Expression>, Box<Expression>),
     LTE(Box<Expression>, Box<Expression>),
+
+    /* error expressions */
+    COk(Box<Expression>),
+    CErr(Box<Expression>),
+
+    CJust(Box<Expression>),
+    CNothing,
+
+    Unwrap(Box<Expression>),
+    IsError(Box<Expression>),
+    IsNothing(Box<Expression>),
+    Propagate(Box<Expression>),
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -187,6 +203,7 @@ pub enum Statement {
     Assignment(Name, Box<Expression>, Option<Type>),
     IfThenElse(Box<Expression>, Box<Statement>, Option<Box<Statement>>),
     While(Box<Expression>, Box<Statement>),
+    Block(Vec<Statement>),
     Sequence(Box<Statement>, Box<Statement>),
     AssertTrue(Box<Expression>, String),
     AssertFalse(Box<Expression>, String),
@@ -197,4 +214,21 @@ pub enum Statement {
     AssertFails(String),
     FuncDef(Function),
     Return(Box<Expression>),
+}
+
+#[derive(Debug)]
+pub enum ParseError {
+    IndentationError(usize),
+    UnexpectedToken(String),
+    InvalidExpression(String),
+}
+
+pub fn with_error_context<'a, T>(
+    parser: impl Fn(&'a str) -> IResult<&'a str, T>,
+    _context: &'a str,
+) -> impl Fn(&'a str) -> IResult<&'a str, T> {
+    move |input| {
+        parser(input)
+            .map_err(|_| nom::Err::Error(nom::error::Error::new(input, nom::error::ErrorKind::Tag)))
+    }
 }
