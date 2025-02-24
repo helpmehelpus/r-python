@@ -11,6 +11,7 @@ pub fn check_exp(exp: Expression, env: &Environment<Type>) -> Result<Type, Error
     match exp {
         Expression::CTrue => Ok(Type::TBool),
         Expression::CFalse => Ok(Type::TBool),
+        Expression::CVoid => Ok(Type::TVoid),
         Expression::CInt(_) => Ok(Type::TInteger),
         Expression::CReal(_) => Ok(Type::TReal),
         Expression::CString(_) => Ok(Type::TString),

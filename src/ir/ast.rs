@@ -3,26 +3,28 @@ pub type Name = String;
 use nom::IResult;
 use std::collections::HashMap;
 
-#[derive(Clone, Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Frame<A> {
     pub parent_function: Option<Function>,
     pub parent_key: Option<(Name, i32)>,
     pub variables: HashMap<Name, A>,
+    pub tests: HashMap<Name, Function>,
 }
 
 impl<A> Frame<A> {
     pub fn new(func: Option<Function>, key: Option<(Name, i32)>) -> Frame<A> {
         let variables: HashMap<Name, A> = HashMap::new();
-
+        let tests: HashMap<Name, Function> = HashMap::new();
         return Frame {
             parent_function: func,
             parent_key: key,
             variables,
+            tests,
         };
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Environment<A> {
     pub scope: Function,
     pub recursion: i32,
@@ -103,6 +105,12 @@ impl<A> Environment<A> {
     }
 
 
+    pub fn insert_test(&mut self, name: Name, test: Function) -> () {
+        if let Some(frame) = self.stack.get_mut(&self.scope_key()) {
+            frame.tests.insert(name, test);
+        }
+    }
+
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -125,11 +133,26 @@ impl Function {
 }
 
 #[derive(Debug, PartialEq, Clone)]
+pub struct TestEnvironment<A> {
+    pub name: Name,
+    pub env: Environment<A>,
+}
+
+impl<A> TestEnvironment<A> {
+    pub fn new() -> TestEnvironment<A> {
+        return TestEnvironment {
+            name: "__test__".to_string(),
+            env: Environment::<A>::new(),
+        };
+    }
+}
+#[derive(Clone, Debug, PartialEq)]
 pub enum Type {
     TInteger,
     TBool,
     TReal,
     TString,
+    TVoid,
     TFunction(Box<Option<Type>>, Vec<Type>),
     TList(Box<Type>),
     TTuple(Vec<Type>),
@@ -153,6 +176,7 @@ pub enum Expression {
     CInt(i32),
     CReal(f64),
     CString(String),
+    CVoid,
 
     /* variable reference */
     Var(Name),
@@ -202,6 +226,13 @@ pub enum Statement {
     While(Box<Expression>, Box<Statement>),
     Block(Vec<Statement>),
     Sequence(Box<Statement>, Box<Statement>),
+    AssertTrue(Box<Expression>, String),
+    AssertFalse(Box<Expression>, String),
+    AssertEQ(Box<Expression>, Box<Expression>, String),
+    AssertNEQ(Box<Expression>, Box<Expression>, String),
+    TestDef(Function),
+    ModTestDef(Name, Box<Statement>),
+    AssertFails(String),
     FuncDef(Function),
     Return(Box<Expression>),
     ADTDeclaration(Name, Vec<ValueConstructor>),
