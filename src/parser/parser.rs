@@ -578,7 +578,7 @@ fn match_expression(input: &str) -> IResult<&str, Statement> {
     let (input, _) = multispace0(input)?; // Skip leading spaces & newlines
     let (input, _) = tag("match")(input)?; // Parse the "match" keyword
     let (input, _) = space1(input)?; // Require at least one space after "match"
-    let (input, exp) = expression(input)?; // Parse the expression to match (e.g., "shape")
+    let (input, exp) = expression(input)?; // Parse the expression to match 
     let (input, _) = multispace0(input)?; // Skip spaces & newlines
     let (input, _) = char('{')(input)?; // Parse the opening brace
     let (input, _) = multispace0(input)?; // Skip spaces & newlines
@@ -596,19 +596,19 @@ fn match_expression(input: &str) -> IResult<&str, Statement> {
 }
 
 fn match_case(input: &str) -> IResult<&str, (Expression, Box<Statement>)> {
-    println!("Parsing match case: {}", input); // Debug print
+    //println!("Parsing match case: {}", input); // Debug print
     let (input, _) = multispace0(input)?; // Skip spaces & newlines
-    println!("After skipping spaces: {}", input); // Debug print
-    let (input, pattern) = pattern(input)?; // Parse the pattern (e.g., "Circle r")
-    println!("Parsed pattern: {:?}", pattern); // Debug print
+    //println!("After skipping spaces: {}", input); // Debug print
+    let (input, pattern) = pattern(input)?; 
+    //println!("Parsed pattern: {:?}", pattern); // Debug print
     let (input, _) = space0(input)?; // Skip optional spaces
-    println!("After skipping spaces before =>: {}", input); // Debug print
+    //println!("After skipping spaces before =>: {}", input); // Debug print
     let (input, _) = tag("=>")(input)?; // Parse the "=>" operator
-    println!("After parsing =>: {}", input); // Debug print
+    //println!("After parsing =>: {}", input); // Debug print
     let (input, _) = space0(input)?; // Skip optional spaces
-    println!("After skipping spaces after =>: {}", input); // Debug print
-    let (input, stmt) = statement(input)?; // Parse the statement (e.g., "return 3.14 * r * r")
-    println!("Parsed statement: {:?}", stmt); // Debug print
+    //println!("After skipping spaces after =>: {}", input); // Debug print
+    let (input, stmt) = statement(input)?; 
+    //println!("Parsed statement: {:?}", stmt); // Debug print
 
     Ok((input, (pattern, Box::new(stmt))))
 }
@@ -624,10 +624,10 @@ fn arg_pattern(input: &str) -> IResult<&str, Expression> {
 }
 
 fn adt_pattern(input: &str) -> IResult<&str, Expression> {
-    let (input, adt_name) = identifier(input)?; // Parse the ADT name (e.g., "Shape")
+    let (input, adt_name) = identifier(input)?; // Parse the ADT name 
     let (input, _) = space0(input)?; // Skip optional spaces
-    let (input, constructor_name) = identifier(input)?; // Parse the constructor name (e.g., "Triangle")
-    let (input, args) = many1(preceded(space1, arg_pattern))(input)?; // Parse the arguments (e.g., "b", "h", "s")
+    let (input, constructor_name) = identifier(input)?; // Parse the constructor name 
+    let (input, args) = many1(preceded(space1, arg_pattern))(input)?; // Parse the arguments 
 
     Ok((input, Expression::ADTConstructor(adt_name, constructor_name, args.into_iter().map(Box::new).collect())))
 }
