@@ -1,7 +1,7 @@
 use nom::{
     branch::alt,
     bytes::complete::{tag, take_while, take_while1},
-    character::complete::{char, digit1, line_ending, space0, space1, multispace0},
+    character::complete::{char, digit1, line_ending, multispace0, space0, space1},
     combinator::{map, map_res, opt, recognize},
     error::Error,
     multi::{many0, many1, separated_list0, separated_list1},
@@ -104,7 +104,7 @@ fn statement(input: &str) -> IResult<&str, Statement> {
         return_statement,
         assignment,
         declaration,
-        adt_declaration, // Add ADT declaration
+        adt_declaration,  // Add ADT declaration
         match_expression, // Add pattern matching
     ))(input)
 }
@@ -540,7 +540,6 @@ pub fn parse(input: &str) -> IResult<&str, Vec<Statement>> {
     Ok((input, statements))
 }
 
-
 fn adt_declaration(input: &str) -> IResult<&str, Statement> {
     let (input, _) = tag("adt")(input)?;
     let (input, _) = space1(input)?;
@@ -549,10 +548,9 @@ fn adt_declaration(input: &str) -> IResult<&str, Statement> {
     let (input, _) = char('=')(input)?;
     let (input, _) = space0(input)?;
     let (input, constructors) = separated_list1(
-        preceded(space0, char('|')), // Match `|`, allowing leading spaces
+        preceded(space0, char('|')),         // Match `|`, allowing leading spaces
         preceded(space0, value_constructor), // Consume extra spaces before each constructor
     )(input)?;
-    
 
     Ok((input, Statement::ADTDeclaration(name, constructors)))
 }
@@ -578,7 +576,7 @@ fn match_expression(input: &str) -> IResult<&str, Statement> {
     let (input, _) = multispace0(input)?; // Skip leading spaces & newlines
     let (input, _) = tag("match")(input)?; // Parse the "match" keyword
     let (input, _) = space1(input)?; // Require at least one space after "match"
-    let (input, exp) = expression(input)?; // Parse the expression to match 
+    let (input, exp) = expression(input)?; // Parse the expression to match
     let (input, _) = multispace0(input)?; // Skip spaces & newlines
     let (input, _) = char('{')(input)?; // Parse the opening brace
     let (input, _) = multispace0(input)?; // Skip spaces & newlines
@@ -586,7 +584,7 @@ fn match_expression(input: &str) -> IResult<&str, Statement> {
     // Parse the match cases
     let (input, cases) = separated_list0(
         tuple((multispace0, char(','), multispace0)), // Allow spaces/newlines before and after `,`
-        match_case, // Parse each match case
+        match_case,                                   // Parse each match case
     )(input)?;
 
     let (input, _) = multispace0(input)?; // Skip spaces & newlines
@@ -598,23 +596,23 @@ fn match_expression(input: &str) -> IResult<&str, Statement> {
 fn match_case(input: &str) -> IResult<&str, (Expression, Box<Statement>)> {
     //println!("Parsing match case: {}", input); // Debug print
     let (input, _) = multispace0(input)?; // Skip spaces & newlines
-    //println!("After skipping spaces: {}", input); // Debug print
-    let (input, pattern) = pattern(input)?; 
+                                          //println!("After skipping spaces: {}", input); // Debug print
+    let (input, pattern) = pattern(input)?;
     //println!("Parsed pattern: {:?}", pattern); // Debug print
     let (input, _) = space0(input)?; // Skip optional spaces
-    //println!("After skipping spaces before =>: {}", input); // Debug print
+                                     //println!("After skipping spaces before =>: {}", input); // Debug print
     let (input, _) = tag("=>")(input)?; // Parse the "=>" operator
-    //println!("After parsing =>: {}", input); // Debug print
+                                        //println!("After parsing =>: {}", input); // Debug print
     let (input, _) = space0(input)?; // Skip optional spaces
-    //println!("After skipping spaces after =>: {}", input); // Debug print
-    let (input, stmt) = statement(input)?; 
+                                     //println!("After skipping spaces after =>: {}", input); // Debug print
+    let (input, stmt) = statement(input)?;
     //println!("Parsed statement: {:?}", stmt); // Debug print
 
     Ok((input, (pattern, Box::new(stmt))))
 }
 fn pattern(input: &str) -> IResult<&str, Expression> {
     alt((
-        adt_pattern, // Handle ADT patterns first (e.g., "Circle r")
+        adt_pattern,                      // Handle ADT patterns first (e.g., "Circle r")
         map(identifier, Expression::Var), // Fallback to variables
     ))(input)
 }
@@ -624,14 +622,20 @@ fn arg_pattern(input: &str) -> IResult<&str, Expression> {
 }
 
 fn adt_pattern(input: &str) -> IResult<&str, Expression> {
-    let (input, adt_name) = identifier(input)?; // Parse the ADT name 
+    let (input, adt_name) = identifier(input)?; // Parse the ADT name
     let (input, _) = space0(input)?; // Skip optional spaces
-    let (input, constructor_name) = identifier(input)?; // Parse the constructor name 
-    let (input, args) = many1(preceded(space1, arg_pattern))(input)?; // Parse the arguments 
+    let (input, constructor_name) = identifier(input)?; // Parse the constructor name
+    let (input, args) = many1(preceded(space1, arg_pattern))(input)?; // Parse the arguments
 
-    Ok((input, Expression::ADTConstructor(adt_name, constructor_name, args.into_iter().map(Box::new).collect())))
+    Ok((
+        input,
+        Expression::ADTConstructor(
+            adt_name,
+            constructor_name,
+            args.into_iter().map(Box::new).collect(),
+        ),
+    ))
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -1435,23 +1439,23 @@ mod tests {
 
         assert!(result.is_err());
     }
-    
+
     #[test]
     fn test_var_declaration_with_keyword_while() {
         let input = "while = 10";
         let result = assignment(input);
-        
+
         assert!(result.is_err());
-    }    
-    
+    }
+
     #[test]
     fn test_var_declaration_with_keyword_ok() {
         let input = "Ok = 10";
         let result = assignment(input);
-        
+
         assert!(result.is_err());
-    }    
-    
+    }
+
     #[test]
     fn test_adt_pattern() {
         // Test case 1: Circle with one argument
@@ -1463,14 +1467,14 @@ mod tests {
         assert_eq!(
             parsed_expr,
             Expression::ADTConstructor(
-                "Shape".to_string(), // ADT name
-                "Circle".to_string(), // Constructor name
-                vec![Box::new(Expression::Var("r".to_string()))] // Argument
+                "Shape".to_string(),                              // ADT name
+                "Circle".to_string(),                             // Constructor name
+                vec![Box::new(Expression::Var("r".to_string()))]  // Argument
             )
         );
-    
+
         println!("Passou");
-    
+
         // Test case 2: Rectangle with two arguments
         let input = "Shape Rectangle w h";
         let result = adt_pattern(input);
@@ -1480,7 +1484,7 @@ mod tests {
         assert_eq!(
             parsed_expr,
             Expression::ADTConstructor(
-                "Shape".to_string(), // ADT name
+                "Shape".to_string(),     // ADT name
                 "Rectangle".to_string(), // Constructor name
                 vec![
                     Box::new(Expression::Var("w".to_string())), // First argument
@@ -1488,7 +1492,7 @@ mod tests {
                 ]
             )
         );
-    
+
         // Test case 3: Triangle with three arguments
         let input = "Shape Triangle b h s";
         let result = adt_pattern(input);
@@ -1498,7 +1502,7 @@ mod tests {
         assert_eq!(
             parsed_expr,
             Expression::ADTConstructor(
-                "Shape".to_string(), // ADT name
+                "Shape".to_string(),    // ADT name
                 "Triangle".to_string(), // Constructor name
                 vec![
                     Box::new(Expression::Var("b".to_string())), // First argument
@@ -1507,13 +1511,12 @@ mod tests {
                 ]
             )
         );
-    
+
         // Test case 4: Invalid input (missing argument)
         let input = "Shape Circle";
         let result = adt_pattern(input);
         assert!(result.is_err()); // Expect an error because the argument is missing
     }
-    
 
     #[test]
     fn parser_test_adt_and_pattern_matching2() {
@@ -1523,9 +1526,9 @@ mod tests {
         let adt_result = adt_declaration(adt_input);
         println!("ADT Result: {:?}", adt_result);
         assert!(adt_result.is_ok());
-    
+
         // Define the match expression
-        let match_input ="
+        let match_input = "
             match shape {
                 FG Circle r => return 3.14 * r * r,
                 FG Rectangle w h => return w * h,
@@ -1536,7 +1539,7 @@ mod tests {
         let match_result = match_expression(match_input);
         println!("Match Result: {:?}", match_result);
         assert!(match_result.is_ok());
-    
+
         // Verify the parsed ADT
         let (_, adt) = adt_result.unwrap();
         println!("Parsed ADT: {:?}", adt);
@@ -1560,7 +1563,7 @@ mod tests {
                 ]
             )
         );
-    
+
         // Verify the parsed match expression
         let (_, match_stmt) = match_result.unwrap();
         println!("Parsed Match Statement: {:?}", match_stmt);
@@ -1581,9 +1584,8 @@ mod tests {
                                 Box::new(Expression::Var("r".to_string()))
                             )),
                             Box::new(Expression::Var("r".to_string()))
-                        )))
+                        )))),
                     ),
-                ),
                     (
                         Expression::ADTConstructor(
                             "FG".to_string(),
@@ -1596,8 +1598,7 @@ mod tests {
                         Box::new(Statement::Return(Box::new(Expression::Mul(
                             Box::new(Expression::Var("w".to_string())),
                             Box::new(Expression::Var("h".to_string()))
-                        )))
-                    ),
+                        )))),
                     ),
                     (
                         Expression::ADTConstructor(
@@ -1611,22 +1612,14 @@ mod tests {
                         ),
                         Box::new(Statement::Return(Box::new(Expression::Mul(
                             Box::new(Expression::Mul(
-                            Box::new(Expression::CReal(0.5)),
-                            Box::new(Expression::Var("b".to_string())),
+                                Box::new(Expression::CReal(0.5)),
+                                Box::new(Expression::Var("b".to_string())),
                             )),
-                                Box::new(Expression::Var("h".to_string()))
-                            )
-                    ))
+                            Box::new(Expression::Var("h".to_string()))
+                        )))),
                     ),
-                ),
                 ]
             )
         );
     }
-
-
 }
-
-
-
-    

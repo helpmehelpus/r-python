@@ -96,7 +96,7 @@ impl<A> Environment<A> {
         }
     }
 
-    pub fn insert_type(&mut self, name:Name, constructors: Vec<ValueConstructor>){
+    pub fn insert_type(&mut self, name: Name, constructors: Vec<ValueConstructor>) {
         self.type_env.insert(name, constructors);
     }
 
@@ -104,13 +104,11 @@ impl<A> Environment<A> {
         self.type_env.get(name)
     }
 
-
     pub fn insert_test(&mut self, name: Name, test: Function) -> () {
         if let Some(frame) = self.stack.get_mut(&self.scope_key()) {
             frame.tests.insert(name, test);
         }
     }
-
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -162,10 +160,10 @@ pub enum Type {
     Tadt(Name, Vec<ValueConstructor>),
 }
 
-#[derive(Debug,PartialEq, Clone)]
-pub struct  ValueConstructor{
+#[derive(Debug, PartialEq, Clone)]
+pub struct ValueConstructor {
     pub name: Name,
-    pub types: Vec<Type> 
+    pub types: Vec<Type>,
 }
 
 #[derive(Debug, PartialEq, Clone)]

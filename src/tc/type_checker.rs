@@ -38,9 +38,9 @@ pub fn check_exp(exp: Expression, env: &Environment<Type>) -> Result<Type, Error
         Expression::Unwrap(e) => check_unwrap_type(*e, env),
         Expression::Propagate(e) => check_propagate_type(*e, env),
         Expression::FuncCall(name, args) => check_func_call(name, args, env),
-        Expression::ADTConstructor(adt_name,constructor_name,args ) => check_adt_constructor(adt_name,constructor_name, args, env),
-        
-        //_ => Err(String::from("not implemented yet")),
+        Expression::ADTConstructor(adt_name, constructor_name, args) => {
+            check_adt_constructor(adt_name, constructor_name, args, env)
+        } //_ => Err(String::from("not implemented yet")),
     }
 }
 
@@ -176,10 +176,9 @@ pub fn check_stmt(stmt: Statement, env: &Environment<Type>) -> Result<ControlFlo
     }
 }
 
-
 fn check_adt_constructor(
-    adt_name: Name,          // Name of the ADT
-    constructor_name: Name,  // Name of the constructor
+    adt_name: Name,         // Name of the ADT
+    constructor_name: Name, // Name of the constructor
     args: Vec<Box<Expression>>,
     env: &Environment<Type>,
 ) -> Result<Type, ErrorMessage> {
@@ -230,7 +229,6 @@ fn check_adt_constructor(
         ))
     }
 }
-
 
 fn check_func_call(
     name: String,
