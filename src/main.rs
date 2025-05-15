@@ -14,6 +14,7 @@ pub mod interpreter;
 pub mod ir;
 pub mod parser;
 pub mod tc;
+pub mod environment;
 
 fn main() {
     println!("Hello, world!");
