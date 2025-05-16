@@ -10,11 +10,11 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::Write;*/
 
+pub mod environment;
 pub mod interpreter;
 pub mod ir;
 pub mod parser;
 pub mod tc;
-pub mod environment;
 
 fn main() {
     println!("Hello, world!");
