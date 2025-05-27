@@ -13,9 +13,11 @@ type ParseResult<'a, T> = IResult<&'a str, T, Error<&'a str>>;
 
 const KEYWORDS: &[&str] = &[
     "if",
+    "in",
     "else",
     "def",
     "while",
+    "for",
     "val",
     "var",
     "return",
@@ -101,6 +103,7 @@ fn statement(input: &str) -> IResult<&str, Statement> {
     alt((
         function_def,
         if_statement,
+        for_statement,
         return_statement,
         assignment,
         declaration,
@@ -421,6 +424,29 @@ fn if_statement(input: &str) -> IResult<&str, Statement> {
     ))
 }
 
+// A 'for' statement parser.
+// A basic 'for' statement in Python has the following
+// syntax:
+//
+// > for <var> in <exp>:
+// >  <stmt>
+fn for_statement(input: &str) -> IResult<&str, Statement> {
+    let (input, _) = tag("for")(input)?;
+    let (input, _) = space1(input)?;
+    let (input, var) = identifier(input)?;
+    let (input, _) = space1(input)?;
+    let (input, _) = tag("in")(input)?;
+    let (input, _) = space1(input)?;
+    let (input, exp) = expression(input)?;
+    let (input, _) = space0(input)?;
+    let (input, _) = char(':')(input)?;
+    let (input, block) = indented_block(input)?;
+    Ok((
+        input,
+        Statement::For(var, Box::new(exp), Box::new(Statement::Block(block))),
+    ))
+}
+
 fn declaration(input: &str) -> IResult<&str, Statement> {
     let (input, keyword) = alt((tag("var"), tag("val")))(input)?;
     let (input, _) = space1(input)?;
@@ -442,19 +468,7 @@ fn assignment(input: &str) -> IResult<&str, Statement> {
     let (input, _) = delimited(space0, char('='), space0)(input)?;
     let (input, expr) = expression(input)?;
 
-    // Infer type from expression
-    let inferred_type = match &expr {
-        Expression::CInt(_) => Some(Type::TInteger),
-        Expression::CReal(_) => Some(Type::TReal),
-        Expression::CString(_) => Some(Type::TString),
-        Expression::CTrue | Expression::CFalse => Some(Type::TBool),
-        _ => None,
-    };
-
-    Ok((
-        input,
-        Statement::Assignment(name, Box::new(expr), inferred_type),
-    ))
+    Ok((input, Statement::Assignment(name, Box::new(expr))))
 }
 
 fn parse_type(type_name: &str) -> Type {
@@ -647,7 +661,7 @@ mod tests {
         let (rest, stmt) = assignment(input).unwrap();
         assert_eq!(rest, "");
         match stmt {
-            Statement::Assignment(name, expr, _type) => {
+            Statement::Assignment(name, expr) => {
                 // Added _type
                 assert_eq!(name, "x");
                 match *expr {
@@ -674,7 +688,7 @@ mod tests {
         assert_eq!(rest, "");
 
         match &stmts[0] {
-            Statement::Assignment(name, expr, _type) => {
+            Statement::Assignment(name, expr) => {
                 // Added _type
                 assert_eq!(name, "x");
                 match **expr {
@@ -695,7 +709,7 @@ mod tests {
 
         // Verify first statement is assignment
         match &stmts[0] {
-            Statement::Assignment(name, expr, _type) => {
+            Statement::Assignment(name, expr) => {
                 // Added _type
                 assert_eq!(name, "x");
                 assert!(matches!(**expr, Expression::CInt(10)));
@@ -714,7 +728,7 @@ mod tests {
                     Statement::Block(ref stmts) => {
                         assert_eq!(stmts.len(), 1);
                         match &stmts[0] {
-                            Statement::Assignment(name, expr, _type) => {
+                            Statement::Assignment(name, expr) => {
                                 assert_eq!(name, "y");
                                 assert!(matches!(**expr, Expression::CInt(1)));
                             }
@@ -730,7 +744,7 @@ mod tests {
                         Statement::Block(ref stmts) => {
                             assert_eq!(stmts.len(), 1);
                             match &stmts[0] {
-                                Statement::Assignment(name, expr, _type) => {
+                                Statement::Assignment(name, expr) => {
                                     assert_eq!(name, "y");
                                     assert!(matches!(**expr, Expression::CInt(2)));
                                 }
@@ -762,7 +776,7 @@ mod tests {
                     Statement::Block(ref stmts) => {
                         assert_eq!(stmts.len(), 1);
                         match &stmts[0] {
-                            Statement::Assignment(name, expr, _type) => {
+                            Statement::Assignment(name, expr) => {
                                 assert_eq!(name, "y");
                                 assert!(matches!(**expr, Expression::CInt(1)));
                             }
@@ -778,7 +792,7 @@ mod tests {
                         Statement::Block(ref stmts) => {
                             assert_eq!(stmts.len(), 1);
                             match &stmts[0] {
-                                Statement::Assignment(name, expr, _type) => {
+                                Statement::Assignment(name, expr) => {
                                     assert_eq!(name, "y");
                                     assert!(matches!(**expr, Expression::CInt(2)));
                                 }
@@ -813,7 +827,7 @@ mod tests {
                     Statement::Block(ref stmts) => {
                         assert_eq!(stmts.len(), 1);
                         match &stmts[0] {
-                            Statement::Assignment(name, expr, _type) => {
+                            Statement::Assignment(name, expr) => {
                                 assert_eq!(name, "y");
                                 assert!(matches!(**expr, Expression::CInt(1)));
                             }
@@ -829,7 +843,7 @@ mod tests {
                         Statement::Block(ref stmts) => {
                             assert_eq!(stmts.len(), 1);
                             match &stmts[0] {
-                                Statement::Assignment(name, expr, _type) => {
+                                Statement::Assignment(name, expr) => {
                                     assert_eq!(name, "y");
                                     assert!(matches!(**expr, Expression::CInt(2)));
                                 }
@@ -846,6 +860,28 @@ mod tests {
     }
 
     #[test]
+    fn test_for_statement() {
+        let input = "for x in range:\n   x = x+1";
+        let (rest, stmt) = statement(input).unwrap();
+        let expected = Statement::For(
+            "x".to_string(),
+            Box::new(Expression::Var("range".to_string())),
+            Box::new(Statement::Block(
+                [Statement::Assignment(
+                    "x".to_string(),
+                    Box::new(Expression::Add(
+                        Box::new(Expression::Var("x".to_string())),
+                        Box::new(Expression::CInt(1)),
+                    )),
+                )]
+                .to_vec(),
+            )),
+        );
+        assert_eq!(rest, "");
+        assert_eq!(stmt, expected)
+    }
+
+    #[test]
     fn test_multiline_parse() {
         let input = "x = 42\ny = 10";
         let (rest, stmts) = parse(input).unwrap();
@@ -853,7 +889,7 @@ mod tests {
         assert_eq!(stmts.len(), 2);
 
         match &stmts[0] {
-            Statement::Assignment(name, expr, _type) => {
+            Statement::Assignment(name, expr) => {
                 assert_eq!(&**name, "x");
                 match **expr {
                     Expression::CInt(42) => (),
@@ -864,7 +900,7 @@ mod tests {
         }
 
         match &stmts[1] {
-            Statement::Assignment(name, expr, _type) => {
+            Statement::Assignment(name, expr) => {
                 assert_eq!(&**name, "y");
                 match **expr {
                     Expression::CInt(10) => (),
@@ -921,7 +957,7 @@ mod tests {
         let (rest, stmt) = assignment(input).unwrap();
         assert_eq!(rest, "");
         match stmt {
-            Statement::Assignment(name, expr, _type) => {
+            Statement::Assignment(name, expr) => {
                 assert_eq!(name, "result");
                 match *expr {
                     Expression::FuncCall(func_name, args) => {
@@ -1326,8 +1362,7 @@ mod tests {
             [
                 Statement::Assignment(
                     String::from("x"),
-                    Box::new(Expression::COk(Box::new(Expression::CTrue))),
-                    None
+                    Box::new(Expression::COk(Box::new(Expression::CTrue)))
                 ),
                 Statement::IfThenElse(
                     Box::new(Expression::Unwrap(Box::new(Expression::Var(String::from(
@@ -1335,8 +1370,7 @@ mod tests {
                     ))))),
                     Box::new(Statement::Block(vec![Statement::Assignment(
                         String::from("y"),
-                        Box::new(Expression::CInt(1)),
-                        Some(Type::TInteger)
+                        Box::new(Expression::CInt(1))
                     )])),
                     None
                 ),
@@ -1346,8 +1380,7 @@ mod tests {
                     )))),
                     Box::new(Statement::Block(vec![Statement::Assignment(
                         String::from("y"),
-                        Box::new(Expression::CInt(1)),
-                        Some(Type::TInteger)
+                        Box::new(Expression::CInt(1))
                     )])),
                     None
                 )

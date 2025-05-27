@@ -144,6 +144,7 @@ impl<A> TestEnvironment<A> {
         };
     }
 }
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum Type {
     TInteger,
@@ -219,9 +220,10 @@ pub enum Expression {
 pub enum Statement {
     VarDeclaration(Name),
     ValDeclaration(Name),
-    Assignment(Name, Box<Expression>, Option<Type>),
+    Assignment(Name, Box<Expression>),
     IfThenElse(Box<Expression>, Box<Statement>, Option<Box<Statement>>),
     While(Box<Expression>, Box<Statement>),
+    For(Name, Box<Expression>, Box<Statement>),
     Block(Vec<Statement>),
     Sequence(Box<Statement>, Box<Statement>),
     AssertTrue(Box<Expression>, String),
