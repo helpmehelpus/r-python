@@ -4,12 +4,13 @@ use crate::ir::ast::Name;
 use std::collections::HashMap;
 use std::collections::LinkedList;
 
+#[derive(Clone)]
 pub struct Scope<A> {
     pub variables: HashMap<Name, A>,
     pub functions: HashMap<Name, Function>,
 }
 
-impl<A> Scope<A> {
+impl<A: Clone> Scope<A> {
     fn new() -> Scope<A> {
         Scope {
             variables: HashMap::new(),
@@ -22,17 +23,23 @@ impl<A> Scope<A> {
         return ();
     }
 
-    fn lookup(&mut self, var: Name) -> Option<&A> {
-        self.variables.get(&var)
+    fn map_function(&mut self, function: Function) -> () {
+        self.functions.insert(function.name.clone(), function);
+        return ();
+    }
+
+    fn lookup(&self, var: &Name) -> Option<&A> {
+        self.variables.get(var)
     }
 }
 
+#[derive(Clone)]
 pub struct Environment<A> {
     pub globals: Scope<A>,
     pub stack: LinkedList<Scope<A>>,
 }
 
-impl<A> Environment<A> {
+impl<A: Clone> Environment<A> {
     pub fn new() -> Environment<A> {
         Environment {
             globals: Scope::new(),
@@ -48,11 +55,20 @@ impl<A> Environment<A> {
         return ();
     }
 
-    pub fn lookup(&mut self, var: Name) -> Option<&A> {
-        match self.stack.front_mut() {
+    pub fn map_function(&mut self, function: Function) -> () {
+        self.globals.map_function(function);
+        return ();
+    }
+
+    pub fn lookup(&self, var: &Name) -> Option<&A> {
+        match self.stack.front() {
             None => self.globals.lookup(var),
             Some(top) => top.lookup(var),
         }
+    }
+
+    pub fn scoped_function(&self) -> bool {
+        !self.stack.is_empty()
     }
 
     pub fn push(&mut self) -> () {
@@ -75,8 +91,8 @@ mod tests {
         s.map_variable("x".to_string(), 32);
         s.map_variable("y".to_string(), 23);
 
-        assert_eq!(Some(32), s.lookup("x".to_string()).copied());
-        assert_eq!(Some(23), s.lookup("y".to_string()).copied());
+        assert_eq!(Some(32), s.lookup(&"x".to_string()).copied());
+        assert_eq!(Some(23), s.lookup(&"y".to_string()).copied());
     }
 
     #[test]
@@ -90,13 +106,13 @@ mod tests {
         env.map_variable("x".to_string(), 55);
         env.map_variable("y".to_string(), 23);
 
-        assert_eq!(Some(55), env.lookup("x".to_string()).copied());
-        assert_eq!(Some(23), env.lookup("y".to_string()).copied());
-        assert_eq!(None, env.lookup("a".to_string()).copied());
+        assert_eq!(Some(55), env.lookup(&"x".to_string()).copied());
+        assert_eq!(Some(23), env.lookup(&"y".to_string()).copied());
+        assert_eq!(None, env.lookup(&"a".to_string()).copied());
 
         env.pop();
 
-        assert_eq!(Some(32), env.lookup("x".to_string()).copied());
-        assert_eq!(None, env.lookup("y".to_string()).copied());
+        assert_eq!(Some(32), env.lookup(&"x".to_string()).copied());
+        assert_eq!(None, env.lookup(&"y".to_string()).copied());
     }
 }
