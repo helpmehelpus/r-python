@@ -196,6 +196,7 @@ pub enum Expression {
 
     /* relational expressions over numbers */
     EQ(Box<Expression>, Box<Expression>),
+    NEQ(Box<Expression>, Box<Expression>),
     GT(Box<Expression>, Box<Expression>),
     LT(Box<Expression>, Box<Expression>),
     GTE(Box<Expression>, Box<Expression>),
@@ -235,8 +236,7 @@ pub enum Statement {
     AssertFails(String),
     FuncDef(Function),
     Return(Box<Expression>),
-    ADTDeclaration(Name, Vec<ValueConstructor>),
-    Match(Box<Expression>, Vec<(Expression, Box<Statement>)>),
+    ADTDeclaration(Name, Vec<ValueConstructor>)
 }
 
 #[derive(Debug)]

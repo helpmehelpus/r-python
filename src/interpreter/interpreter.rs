@@ -225,21 +225,6 @@ fn execute(stmt: Statement, env: &Environment<EnvValue>) -> Result<ControlFlow, 
             Ok(ControlFlow::Continue(new_env))
         }
 
-        Statement::Match(exp, cases) => {
-            let value = eval(*exp, &new_env)?;
-
-            for (pattern, stmt) in cases {
-                if matches_pattern(&value, &pattern, &new_env)? {
-                    return match *stmt {
-                        Statement::Block(stmts) => execute_block(stmts, &new_env),
-                        _ => execute(*stmt, &new_env),
-                    };
-                }
-            }
-
-            Err(("No matching pattern found".to_string(), None))
-        }
-
         _ => Err((String::from("not implemented yet"), None)),
     };
 

@@ -38,19 +38,18 @@ pub fn parse_statement(input: &str) -> IResult<&str, Statement> {
         parse_assignment_statement,
         parse_if_statement,
         parse_for_statement,
-	parse_while_statement,
+	    parse_while_statement,
         parse_function_def_statement,
         parse_return_statement,
         parse_var_declaration_statement,
-        parse_adt_declaration_statement,
-        match_expression,
+        parse_adt_declaration_statement
     ))(input)
 }
 
 fn parse_assignment_statement(input: &str) -> IResult<&str, Statement> {
     let (input, name) = identifier(input)?;
     let (input, _) = delimited(space0, char('='), space0)(input)?;
-    let (input, expr) = expression(input)?;
+    let (input, expr) = parse_expression(input)?;
 
     Ok((input, Statement::Assignment(name, Box::new(expr))))
 }
@@ -89,7 +88,7 @@ fn parse_for_statement(input: &str) -> IResult<&str, Statement> {
     let (input, _) = space1(input)?;
     let (input, _) = tag("in")(input)?;
     let (input, _) = space1(input)?;
-    let (input, exp) = expression(input)?;
+    let (input, exp) = parse_expression(input)?;
     let (input, _) = space0(input)?;
     let (input, _) = char(':')(input)?;
     let (input, block) = indented_block(input)?;
@@ -102,7 +101,7 @@ fn parse_for_statement(input: &str) -> IResult<&str, Statement> {
 fn parse_while_statement(input: &str) -> IResult<&str, Statement> {
     let (input, _) = tag("while")(input)?;
     let (input, _) = space1(input)?;
-    let (input, exp) = expression(input)?;
+    let (input, exp) = parse_expression(input)?;
     let (input, _) = space0(input)?;
     let (input, _) = char(':')(input)?;
     let (input, block) = indented_block(input)?;
@@ -151,7 +150,7 @@ fn parse_function_def_statement(input: &str) -> IResult<&str, Statement> {
 fn parse_return_statement(input: &str) -> IResult<&str, Statement> {
     let (input, _) = tag("return")(input)?;
     let (input, _) = space1(input)?;
-    let (input, expr) = expression(input)?;
+    let (input, expr) = parse_expression(input)?;
 
     Ok((input, Statement::Return(Box::new(expr))))
 }
@@ -193,6 +192,51 @@ pub fn value_constructor(input: &str) -> IResult<&str, ValueConstructor> {
     Ok((input, ValueConstructor { name, types }))
 }
 
+
+// Parser for expressions. 
+
+pub fn parse_expression(input: &str) -> IResult<&str, Expression> {
+    alt((
+        parse_real,
+        parse_integer,
+        boolean_expression,
+        comparison_expression,
+        parse_arithmetic_expression,
+        ok_expression,
+        err_expression,
+        just_expression,
+        nothing_expression,
+        unwrap_expression,
+        tryunwrap_expression,
+        iserror_expression,
+        isnothing_expression,
+        string,
+        map(identifier, Expression::Var),
+    ))(input)
+}
+
+fn parse_integer(input: &str) -> IResult<&str, Expression> {
+    map_res(
+        pair(opt(preceded(space0, char('-'))), preceded(space0, digit1)),
+        |(sign, digits): (Option<char>, &str)| {
+            digits.parse::<i32>().map(|num| {
+                if sign.is_some() {
+                    Expression::CInt(-num)
+                } else {
+                    Expression::CInt(num)
+                }
+            })
+        },
+    )(input)
+}
+
+fn parse_real(input: &str) -> IResult<&str, Expression> {
+    map_res(
+        recognize(tuple((opt(char('-')), digit1, char('.'), digit1))),
+        |num_str: &str| num_str.parse::<f64>().map(Expression::CReal),
+    )(input)
+}
+
 pub fn identifier(input: &str) -> IResult<&str, Name> {
     let (input, id) = take_while1(|c: char| c.is_alphanumeric() || c == '_')(input)?;
 
@@ -207,20 +251,7 @@ pub fn identifier(input: &str) -> IResult<&str, Name> {
 }
 
 // Parse integer literals
-pub fn integer(input: &str) -> IResult<&str, Expression> {
-    map_res(
-        pair(opt(preceded(space0, char('-'))), preceded(space0, digit1)),
-        |(sign, digits): (Option<char>, &str)| {
-            digits.parse::<i32>().map(|num| {
-                if sign.is_some() {
-                    Expression::CInt(-num)
-                } else {
-                    Expression::CInt(num)
-                }
-            })
-        },
-    )(input)
-}
+
 
 //term parser for arithmetic
 pub fn term(input: &str) -> ParseResult<Expression> {
@@ -252,26 +283,6 @@ pub fn term(input: &str) -> ParseResult<Expression> {
 
 //expression parser to include if statements
 
-// Parse basic expressions
-pub fn expression(input: &str) -> IResult<&str, Expression> {
-    alt((
-        boolean_expression,
-        comparison_expression,
-        arithmetic_expression,
-        real,
-        integer,
-        ok_expression,
-        err_expression,
-        just_expression,
-        nothing_expression,
-        unwrap_expression,
-        tryunwrap_expression,
-        iserror_expression,
-        isnothing_expression,
-        string,
-        map(identifier, Expression::Var),
-    ))(input)
-}
 
 // Parse arithmetic operators (unused)
 //pub fn operator(input: &str) -> IResult<&str, &str> {
@@ -311,7 +322,7 @@ pub fn comparison_expression(input: &str) -> IResult<&str, Expression> {
 }
 
 // Parse expressions with operator precedence
-pub fn arithmetic_expression(input: &str) -> ParseResult<Expression> {
+pub fn parse_arithmetic_expression(input: &str) -> ParseResult<Expression> {
     let (mut input, mut expr) = term(input)?;
 
     loop {
@@ -350,12 +361,7 @@ pub fn boolean(input: &str) -> IResult<&str, Expression> {
 }
 
 // Parse real numbers
-pub fn real(input: &str) -> IResult<&str, Expression> {
-    map_res(
-        recognize(tuple((opt(char('-')), digit1, char('.'), digit1))),
-        |num_str: &str| num_str.parse::<f64>().map(Expression::CReal),
-    )(input)
-}
+
 
 // Parse strings
 pub fn string(input: &str) -> IResult<&str, Expression> {
@@ -373,7 +379,7 @@ pub fn ok_expression(input: &str) -> IResult<&str, Expression> {
     let (input, _) = space0(input)?;
     let (input, expr) = delimited(
         tuple((char('('), space0)),
-        expression,
+        parse_expression,
         tuple((space0, char(')'))),
     )(input)?;
 
@@ -385,7 +391,7 @@ pub fn err_expression(input: &str) -> IResult<&str, Expression> {
     let (input, _) = space0(input)?;
     let (input, expr) = delimited(
         tuple((char('('), space0)),
-        expression,
+        parse_expression,
         tuple((space0, char(')'))),
     )(input)?;
 
@@ -397,7 +403,7 @@ pub fn just_expression(input: &str) -> IResult<&str, Expression> {
     let (input, _) = space0(input)?;
     let (input, expr) = delimited(
         tuple((char('('), space0)),
-        expression,
+        parse_expression,
         tuple((space0, char(')'))),
     )(input)?;
     Ok((input, Expression::CJust(Box::new(expr))))
@@ -413,7 +419,7 @@ pub fn isnothing_expression(input: &str) -> IResult<&str, Expression> {
 
     let (input, expr) = delimited(
         tuple((char('('), space0)),
-        expression,
+        parse_expression,
         tuple((space0, char(')'))),
     )(input)?;
 
@@ -425,7 +431,7 @@ pub fn iserror_expression(input: &str) -> IResult<&str, Expression> {
     let (input, _) = space0(input)?;
     let (input, expr) = delimited(
         tuple((char('('), space0)),
-        expression,
+        parse_expression,
         tuple((space0, char(')'))),
     )(input)?;
 
@@ -437,7 +443,7 @@ pub fn unwrap_expression(input: &str) -> IResult<&str, Expression> {
     let (input, _) = space0(input)?;
     let (input, expr) = delimited(
         tuple((char('('), space0)),
-        expression,
+        parse_expression,
         tuple((space0, char(')'))),
     )(input)?;
 
@@ -449,7 +455,7 @@ pub fn tryunwrap_expression(input: &str) -> IResult<&str, Expression> {
     let (input, _) = space0(input)?;
     let (input, expr) = delimited(
         tuple((char('('), space0)),
-        expression,
+        parse_expression,
         tuple((space0, char(')'))),
     )(input)?;
 
@@ -503,7 +509,7 @@ pub fn factor(input: &str) -> IResult<&str, Expression> {
     alt((
         delimited(
             tuple((char('('), space0)),
-            arithmetic_expression,
+            parse_arithmetic_expression,
             tuple((space0, char(')'))),
         ),
         function_call,
@@ -515,8 +521,8 @@ pub fn factor(input: &str) -> IResult<&str, Expression> {
         tryunwrap_expression,
         iserror_expression,
         isnothing_expression,
-        real,
-        integer,
+        parse_real,
+        parse_integer,
         map(tuple((char('-'), space0, factor)), |(_, _, expr)| {
             Expression::Mul(Box::new(Expression::CInt(-1)), Box::new(expr))
         }),
@@ -556,7 +562,7 @@ pub fn parse_type(type_name: &str) -> Type {
 pub fn function_call(input: &str) -> IResult<&str, Expression> {
     let (input, name) = identifier(input)?;
     let (input, _) = char('(')(input)?;
-    let (input, args) = separated_list0(delimited(space0, char(','), space0), expression)(input)?;
+    let (input, args) = separated_list0(delimited(space0, char(','), space0), parse_expression)(input)?;
     let (input, _) = char(')')(input)?;
 
     Ok((input, Expression::FuncCall(name, args)))
@@ -576,70 +582,7 @@ pub fn type_annotation(input: &str) -> IResult<&str, Type> {
     ))(input)
 }
 
-pub fn match_expression(input: &str) -> IResult<&str, Statement> {
-    let (input, _) = multispace0(input)?; // Skip leading spaces & newlines
-    let (input, _) = tag("match")(input)?; // Parse the "match" keyword
-    let (input, _) = space1(input)?; // Require at least one space after "match"
-    let (input, exp) = expression(input)?; // Parse the expression to match
-    let (input, _) = multispace0(input)?; // Skip spaces & newlines
-    let (input, _) = char('{')(input)?; // Parse the opening brace
-    let (input, _) = multispace0(input)?; // Skip spaces & newlines
 
-    // Parse the match cases
-    let (input, cases) = separated_list0(
-        tuple((multispace0, char(','), multispace0)), // Allow spaces/newlines before and after `,`
-        match_case,                                   // Parse each match case
-    )(input)?;
-
-    let (input, _) = multispace0(input)?; // Skip spaces & newlines
-    let (input, _) = char('}')(input)?; // Parse the closing brace
-
-    Ok((input, Statement::Match(Box::new(exp), cases)))
-}
-
-pub fn match_case(input: &str) -> IResult<&str, (Expression, Box<Statement>)> {
-    //println!("Parsing match case: {}", input); // Debug print
-    let (input, _) = multispace0(input)?; // Skip spaces & newlines
-                                          //println!("After skipping spaces: {}", input); // Debug print
-    let (input, pattern) = pattern(input)?;
-    //println!("Parsed pattern: {:?}", pattern); // Debug print
-    let (input, _) = space0(input)?; // Skip optional spaces
-                                     //println!("After skipping spaces before =>: {}", input); // Debug print
-    let (input, _) = tag("=>")(input)?; // Parse the "=>" operator
-                                        //println!("After parsing =>: {}", input); // Debug print
-    let (input, _) = space0(input)?; // Skip optional spaces
-                                     //println!("After skipping spaces after =>: {}", input); // Debug print
-    let (input, stmt) = parse_statement(input)?;
-    //println!("Parsed statement: {:?}", stmt); // Debug print
-
-    Ok((input, (pattern, Box::new(stmt))))
-}
-pub fn pattern(input: &str) -> IResult<&str, Expression> {
-    alt((
-        adt_pattern,                      // Handle ADT patterns first (e.g., "Circle r")
-        map(identifier, Expression::Var), // Fallback to variables
-    ))(input)
-}
-
-pub fn arg_pattern(input: &str) -> IResult<&str, Expression> {
-    map(identifier, Expression::Var)(input) // Only parse variables
-}
-
-pub fn adt_pattern(input: &str) -> IResult<&str, Expression> {
-    let (input, adt_name) = identifier(input)?; // Parse the ADT name
-    let (input, _) = space0(input)?; // Skip optional spaces
-    let (input, constructor_name) = identifier(input)?; // Parse the constructor name
-    let (input, args) = many1(preceded(space1, arg_pattern))(input)?; // Parse the arguments
-
-    Ok((
-        input,
-        Expression::ADTConstructor(
-            adt_name,
-            constructor_name,
-            args.into_iter().map(Box::new).collect(),
-        ),
-    ))
-}
 
 const KEYWORDS: &[&str] = &[
     "if",
