@@ -167,6 +167,15 @@ pub struct ValueConstructor {
     pub types: Vec<Type>,
 }
 
+impl ValueConstructor {
+    pub fn new(name: Name, types: Vec<Type>) -> Self {
+	ValueConstructor {
+	    name,
+	    types,
+	}
+    }
+}
+
 #[derive(Debug, PartialEq, Clone)]
 pub enum Expression {
     /* constants */
@@ -227,6 +236,7 @@ pub enum Statement {
     For(Name, Box<Expression>, Box<Statement>),
     Block(Vec<Statement>),
     Sequence(Box<Statement>, Box<Statement>),
+    Assert(Box<Expression>, Box<Expression>),
     AssertTrue(Box<Expression>, String),
     AssertFalse(Box<Expression>, String),
     AssertEQ(Box<Expression>, Box<Expression>, String),
@@ -236,7 +246,7 @@ pub enum Statement {
     AssertFails(String),
     FuncDef(Function),
     Return(Box<Expression>),
-    ADTDeclaration(Name, Vec<ValueConstructor>)
+    ADTDeclaration(Name, Vec<ValueConstructor>),
 }
 
 #[derive(Debug)]
