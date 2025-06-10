@@ -131,6 +131,21 @@ impl Function {
 }
 
 #[derive(Debug, PartialEq, Clone)]
+pub struct FormalArgument {
+    pub argumentName: Name,
+    pub argumentType: Type,
+}
+
+impl FormalArgument {
+    pub fn new(argumentName: Name, argumentType: Type) -> Self {
+	FormalArgument {
+	    argumentName,
+	    argumentType,
+	}
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
 pub struct TestEnvironment<A> {
     pub name: Name,
     pub env: Environment<A>,
