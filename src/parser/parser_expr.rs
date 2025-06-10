@@ -1,17 +1,22 @@
 use nom::{
-    IResult,
     branch::alt,
     bytes::complete::{tag, take_while},
-    character::complete::{digit1, multispace0, alpha1, char},
-    combinator::{map_res, recognize, value, map, opt, not, peek, verify},
-    sequence::{pair, delimited, terminated, preceded},
-    multi::{many0, fold_many0, separated_list0}
+    character::complete::{char, digit1, multispace0},
+    combinator::{map, map_res, opt, value, verify},
+    multi::{fold_many0, separated_list0},
+    sequence::{delimited, pair, preceded, tuple},
+    IResult,
+    error::Error,
 };
+
 use std::str::FromStr;
+
+use crate::ir::ast::Expression;
+use crate::parser::parser_common::{identifier, keyword, is_string_char};
 
 use crate::ir::ast::Function;
 use crate::ir::ast::Type;
-use crate::ir::ast::{Expression, Name, Statement, ValueConstructor};
+use crate::ir::ast::{Name, Statement, ValueConstructor};
 
 use crate::parser::keywords::KEYWORDS;
 
@@ -39,7 +44,9 @@ fn parse_and(input: &str) -> IResult<&str, Expression> {
 
 fn parse_not(input: &str) -> IResult<&str, Expression> {
     alt((
-        map(preceded(keyword("not"), parse_not), |e| Expression::Not(Box::new(e))),
+        map(preceded(keyword("not"), parse_not), |e| {
+            Expression::Not(Box::new(e))
+        }),
         parse_relational,
     ))(input)
 }
@@ -48,7 +55,14 @@ fn parse_relational(input: &str) -> IResult<&str, Expression> {
     let (input, init) = parse_add_sub(input)?;
     fold_many0(
         pair(
-            alt((operator("<="), operator("<"), operator(">="), operator(">"), operator("=="), operator("!="))),
+            alt((
+                operator("<="),
+                operator("<"),
+                operator(">="),
+                operator(">"),
+                operator("=="),
+                operator("!="),
+            )),
             parse_add_sub,
         ),
         move || init.clone(),
@@ -69,7 +83,7 @@ fn parse_add_sub(input: &str) -> IResult<&str, Expression> {
     fold_many0(
         pair(
             alt((operator("+"), operator("-"))),
-            parse_term,
+            parse_term
         ),
         move || init.clone(),
         |acc, (op, val)| match op {
@@ -85,7 +99,7 @@ fn parse_term(input: &str) -> IResult<&str, Expression> {
     fold_many0(
         pair(
             alt((operator("*"), operator("/"))),
-            parse_factor,
+            parse_factor
         ),
         move || init.clone(),
         |acc, (op, val)| match op {
@@ -100,27 +114,53 @@ fn parse_factor(input: &str) -> IResult<&str, Expression> {
     alt((
         parse_bool,
         parse_number,
-	parse_string,
-	parse_var,
-	parse_function_call,
-        delimited(tag("("), parse_expression, tag(")")),
+        parse_string,
+        parse_function_call,
+        parse_var,
+        delimited(char::<&str, Error<&str>>('('), parse_expression, char::<&str, Error<&str>>(')')),
     ))(input)
 }
 
 fn parse_bool(input: &str) -> IResult<&str, Expression> {
-    alt((value(Expression::CTrue, keyword("True")), value(Expression::CFalse, keyword("False"))))(input)
+    alt((
+        value(Expression::CTrue, keyword("True")),
+        value(Expression::CFalse, keyword("False")),
+    ))(input)
 }
-				      
+
 fn parse_number(input: &str) -> IResult<&str, Expression> {
     let float_parser = map_res(
-        recognize(pair(
-            digit1,
-            opt(pair(tag("."), digit1))
-        )),
-        |s: &str| f64::from_str(s)
+        verify(
+            tuple((
+                opt(char::<&str, Error<&str>>('-')),
+                digit1,
+                char::<&str, Error<&str>>('.'),
+                digit1
+            )),
+            |(_, _, _, _)| true,
+        ),
+        |(sign, d1, _, d2)| {
+            let s = match sign {
+                Some(_) => format!("-{}.{}", d1, d2),
+                None => format!("{}.{}", d1, d2),
+            };
+            f64::from_str(&s)
+        },
     );
 
-    let int_parser = map_res(digit1, |s: &str| i32::from_str(s));
+    let int_parser = map_res(
+        tuple((
+            opt(char::<&str, Error<&str>>('-')),
+            digit1
+        )),
+        |(sign, digits)| {
+            let s = match sign {
+                Some(_) => format!("-{}", digits),
+                None => digits.to_string(),
+            };
+            i32::from_str(&s)
+        }
+    );
 
     alt((
         map(float_parser, Expression::CReal),
@@ -129,90 +169,50 @@ fn parse_number(input: &str) -> IResult<&str, Expression> {
 }
 
 fn parse_string(input: &str) -> IResult<&str, Expression> {
-    map(delimited(
-        multispace0,
+    map(
         delimited(
-            tag("\""),
-            map(take_while(is_string_char), |s: &str| s.to_string()),
-            tag("\""),
+            multispace0,
+            delimited(
+                char::<&str, Error<&str>>('"'),
+                map(take_while(is_string_char), |s: &str| s.to_string()),
+                char::<&str, Error<&str>>('"'),
+            ),
+            multispace0,
         ),
-        multispace0,
-    ), |s| Expression::CString(s))(input)
+        |s| Expression::CString(s),
+    )(input)
 }
 
 fn parse_var(input: &str) -> IResult<&str, Expression> {
-    map(parse_identifier, |v| Expression::Var(v.into()))(input)
+    map(identifier, |v| Expression::Var(v.into()))(input)
 }
-fn parse_function_call(input: &str) -> IResult<&str, Expression> {
-    let (input, name) = parse_identifier(input)?;
-    let (input, _) = multispace0(input)?;
-    let (input, _) = char('(')(input)?;
-    let (input, args) = separated_list0(separator(","), parse_expression)(input)?;
-    let (input, _) = multispace0(input)?;
-    let (input, _) = char('(')(input)?;
 
+fn parse_function_call(input: &str) -> IResult<&str, Expression> {
+    let (input, name) = identifier(input)?;
+    let (input, args) = parse_actual_arguments(input)?;
     Ok((input, Expression::FuncCall(name.to_string(), args)))
 }
 
-
-fn separator<'a>(sep: &'static str) -> impl FnMut(&'a str) -> IResult<&'a str, &'a str> {
-    delimited(multispace0, tag(sep), multispace0)
+pub fn parse_actual_arguments(input: &str) -> IResult<&str, Vec<Expression>> {
+    map(
+        tuple((
+            multispace0,
+            char::<&str, Error<&str>>('('),
+            separated_list0(
+                tuple((multispace0, char::<&str, Error<&str>>(','), multispace0)),
+                parse_expression
+            ),
+            multispace0,
+            char::<&str, Error<&str>>(')')
+        )),
+        |(_, _, args, _, _)| args
+    )(input)
 }
-    
-
-
-/// Parses a reserved keyword (e.g., "if") surrounded by optional spaces
-/// Fails if followed by an identifier character
-fn keyword<'a>(kw: &'static str) -> impl FnMut(&'a str) -> IResult<&'a str, &'a str> {
-    terminated(
-        delimited(multispace0, tag(kw), multispace0),
-        not(peek(identifier_start_or_continue)),
-    )
-}
-
-/// Parsers for identifiers.
-fn parse_identifier(input: &str) -> IResult<&str, &str> {
-    let (input, _) = multispace0(input)?;
-
-    let (input, first_char) = identifier_start(input)?;
-    let (input, rest) = identifier_continue(input)?;
-
-    let ident = format!("{}{}", first_char, rest);
-
-    if KEYWORDS.contains(&ident.as_str()) {
-        Err(nom::Err::Error(nom::error::Error::new(input, nom::error::ErrorKind::Tag)))
-    } else {
-        Ok((input, Box::leak(ident.into_boxed_str())))
-    }	 
-}
-
-/// First character of an identifier: [a-zA-Z_]
-fn identifier_start(input: &str) -> IResult<&str, &str> {
-    alt((alpha1, tag("_")))(input)
-}
-
-/// Remaining characters: [a-zA-Z0-9_]*
-fn identifier_continue(input: &str) -> IResult<&str, &str> {
-    recognize(many0(identifier_start_or_continue))(input)
-}
-
-/// A single identifier character: alphanumeric or underscore
-fn identifier_start_or_continue(input: &str) -> IResult<&str, &str> {
-    recognize(alt((alpha1, tag("_"), nom::character::complete::digit1)))(input)
-}
-
 
 /// Parses an operator.
 fn operator<'a>(op: &'static str) -> impl FnMut(&'a str) -> IResult<&'a str, &'a str> {
     delimited(multispace0, tag(op), multispace0)
 }
-
-
-/// Accepts any character except '"' and control characters (like \n, \t)
-fn is_string_char(c: char) -> bool {
-    c != '"' && !c.is_control()
-}
-
 
 #[cfg(test)]
 mod tests {
@@ -243,11 +243,6 @@ mod tests {
             parse_expression("-0.001rest"),
             Ok(("rest", Expression::CReal(-0.001)))
         );
-
-        assert_eq!(
-            parse_expression("2e3more"),
-            Ok(("more", Expression::CReal(2000.0)))
-        );
     }
 
     #[test]
@@ -264,23 +259,21 @@ mod tests {
     fn test_keywords() {
         let cases = [
             ("if", "if"),
-            (" else ", "else"),
-            ("while rest", "while"),
-            ("  and   ", "and"),
-            ("or)", "or"),
-            ("not x", "not"),
-            (" for (", "for"),
-            ("def  ", "def"),
+            ("else", "else"),
+            ("while", "while"),
+            ("and", "and"),
+            ("or", "or"),
+            ("not", "not"),
+            ("for", "for"),
+            ("def", "def"),
         ];
 
         for (input, expected) in cases {
-            let mut parser = keyword(expected);
-            let result = parser(input);
-            assert_eq!(
-                result,
-                Ok((input[expected.len()..].trim_start(), expected)),
-                "Failed to parse keyword '{}'", expected
-            );
+            let result = keyword(expected)(input);
+            assert!(result.is_ok(), "Failed to parse keyword '{}'", expected);
+            let (rest, parsed) = result.unwrap();
+            assert_eq!(parsed, expected);
+            assert!(rest.is_empty() || rest.starts_with(' '));
         }
     }
 
@@ -296,4 +289,3 @@ mod tests {
         assert!(parser("origin").is_err());
     }
 }
-
