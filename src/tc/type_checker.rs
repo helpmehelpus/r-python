@@ -82,11 +82,21 @@ pub fn check_stmt(
                         .to_string(),
                 );
             }
-            new_env = check_stmt(*stmt_then, &new_env)?;
 
-            if stmt_else_opt.is_some() {
-                new_env = check_stmt(*stmt_else_opt.unwrap(), &new_env)?
+            // Check then branch
+            let then_env = check_stmt(*stmt_then, &new_env)?;
+
+            // Check else branch if it exists
+            if let Some(stmt_else) = stmt_else_opt {
+                let else_env = check_stmt(*stmt_else, &new_env)?;
+                // Merge the environments from both branches
+                new_env = merge_environments(&then_env, &else_env)?;
+            } else {
+                // If no else branch, we still need to merge with the original environment
+                // because variables in the then branch are conditionally defined
+                new_env = merge_environments(&new_env, &then_env)?;
             }
+            
             Ok(new_env)
         }
         Statement::While(cond, stmt) => {
@@ -389,6 +399,31 @@ fn check_isnothing_type(exp: Expression, env: &Environment<Type>) -> Result<Type
         Type::TMaybe(_) => Ok(Type::TBool),
         _ => Err(String::from("[Type Error] expecting a maybe type value.")),
     }
+}
+
+fn merge_environments(env1: &Environment<Type>, env2: &Environment<Type>) -> Result<Environment<Type>, ErrorMessage> {
+    let mut merged = env1.clone();
+    
+    // Get all variables defined in either environment
+    for (name, type2) in env2.get_all_variables() {
+        match env1.lookup(&name) {
+            Some(type1) => {
+                // Variable exists in both branches - types must match
+                if *type1 != type2 {
+                    return Err(format!(
+                        "[Type Error] Variable '{}' has inconsistent types in different branches: '{:?}' and '{:?}'",
+                        name, type1, type2
+                    ));
+                }
+            }
+            None => {
+                // Variable only exists in else branch - it's conditionally defined
+                // For now, we'll add it to the environment but might want to mark it as conditional
+                merged.map_variable(name.clone(), type2.clone());
+            }
+        }
+    }
+    Ok(merged)
 }
 
 #[cfg(test)]
@@ -777,271 +812,64 @@ mod tests {
         }
     }
 
-    // #[test]
-    // fn check_func_def_error() {
-    //     let env: Environment<Type> = Environment::new();
+    #[test]
+    fn test_if_else_consistent_types() {
+        let env = Environment::new();
+        let stmt = Statement::IfThenElse(
+            Box::new(Expression::CTrue),
+            Box::new(Statement::Assignment(
+                "x".to_string(),
+                Box::new(Expression::CInt(1))
+            )),
+            Some(Box::new(Statement::Assignment(
+                "x".to_string(),
+                Box::new(Expression::CInt(2))
+            )))
+        );
+        
+        // Should succeed - x is consistently an integer in both branches
+        assert!(check_stmt(stmt, &env).is_ok());
+    }
 
-    //     let func = FuncDef(Function {
-    //         name: "add".to_string(),
-    //         kind: Some(TInteger),
-    //         params: Some(vec![
-    //             ("a".to_string(), TInteger),
-    //             ("b".to_string(), TInteger),
-    //         ]),
-    //         body: Some(Box::new(Return(Box::new(CTrue)))),
-    //     });
+    #[test]
+    fn test_if_else_inconsistent_types() {
+        let env = Environment::new();
+        let stmt = Statement::IfThenElse(
+            Box::new(Expression::CTrue),
+            Box::new(Statement::Assignment(
+                "x".to_string(),
+                Box::new(Expression::CInt(1))
+            )),
+            Some(Box::new(Statement::Assignment(
+                "x".to_string(),
+                Box::new(Expression::CString("hello".to_string()))
+            )))
+        );
+        
+        // Should fail - x has different types in different branches
+        assert!(check_stmt(stmt, &env).is_err());
+    }
 
-    //     match check_stmt(func, &env) {
-    //         Ok(_) => assert!(false),
-    //         Err(s) => assert_eq!(
-    //             s,
-    //             "[Type Error] 'add()' has mismatched types: expected 'TInteger', found 'TBool'."
-    //         ),
-    //     }
-    // }
-
-    // #[test]
-    // fn check_return_outside_function() {
-    //     let env: Environment<Type> = Environment::new();
-
-    //     let retrn = Return(Box::new(CInt(1)));
-
-    //     match check_stmt(retrn, &env) {
-    //         Ok(_) => assert!(false),
-    //         Err(s) => assert_eq!(s, "[Syntax Error] return statement outside function."),
-    //     }
-    // }
-
-    // #[test]
-    // fn check_function_call_wrong_args() {
-    //     let env: Environment<Type> = Environment::new();
-
-    //     let func = FuncDef(Function {
-    //         name: "add".to_string(),
-    //         kind: Some(TInteger),
-    //         params: Some(vec![
-    //             ("a".to_string(), TInteger),
-    //             ("b".to_string(), TInteger),
-    //         ]),
-    //         body: Some(Box::new(Sequence(
-    //             Box::new(Assignment(
-    //                 "c".to_string(),
-    //                 Box::new(Add(
-    //                     Box::new(Var("a".to_string())),
-    //                     Box::new(Var("b".to_string())),
-    //                 )),
-    //                 Some(TInteger),
-    //             )),
-    //             Box::new(Return(Box::new(Var("c".to_string())))),
-    //         ))),
-    //     });
-    //     let program1 = Sequence(
-    //         Box::new(func.clone()),
-    //         Box::new(Assignment(
-    //             "var".to_string(),
-    //             Box::new(FuncCall("add".to_string(), vec![CInt(1)])),
-    //             Some(TInteger),
-    //         )),
-    //     );
-    //     let program2 = Sequence(
-    //         Box::new(func),
-    //         Box::new(Assignment(
-    //             "var".to_string(),
-    //             Box::new(FuncCall("add".to_string(), vec![CInt(1), CInt(2), CInt(3)])),
-    //             Some(TInteger),
-    //         )),
-    //     );
-
-    //     match check_stmt(program1, &env.clone()) {
-    //         Ok(_) => assert!(false),
-    //         Err(s) => assert_eq!(
-    //             s,
-    //             "[Type Error on '__main__()'] 'add()' expected 2 arguments, found 1."
-    //         ),
-    //     }
-    //     match check_stmt(program2, &env) {
-    //         Ok(_) => assert!(false),
-    //         Err(s) => assert_eq!(
-    //             s,
-    //             "[Type Error on '__main__()'] 'add()' expected 2 arguments, found 3."
-    //         ),
-    //     }
-    // }
-
-    // #[test]
-    // fn check_function_call_wrong_type() {
-    //     let env: Environment<Type> = Environment::new();
-
-    //     let func = FuncDef(Function {
-    //         name: "add".to_string(),
-    //         kind: Some(TInteger),
-    //         params: Some(vec![
-    //             ("a".to_string(), TInteger),
-    //             ("b".to_string(), TInteger),
-    //         ]),
-    //         body: Some(Box::new(Sequence(
-    //             Box::new(Assignment(
-    //                 "c".to_string(),
-    //                 Box::new(Add(
-    //                     Box::new(Var("a".to_string())),
-    //                     Box::new(Var("b".to_string())),
-    //                 )),
-    //                 Some(TInteger),
-    //             )),
-    //             Box::new(Return(Box::new(Var("c".to_string())))),
-    //         ))),
-    //     });
-    //     let program = Sequence(
-    //         Box::new(func.clone()),
-    //         Box::new(Assignment(
-    //             "var".to_string(),
-    //             Box::new(FuncCall("add".to_string(), vec![CInt(1), CTrue])),
-    //             Some(TInteger),
-    //         )),
-    //     );
-
-    //     match check_stmt(program, &env.clone()) {
-    //         Ok(_) => assert!(false),
-    //         Err(s) => assert_eq!(s, "[Type Error on '__main__()'] 'add()' has mismatched arguments: expected 'TInteger', found 'TBool'."),
-    //     }
-    // }
-
-    // #[test]
-    // fn check_function_call_non_function() {
-    //     let env: Environment<Type> = Environment::new();
-
-    //     let program = Sequence(
-    //         Box::new(Assignment(
-    //             "a".to_string(),
-    //             Box::new(CInt(1)),
-    //             Some(TInteger),
-    //         )),
-    //         Box::new(Assignment(
-    //             "b".to_string(),
-    //             Box::new(FuncCall("a".to_string(), vec![])),
-    //             Some(TInteger),
-    //         )),
-    //     );
-
-    //     match check_stmt(program, &env.clone()) {
-    //         Ok(_) => assert!(false),
-    //         Err(s) => assert_eq!(s, "[Name Error on '__main__()'] 'a()' is not defined."),
-    //     }
-    // }
-
-    // #[test]
-    // fn check_function_call_undefined() {
-    //     let env: Environment<Type> = Environment::new();
-
-    //     let program = Assignment(
-    //         "a".to_string(),
-    //         Box::new(FuncCall("func".to_string(), vec![])),
-    //         Some(TInteger),
-    //     );
-
-    //     match check_stmt(program, &env.clone()) {
-    //         Ok(_) => assert!(false),
-    //         Err(s) => assert_eq!(s, "[Name Error on '__main__()'] 'func()' is not defined."),
-    //     }
-    // }
-    // #[test]
-    // fn check_recursive_function() {
-    //     let env: Environment<Type> = Environment::new();
-
-    //     // Definição de função fatorial recursiva
-    //     let factorial = FuncDef(Function {
-    //         name: "factorial".to_string(),
-    //         kind: Some(TInteger),
-    //         params: Some(vec![("n".to_string(), TInteger)]),
-    //         body: Some(Box::new(IfThenElse(
-    //             Box::new(EQ(Box::new(Var("n".to_string())), Box::new(CInt(0)))),
-    //             Box::new(Return(Box::new(CInt(1)))),
-    //             Some(Box::new(Return(Box::new(Mul(
-    //                 Box::new(Var("n".to_string())),
-    //                 Box::new(FuncCall(
-    //                     "factorial".to_string(),
-    //                     vec![Sub(Box::new(Var("n".to_string())), Box::new(CInt(1)))],
-    //                 )),
-    //             ))))),
-    //         ))),
-    //     });
-
-    //     match check_stmt(factorial, &env) {
-    //         Ok(ControlFlow::Continue(new_env)) => {
-    //             assert_eq!(
-    //                 new_env.search_frame("factorial".to_string()),
-    //                 Some(TFunction(Box::new(Some(TInteger)), vec![TInteger])).as_ref()
-    //             );
-    //         }
-    //         _ => assert!(false, "Recursive function definition failed"),
-    //     }
-    // }
-
-    // #[test]
-    // fn check_function_multiple_return_paths() {
-    //     let env: Environment<Type> = Environment::new();
-
-    //     // Função com múltiplos caminhos de retorno
-    //     let func = FuncDef(Function {
-    //         name: "max".to_string(),
-    //         kind: Some(TInteger),
-    //         params: Some(vec![
-    //             ("a".to_string(), TInteger),
-    //             ("b".to_string(), TInteger),
-    //         ]),
-    //         body: Some(Box::new(IfThenElse(
-    //             Box::new(GT(
-    //                 Box::new(Var("a".to_string())),
-    //                 Box::new(Var("b".to_string())),
-    //             )),
-    //             Box::new(Return(Box::new(Var("a".to_string())))),
-    //             Some(Box::new(Return(Box::new(Var("b".to_string()))))),
-    //         ))),
-    //     });
-
-    //     match check_stmt(func, &env) {
-    //         Ok(ControlFlow::Continue(_)) => assert!(true),
-    //         _ => assert!(false, "Multiple return paths function failed"),
-    //     }
-    // }
-
-    // #[test]
-    // fn test_function_wrong_return_type() {
-    //     let env: Environment<Type> = Environment::new();
-
-    //     let func = FuncDef(Function {
-    //         name: "wrong_return".to_string(),
-    //         kind: Some(TInteger),
-    //         params: None,
-    //         body: Some(Box::new(Return(Box::new(CReal(1.0))))),
-    //     });
-
-    //     match check_stmt(func, &env) {
-    //         Ok(_) => assert!(false, "Should fail due to wrong return type"),
-    //         Err(msg) => assert_eq!(
-    //             msg,
-    //             "[Type Error] 'wrong_return()' has mismatched types: expected 'TInteger', found 'TReal'."
-    //         ),
-    //     }
-    // }
-
-    // #[test]
-    // fn test_function_parameter_shadowing() {
-    //     let env: Environment<Type> = Environment::new();
-
-    //     let func = FuncDef(Function {
-    //         name: "shadow_test".to_string(),
-    //         kind: Some(TInteger),
-    //         params: Some(vec![
-    //             ("x".to_string(), TInteger),
-    //             ("x".to_string(), TInteger), // Mesmo nome de parâmetro
-    //         ]),
-    //         body: Some(Box::new(Return(Box::new(Var("x".to_string()))))),
-    //     });
-
-    //     match check_stmt(func, &env) {
-    //         Ok(_) => panic!("Should not accept duplicate parameter names"),
-    //         Err(msg) => assert_eq!(msg, "[Parameter Error] Duplicate parameter name 'x'"),
-    //     }
-    // }
+    #[test]
+    fn test_if_else_partial_definition() {
+        let env = Environment::new();
+        let stmt = Statement::Sequence(
+            Box::new(Statement::IfThenElse(
+                Box::new(Expression::CTrue),
+                Box::new(Statement::Assignment(
+                    "x".to_string(),
+                    Box::new(Expression::CInt(1))
+                )),
+                None
+            )),
+            Box::new(Statement::Assignment(
+                "x".to_string(),
+                Box::new(Expression::CInt(2))
+            ))
+        );
+        
+        // Should succeed - x is conditionally defined in then branch
+        // and later used consistently as an integer
+        assert!(check_stmt(stmt, &env).is_ok());
+    }
 }
