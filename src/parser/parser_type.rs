@@ -11,94 +11,100 @@ use std::str::FromStr;
 
 use crate::ir::ast::{Type, ValueConstructor};
 
-use crate::parser::parser_common::{keyword, separator, identifier};
+use crate::parser::parser_common::{identifier, keyword, separator};
 
 pub fn parse_type(input: &str) -> IResult<&str, Type> {
-    alt(
-	(parse_basic_types,
-	 parse_list_type,
-	 parse_tuple_type,
-	 parse_maybe_type,
-	 parse_result_type,
-	 parse_function_type,
-	 parse_adt_type)
-    )(input)
+    alt((
+        parse_basic_types,
+        parse_list_type,
+        parse_tuple_type,
+        parse_maybe_type,
+        parse_result_type,
+        parse_function_type,
+        parse_adt_type,
+    ))(input)
 }
 
 fn parse_basic_types(input: &str) -> IResult<&str, Type> {
     map(
-	alt((keyword("Int"),
-	     keyword("Real"),
-	     keyword("Boolean"),
-	     keyword("String"),
-	     keyword("Unit"),
-	     keyword("Any")
-	)),
-	    |t| match t {
-		"Int" => Type::TInteger,
-		"Real" => Type::TReal,
-		"Boolean" => Type::TBool,
-		"String" => Type::TString,
-		"Unit" => Type::TVoid,
-		"Any" => Type::TAny,
-		_ => unreachable!()
-	    }
+        alt((
+            keyword("Int"),
+            keyword("Real"),
+            keyword("Boolean"),
+            keyword("String"),
+            keyword("Unit"),
+            keyword("Any"),
+        )),
+        |t| match t {
+            "Int" => Type::TInteger,
+            "Real" => Type::TReal,
+            "Boolean" => Type::TBool,
+            "String" => Type::TString,
+            "Unit" => Type::TVoid,
+            "Any" => Type::TAny,
+            _ => unreachable!(),
+        },
     )(input)
 }
 
 fn parse_list_type(input: &str) -> IResult<&str, Type> {
-    map(tuple(
-	(preceded(multispace0, char('[')),
-	 preceded(multispace0, parse_type),
-	 preceded(multispace0, char(']')),
-	)),
-	|(_, t, _)| Type::TList(Box::new(t))
+    map(
+        tuple((
+            preceded(multispace0, char('[')),
+            preceded(multispace0, parse_type),
+            preceded(multispace0, char(']')),
+        )),
+        |(_, t, _)| Type::TList(Box::new(t)),
     )(input)
 }
 
 fn parse_tuple_type(input: &str) -> IResult<&str, Type> {
-   map(tuple(
-	(preceded(multispace0, char('(')),
-	 preceded(multispace0, separated_list1(separator(","), parse_type)),
-	 preceded(multispace0, char(')')),
-	)),
-	|(_, ts, _)| Type::TTuple(ts)
+    map(
+        tuple((
+            preceded(multispace0, char('(')),
+            preceded(multispace0, separated_list1(separator(","), parse_type)),
+            preceded(multispace0, char(')')),
+        )),
+        |(_, ts, _)| Type::TTuple(ts),
     )(input)
 }
 
 fn parse_maybe_type(input: &str) -> IResult<&str, Type> {
-   map(tuple(
-         (preceded(multispace0, keyword("Maybe")),
-	  preceded(multispace0, char('[')), 
-	  preceded(multispace0, parse_type),
-	  preceded(multispace0, char(']')),
-	 )),
-	|(_, _, t, _)| Type::TMaybe(Box::new(t))
+    map(
+        tuple((
+            preceded(multispace0, keyword("Maybe")),
+            preceded(multispace0, char('[')),
+            preceded(multispace0, parse_type),
+            preceded(multispace0, char(']')),
+        )),
+        |(_, _, t, _)| Type::TMaybe(Box::new(t)),
     )(input)
 }
 
 fn parse_result_type(input: &str) -> IResult<&str, Type> {
-   map(tuple(
-         (preceded(multispace0, keyword("Result")),
-	  preceded(multispace0, char('[')), 
-	  preceded(multispace0, parse_type),
-	  preceded(multispace0, char(',')),
-	  preceded(multispace0, parse_type),
-	  preceded(multispace0, char(']')),
-	 )),
-	|(_, _, t_ok, _, t_err, _)| Type::TResult(Box::new(t_ok), Box::new(t_err))
+    map(
+        tuple((
+            preceded(multispace0, keyword("Result")),
+            preceded(multispace0, char('[')),
+            preceded(multispace0, parse_type),
+            preceded(multispace0, char(',')),
+            preceded(multispace0, parse_type),
+            preceded(multispace0, char(']')),
+        )),
+        |(_, _, t_ok, _, t_err, _)| Type::TResult(Box::new(t_ok), Box::new(t_err)),
     )(input)
 }
 
 fn parse_function_type(input: &str) -> IResult<&str, Type> {
-       map(tuple(
-         (preceded(multispace0, char('(')), 
-	  preceded(multispace0, separated_list0(separator(","), parse_type)),
-	  preceded(multispace0, char(')')),
-	  preceded(multispace0, tag("->")),
-	  preceded(multispace0, parse_type),
-	 )),
-	|(_, t_args, _, _, t_ret)| Type::TFunction(Box::new(Some(t_ret)), t_args)
+    map(
+        tuple((
+            preceded(multispace0, char('(')),
+            preceded(multispace0, separated_list0(separator(","), parse_type)),
+            preceded(multispace0, char(')')),
+            preceded(multispace0, tag("->")),
+            preceded(multispace0, parse_type),
+        )),
+        |(_, t_args, _, _, t_ret)| Type::TFunction(Box::new(Some(t_ret)), t_args),
     )(input)
 }
 

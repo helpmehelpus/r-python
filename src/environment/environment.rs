@@ -102,7 +102,7 @@ impl<A: Clone> Environment<A> {
 
     pub fn get_all_variables(&self) -> Vec<(Name, A)> {
         let mut vars = Vec::new();
-        
+
         // First get variables from local scopes (in reverse order to respect shadowing)
         for scope in self.stack.iter() {
             for (name, value) in &scope.variables {
@@ -111,14 +111,14 @@ impl<A: Clone> Environment<A> {
                 }
             }
         }
-        
+
         // Then get variables from global scope (if not already found)
         for (name, value) in &self.globals.variables {
             if !vars.iter().any(|(n, _)| n == name) {
                 vars.push((name.clone(), value.clone()));
             }
         }
-        
+
         vars
     }
 }
@@ -136,11 +136,11 @@ mod tests {
         assert_eq!(Some(&32), env.lookup(&"x".to_string()));
 
         // Test nested scopes
-        env.push();  // scope 1
+        env.push(); // scope 1
         env.map_variable("y".to_string(), 23);
-        env.map_variable("x".to_string(), 55);  // shadows global x
+        env.map_variable("x".to_string(), 55); // shadows global x
 
-        env.push();  // scope 2
+        env.push(); // scope 2
         env.map_variable("z".to_string(), 44);
 
         // Variables from all scopes should be accessible
@@ -152,18 +152,18 @@ mod tests {
         env.pop();
         assert_eq!(Some(&55), env.lookup(&"x".to_string())); // still in scope 1
         assert_eq!(Some(&23), env.lookup(&"y".to_string())); // still in scope 1
-        assert_eq!(None, env.lookup(&"z".to_string()));      // z is gone
+        assert_eq!(None, env.lookup(&"z".to_string())); // z is gone
 
         // Pop scope 1
         env.pop();
         assert_eq!(Some(&32), env.lookup(&"x".to_string())); // back to global x
-        assert_eq!(None, env.lookup(&"y".to_string()));      // y is gone
+        assert_eq!(None, env.lookup(&"y".to_string())); // y is gone
     }
 
     #[test]
     fn test_function_scoping() {
         let mut env: Environment<i32> = Environment::new();
-        
+
         let global_func = Function {
             name: "global".to_string(),
             kind: Type::TVoid,
@@ -184,12 +184,12 @@ mod tests {
 
         env.push();
         env.map_function(local_func.clone());
-        
+
         assert!(env.lookup_function(&"global".to_string()).is_some()); // can see global
-        assert!(env.lookup_function(&"local".to_string()).is_some());  // can see local
+        assert!(env.lookup_function(&"local".to_string()).is_some()); // can see local
 
         env.pop();
         assert!(env.lookup_function(&"global".to_string()).is_some()); // global still visible
-        assert!(env.lookup_function(&"local".to_string()).is_none());  // local gone
+        assert!(env.lookup_function(&"local".to_string()).is_none()); // local gone
     }
 }
