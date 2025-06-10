@@ -772,7 +772,7 @@ mod tests {
 
         let func = FuncDef(Function {
             name: "add".to_string(),
-            kind: Some(TInteger),
+            kind: Type::TInteger,
             params: Some(vec![
                 ("a".to_string(), TInteger),
                 ("b".to_string(), TInteger),
@@ -907,5 +907,28 @@ mod tests {
 
         // Should fail - trying to reassign different type
         assert!(check_stmt(stmt, &env).is_err());
+    }
+
+    #[test]
+    fn test_function_scoping() {
+        let mut env: Environment<i32> = Environment::new();
+        
+        let global_func = Function {
+            name: "global".to_string(),
+            kind: Type::TVoid,
+            params: None,
+            body: None,
+        };
+
+        let local_func = Function {
+            name: "local".to_string(),
+            kind: Type::TVoid,
+            params: None,
+            body: None,
+        };
+
+        // Test function scoping
+        env.map_function(global_func.clone());
+        assert!(env.lookup_function(&"global".to_string()).is_some());
     }
 }
