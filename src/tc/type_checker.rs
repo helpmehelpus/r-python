@@ -28,7 +28,7 @@ pub fn check_exp(exp: Expression, env: &Environment<Type>) -> Result<Type, Error
         Expression::LT(l, r) => check_bin_relational_expression(*l, *r, env),
         Expression::GTE(l, r) => check_bin_relational_expression(*l, *r, env),
         Expression::LTE(l, r) => check_bin_relational_expression(*l, *r, env),
-        //        Expression::Var(name) => check_var_name(name, env, false),
+        Expression::Var(name) => check_var_name(name, env, false),
         Expression::COk(e) => check_result_ok(*e, env),
         Expression::CErr(e) => check_result_err(*e, env),
         Expression::CJust(e) => check_maybe_just(*e, env),
@@ -256,37 +256,13 @@ pub fn check_stmt(
 //     Ok(())
 // }
 
-// fn check_var_name(name: Name, env: &Environment<Type>, scoped: bool) -> Result<Type, ErrorMessage> {
-//     let mut curr_scope = env.scope_key();
-
-//     loop {
-//         let frame = env.get_frame(curr_scope.clone());
-
-//         match frame.variables.get(&name) {
-//             Some(kind) => {
-//                 if scoped && curr_scope != env.scope_key() {
-//                     return Err(format!(
-//                         "[Local Name Error on '{}'] cannot access local variable '{}'.",
-//                         env.scope_name(),
-//                         name
-//                     ));
-//                 } else {
-//                     return Ok(kind.clone());
-//                 }
-//             }
-//             None => match &frame.parent_key {
-//                 Some(parent) => curr_scope = parent.clone(),
-//                 None => {
-//                     return Err(format!(
-//                         "[Name Error on '{}'] '{}' is not defined.",
-//                         env.scope_name(),
-//                         name
-//                     ))
-//                 }
-//             },
-//         }
-//     }
-// }
+fn check_var_name(name: Name, env: &Environment<Type>, scoped: bool) -> Result<Type, ErrorMessage> {
+    let var_type = env.lookup(&name);
+    match var_type {
+        Some(t) => Ok(t.clone()),
+        None => Err(format!("[Name Error] '{}' is not defined.", name)),
+    }
+}
 
 fn check_bin_arithmetic_expression(
     left: Expression,
@@ -871,5 +847,65 @@ mod tests {
         // Should succeed - x is conditionally defined in then branch
         // and later used consistently as an integer
         assert!(check_stmt(stmt, &env).is_ok());
+    }
+
+    #[test]
+    fn test_undefined_variable() {
+        let env = Environment::new();
+        let exp = Expression::Var("x".to_string());
+        
+        // Should fail - x is not defined
+        assert!(check_exp(exp, &env).is_err());
+    }
+
+    #[test]
+    fn test_defined_variable() {
+        let mut env = Environment::new();
+        env.map_variable("x".to_string(), Type::TInteger);
+        let exp = Expression::Var("x".to_string());
+        
+        // Should succeed and return integer type
+        assert_eq!(check_exp(exp, &env), Ok(Type::TInteger));
+    }
+
+    #[test]
+    fn test_variable_assignment() {
+        let env = Environment::new();
+        let stmt = Statement::Assignment(
+            "x".to_string(), 
+            Box::new(Expression::CInt(42))
+        );
+
+        // Should succeed and add x:integer to environment
+        let new_env = check_stmt(stmt, &env).unwrap();
+        assert_eq!(new_env.lookup(&"x".to_string()), Some(&Type::TInteger));
+    }
+
+    #[test]
+    fn test_variable_reassignment_same_type() {
+        let mut env = Environment::new();
+        env.map_variable("x".to_string(), Type::TInteger);
+        
+        let stmt = Statement::Assignment(
+            "x".to_string(),
+            Box::new(Expression::CInt(100))
+        );
+
+        // Should succeed - reassigning same type
+        assert!(check_stmt(stmt, &env).is_ok());
+    }
+
+    #[test]
+    fn test_variable_reassignment_different_type() {
+        let mut env = Environment::new();
+        env.map_variable("x".to_string(), Type::TInteger);
+        
+        let stmt = Statement::Assignment(
+            "x".to_string(),
+            Box::new(Expression::CString("hello".to_string()))
+        );
+
+        // Should fail - trying to reassign different type
+        assert!(check_stmt(stmt, &env).is_err());
     }
 }
