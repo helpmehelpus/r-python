@@ -1,14 +1,59 @@
 use nom::{
     branch::alt,
-    bytes::complete::{tag, take_while},
-    character::complete::{alpha1, char, digit1, multispace0},
-    combinator::{map, map_res, not, opt, peek, recognize, value, verify},
-    multi::{fold_many0, many0, separated_list0},
-    sequence::{delimited, pair, preceded, terminated},
+    bytes::complete::tag,
+    character::complete::{alpha1, multispace0},
+    combinator::{not, peek, recognize},
+    multi::many0,
+    sequence::{delimited, terminated},
     IResult,
 };
 
 use crate::parser::keywords::KEYWORDS;
+
+// Type name constants
+pub const INT_TYPE: &str = "Int";
+pub const REAL_TYPE: &str = "Real";
+pub const BOOLEAN_TYPE: &str = "Boolean";
+pub const STRING_TYPE: &str = "String";
+pub const UNIT_TYPE: &str = "Unit";
+pub const ANY_TYPE: &str = "Any";
+
+// Special type constructor constants
+pub const MAYBE_TYPE: &str = "Maybe";
+pub const RESULT_TYPE: &str = "Result";
+
+// Keyword constants
+pub const DATA_KEYWORD: &str = "data";
+pub const END_KEYWORD: &str = "end";
+
+// Statement keyword constants
+pub const IF_KEYWORD: &str = "if";
+pub const ELSE_KEYWORD: &str = "else";
+pub const WHILE_KEYWORD: &str = "while";
+pub const FOR_KEYWORD: &str = "for";
+pub const IN_KEYWORD: &str = "in";
+pub const ASSERT_KEYWORD: &str = "assert";
+pub const DEF_KEYWORD: &str = "def";
+
+// Operator and symbol constants
+pub const FUNCTION_ARROW: &str = "->";
+pub const PIPE_SYMBOL: &str = "|";
+pub const COLON_SYMBOL: &str = ":";
+pub const COMMA_SYMBOL: &str = ",";
+pub const SEMICOLON_SYMBOL: &str = ";";
+
+// Bracket and parentheses constants
+pub const LEFT_BRACKET: char = '[';
+pub const RIGHT_BRACKET: char = ']';
+pub const LEFT_PAREN: char = '(';
+pub const RIGHT_PAREN: char = ')';
+
+// Other character constants
+pub const COMMA_CHAR: char = ',';
+pub const COLON_CHAR: char = ':';
+pub const PIPE_CHAR: char = '|';
+pub const SEMICOLON_CHAR: char = ';';
+pub const EQUALS_CHAR: char = '=';
 
 /// Accepts any character except '"' and control characters (like \n, \t)
 pub fn is_string_char(c: char) -> bool {

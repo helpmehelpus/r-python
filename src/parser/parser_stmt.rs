@@ -2,16 +2,25 @@ use nom::{
     branch::alt,
     bytes::complete::tag,
     character::complete::{char, multispace0, multispace1},
-    combinator::{map, map_res, opt, value, verify},
+    combinator::{map, opt},
     error::Error,
-    multi::{fold_many0, separated_list0},
-    sequence::{delimited, pair, preceded, tuple},
+    multi::separated_list0,
+    sequence::{delimited, preceded, tuple},
     IResult,
 };
 
-use crate::ir::ast::{Expression, FormalArgument, Function, Statement, Type};
-use crate::parser::parser_common::{identifier, keyword};
-use crate::parser::parser_expr::{parse_actual_arguments, parse_expression};
+use crate::ir::ast::{FormalArgument, Function, Statement};
+use crate::parser::parser_common::{
+    identifier, keyword,
+    // Statement keyword constants
+    IF_KEYWORD, ELSE_KEYWORD, WHILE_KEYWORD, FOR_KEYWORD, IN_KEYWORD, 
+    ASSERT_KEYWORD, DEF_KEYWORD, END_KEYWORD,
+    // Operator and symbol constants
+    FUNCTION_ARROW,
+    // Character constants
+    LEFT_PAREN, RIGHT_PAREN, COLON_CHAR, SEMICOLON_CHAR, COMMA_CHAR, EQUALS_CHAR,
+};
+use crate::parser::parser_expr::parse_expression;
 use crate::parser::parser_type::parse_type;
 
 pub fn parse_statement(input: &str) -> IResult<&str, Statement> {
@@ -29,7 +38,7 @@ fn parse_assignment_statement(input: &str) -> IResult<&str, Statement> {
     map(
         tuple((
             delimited(multispace0, identifier, multispace0),
-            char::<&str, Error<&str>>('='),
+            char::<&str, Error<&str>>(EQUALS_CHAR),
             delimited(multispace0, parse_expression, multispace0),
         )),
         |(var, _, expr)| Statement::Assignment(var.to_string(), Box::new(expr)),
@@ -39,10 +48,10 @@ fn parse_assignment_statement(input: &str) -> IResult<&str, Statement> {
 fn parse_if_else_statement(input: &str) -> IResult<&str, Statement> {
     map(
         tuple((
-            keyword("if"),
+            keyword(IF_KEYWORD),
             preceded(multispace1, parse_expression),
             parse_block,
-            opt(preceded(tuple((multispace0, keyword("else"))), parse_block)),
+            opt(preceded(tuple((multispace0, keyword(ELSE_KEYWORD))), parse_block)),
         )),
         |(_, cond, then_block, else_block)| {
             Statement::IfThenElse(
@@ -57,7 +66,7 @@ fn parse_if_else_statement(input: &str) -> IResult<&str, Statement> {
 fn parse_while_statement(input: &str) -> IResult<&str, Statement> {
     map(
         tuple((
-            keyword("while"),
+            keyword(WHILE_KEYWORD),
             preceded(multispace1, parse_expression),
             parse_block,
         )),
@@ -68,9 +77,9 @@ fn parse_while_statement(input: &str) -> IResult<&str, Statement> {
 fn parse_for_statement(input: &str) -> IResult<&str, Statement> {
     map(
         tuple((
-            keyword("for"),
+            keyword(FOR_KEYWORD),
             preceded(multispace1, identifier),
-            preceded(multispace0, keyword("in")),
+            preceded(multispace0, keyword(IN_KEYWORD)),
             preceded(multispace1, parse_expression),
             parse_block,
         )),
@@ -81,14 +90,14 @@ fn parse_for_statement(input: &str) -> IResult<&str, Statement> {
 fn parse_assert_statement(input: &str) -> IResult<&str, Statement> {
     map(
         tuple((
-            keyword("assert"),
+            keyword(ASSERT_KEYWORD),
             delimited(
-                char::<&str, Error<&str>>('('),
+                char::<&str, Error<&str>>(LEFT_PAREN),
                 separated_list0(
-                    tuple((multispace0, char::<&str, Error<&str>>(','), multispace0)),
+                    tuple((multispace0, char::<&str, Error<&str>>(COMMA_CHAR), multispace0)),
                     parse_expression,
                 ),
-                char::<&str, Error<&str>>(')'),
+                char::<&str, Error<&str>>(RIGHT_PAREN),
             ),
         )),
         |(_, args)| {
@@ -103,17 +112,17 @@ fn parse_assert_statement(input: &str) -> IResult<&str, Statement> {
 fn parse_function_definition_statement(input: &str) -> IResult<&str, Statement> {
     map(
         tuple((
-            keyword("def"),
+            keyword(DEF_KEYWORD),
             preceded(multispace1, identifier),
             delimited(
-                char::<&str, Error<&str>>('('),
+                char::<&str, Error<&str>>(LEFT_PAREN),
                 separated_list0(
-                    tuple((multispace0, char::<&str, Error<&str>>(','), multispace0)),
+                    tuple((multispace0, char::<&str, Error<&str>>(COMMA_CHAR), multispace0)),
                     parse_formal_argument,
                 ),
-                char::<&str, Error<&str>>(')'),
+                char::<&str, Error<&str>>(RIGHT_PAREN),
             ),
-            preceded(multispace0, tag("->")),
+            preceded(multispace0, tag(FUNCTION_ARROW)),
             preceded(multispace0, parse_type),
             parse_block,
         )),
@@ -131,14 +140,14 @@ fn parse_function_definition_statement(input: &str) -> IResult<&str, Statement> 
 fn parse_block(input: &str) -> IResult<&str, Statement> {
     map(
         tuple((
-            char::<&str, Error<&str>>(':'),
+            char::<&str, Error<&str>>(COLON_CHAR),
             multispace0,
             separated_list0(
-                delimited(multispace0, char::<&str, Error<&str>>(';'), multispace0),
+                delimited(multispace0, char::<&str, Error<&str>>(SEMICOLON_CHAR), multispace0),
                 parse_statement,
             ),
-            opt(preceded(multispace0, char::<&str, Error<&str>>(';'))),
-            delimited(multispace0, keyword("end"), multispace0),
+            opt(preceded(multispace0, char::<&str, Error<&str>>(SEMICOLON_CHAR))),
+            delimited(multispace0, keyword(END_KEYWORD), multispace0),
         )),
         |(_, _, stmts, _, _)| Statement::Block(stmts),
     )(input)
@@ -148,7 +157,7 @@ fn parse_formal_argument(input: &str) -> IResult<&str, FormalArgument> {
     map(
         tuple((
             preceded(multispace0, identifier),
-            preceded(multispace0, char::<&str, Error<&str>>(':')),
+            preceded(multispace0, char::<&str, Error<&str>>(COLON_CHAR)),
             preceded(multispace0, parse_type),
         )),
         |(name, _, t)| FormalArgument::new(name.to_string(), t),
