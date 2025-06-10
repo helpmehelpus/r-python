@@ -10,6 +10,11 @@ use nom::{
 
 use crate::parser::keywords::KEYWORDS;
 
+/// Accepts any character except '"' and control characters (like \n, \t)
+pub fn is_string_char(c: char) -> bool {
+    c != '"' && !c.is_control()
+}
+
 pub fn separator<'a>(sep: &'static str) -> impl FnMut(&'a str) -> IResult<&'a str, &'a str> {
     delimited(multispace0, tag(sep), multispace0)
 }
@@ -55,9 +60,4 @@ fn identifier_continue(input: &str) -> IResult<&str, &str> {
 /// A single identifier character: alphanumeric or underscore
 fn identifier_start_or_continue(input: &str) -> IResult<&str, &str> {
     recognize(alt((alpha1, tag("_"), nom::character::complete::digit1)))(input)
-}
-
-/// Accepts any character except '"' and control characters (like \n, \t)
-pub fn is_string_char(c: char) -> bool {
-    c != '"' && !c.is_control()
 }
