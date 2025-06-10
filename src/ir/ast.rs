@@ -114,7 +114,7 @@ impl<A> Environment<A> {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Function {
     pub name: Name,
-    pub kind: Option<Type>,
+    pub kind: Type,
     pub params: Option<Vec<(Name, Type)>>,
     pub body: Option<Box<Statement>>,
 }
@@ -123,7 +123,7 @@ impl Function {
     pub fn new() -> Function {
         return Function {
             name: "__main__".to_string(),
-            kind: None,
+            kind: Type::TVoid,
             params: None,
             body: None,
         };

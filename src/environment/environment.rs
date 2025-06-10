@@ -1,5 +1,6 @@
 use crate::ir::ast::Function;
 use crate::ir::ast::Name;
+use crate::ir::ast::Type;
 
 use std::collections::HashMap;
 use std::collections::LinkedList;
@@ -165,14 +166,14 @@ mod tests {
         
         let global_func = Function {
             name: "global".to_string(),
-            kind: None,
+            kind: Type::TVoid,
             params: None,
             body: None,
         };
 
         let local_func = Function {
             name: "local".to_string(),
-            kind: None,
+            kind: Type::TVoid,
             params: None,
             body: None,
         };

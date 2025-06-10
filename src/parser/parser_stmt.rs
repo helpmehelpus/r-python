@@ -139,7 +139,7 @@ fn parse_function_definition_statement(input: &str) -> IResult<&str, Statement> 
 
             Statement::FuncDef(Function {
                 name: name.to_string(),
-                kind: Some(t),
+                kind: t,
                 params: Some(params),
                 body: Some(Box::new(block))
             })
@@ -259,7 +259,7 @@ mod tests {
         let input = "def f(x: Int) -> Int: x = 1; end";
         let expected = Statement::FuncDef(Function {
             name: "f".to_string(),
-            kind: Some(Type::TInteger),
+            kind: Type::TInteger,
             params: Some(vec![("x".to_string(), Type::TInteger)]),
             body: Some(Box::new(Statement::Block(vec![
                 Statement::Assignment("x".to_string(), Box::new(Expression::CInt(1)))
