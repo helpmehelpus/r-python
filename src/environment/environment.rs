@@ -98,6 +98,28 @@ impl<A: Clone> Environment<A> {
     pub fn pop(&mut self) -> () {
         self.stack.pop_front();
     }
+
+    pub fn get_all_variables(&self) -> Vec<(Name, A)> {
+        let mut vars = Vec::new();
+        
+        // First get variables from local scopes (in reverse order to respect shadowing)
+        for scope in self.stack.iter() {
+            for (name, value) in &scope.variables {
+                if !vars.iter().any(|(n, _)| n == name) {
+                    vars.push((name.clone(), value.clone()));
+                }
+            }
+        }
+        
+        // Then get variables from global scope (if not already found)
+        for (name, value) in &self.globals.variables {
+            if !vars.iter().any(|(n, _)| n == name) {
+                vars.push((name.clone(), value.clone()));
+            }
+        }
+        
+        vars
+    }
 }
 
 #[cfg(test)]
