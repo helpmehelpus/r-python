@@ -115,6 +115,7 @@ fn parse_factor(input: &str) -> IResult<&str, Expression> {
         parse_bool,
         parse_number,
         parse_string,
+        parse_list,
         parse_function_call,
         parse_var,
         delimited(char::<&str, Error<&str>>('('), parse_expression, char::<&str, Error<&str>>(')')),
@@ -209,6 +210,23 @@ pub fn parse_actual_arguments(input: &str) -> IResult<&str, Vec<Expression>> {
     )(input)
 }
 
+fn parse_list(input: &str) -> IResult<&str, Expression> {
+    let (input, _) = multispace0(input)?;
+    let (input, _) = char('[')(input)?;
+    let (input, _) = multispace0(input)?;
+    
+    let (input, elements) = separated_list0(
+        delimited(multispace0, char(','), multispace0),
+        parse_expression
+    )(input)?;
+    
+    let (input, _) = multispace0(input)?;
+    let (input, _) = char(']')(input)?;
+    let (input, _) = multispace0(input)?;
+    
+    Ok((input, Expression::ListValue(elements)))
+}
+
 /// Parses an operator.
 fn operator<'a>(op: &'static str) -> impl FnMut(&'a str) -> IResult<&'a str, &'a str> {
     delimited(multispace0, tag(op), multispace0)
@@ -287,5 +305,91 @@ mod tests {
 
         let mut parser = keyword("or");
         assert!(parser("origin").is_err());
+    }
+
+    #[test]
+    fn test_parse_empty_list() {
+        let input = "[]";
+        let (rest, result) = parse_list(input).unwrap();
+        assert_eq!(rest, "");
+        assert!(matches!(result, Expression::ListValue(elements) if elements.is_empty()));
+    }
+
+    #[test]
+    fn test_parse_integer_list() {
+        let input = "[1, 2, 3]";
+        let (rest, result) = parse_list(input).unwrap();
+        assert_eq!(rest, "");
+        if let Expression::ListValue(elements) = result {
+            assert_eq!(elements.len(), 3);
+            assert!(matches!(elements[0], Expression::CInt(1)));
+            assert!(matches!(elements[1], Expression::CInt(2)));
+            assert!(matches!(elements[2], Expression::CInt(3)));
+        } else {
+            panic!("Expected ListValue expression");
+        }
+    }
+
+    #[test]
+    fn test_parse_string_list() {
+        let input = "[\"abc\", \"def\"]";
+        let (rest, result) = parse_list(input).unwrap();
+        assert_eq!(rest, "");
+        if let Expression::ListValue(elements) = result {
+            assert_eq!(elements.len(), 2);
+            assert!(matches!(elements[0], Expression::CString(ref s) if s == "abc"));
+            assert!(matches!(elements[1], Expression::CString(ref s) if s == "def"));
+        } else {
+            panic!("Expected ListValue expression");
+        }
+    }
+
+    #[test]
+    fn test_parse_list_with_spaces() {
+        let input = "[ 1 , 2 , 3 ]";
+        let (rest, result) = parse_list(input).unwrap();
+        assert_eq!(rest, "");
+        if let Expression::ListValue(elements) = result {
+            assert_eq!(elements.len(), 3);
+            assert!(matches!(elements[0], Expression::CInt(1)));
+            assert!(matches!(elements[1], Expression::CInt(2)));
+            assert!(matches!(elements[2], Expression::CInt(3)));
+        } else {
+            panic!("Expected ListValue expression");
+        }
+    }
+
+    #[test]
+    fn test_parse_list_with_outer_spaces() {
+        let input = "    [1, 2, 3]    rest";
+        let (rest, result) = parse_list(input).unwrap();
+        assert_eq!(rest, "rest");
+        if let Expression::ListValue(elements) = result {
+            assert_eq!(elements.len(), 3);
+            assert!(matches!(elements[0], Expression::CInt(1)));
+            assert!(matches!(elements[1], Expression::CInt(2)));
+            assert!(matches!(elements[2], Expression::CInt(3)));
+        } else {
+            panic!("Expected ListValue expression");
+        }
+    }
+
+    #[test]
+    fn test_parse_nested_list() {
+        let input = "[[1, 2], [3, 4]]";
+        let (rest, result) = parse_list(input).unwrap();
+        assert_eq!(rest, "");
+        if let Expression::ListValue(elements) = result {
+            assert_eq!(elements.len(), 2);
+            for element in elements {
+                if let Expression::ListValue(inner) = element {
+                    assert_eq!(inner.len(), 2);
+                } else {
+                    panic!("Expected inner ListValue expression");
+                }
+            }
+        } else {
+            panic!("Expected ListValue expression");
+        }
     }
 }

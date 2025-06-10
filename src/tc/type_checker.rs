@@ -37,6 +37,7 @@ pub fn check_exp(exp: Expression, env: &Environment<Type>) -> Result<Type, Error
         Expression::IsNothing(e) => check_isnothing_type(*e, env),
         Expression::Unwrap(e) => check_unwrap_type(*e, env),
         Expression::Propagate(e) => check_propagate_type(*e, env),
+        Expression::ListValue(elements) => check_list_value(&elements, env),
         _ => Err("not implemented yet.".to_string()), //        Expression::FuncCall(name, args) => check_func_call(name, args, env),
                                                       //        Expression::ADTConstructor(adt_name, constructor_name, args) => check_adt_constructor(adt_name, constructor_name, args, env)
     }
@@ -352,6 +353,28 @@ fn merge_environments(env1: &Environment<Type>, env2: &Environment<Type>) -> Res
         }
     }
     Ok(merged)
+}
+
+fn check_list_value(elements: &[Expression], env: &Environment<Type>) -> Result<Type, ErrorMessage> {
+    if elements.is_empty() {
+        return Ok(Type::TList(Box::new(Type::TAny)));
+    }
+
+    // Check the type of the first element
+    let first_type = check_exp(elements[0].clone(), env)?;
+    
+    // Check that all other elements have the same type
+    for element in elements.iter().skip(1) {
+        let element_type = check_exp(element.clone(), env)?;
+        if element_type != first_type {
+            return Err(format!(
+                "[Type Error] List elements must have the same type. Expected '{:?}', found '{:?}'.",
+                first_type, element_type
+            ));
+        }
+    }
+    
+    Ok(Type::TList(Box::new(first_type)))
 }
 
 #[cfg(test)]
@@ -882,5 +905,139 @@ mod tests {
         // Test function scoping
         env.map_function(global_func.clone());
         assert!(env.lookup_function(&"global".to_string()).is_some());
+    }
+
+    #[test]
+    #[ignore = "for statement type checker not yet implemented"]
+    fn test_for_valid_integer_list() {
+        let env = Environment::new();
+        let stmt = Statement::For(
+            "x".to_string(),
+            Box::new(Expression::ListValue(vec![
+                Expression::CInt(1),
+                Expression::CInt(2),
+                Expression::CInt(3)
+            ])),
+            Box::new(Statement::Assignment(
+                "sum".to_string(),
+                Box::new(Expression::Add(
+                    Box::new(Expression::Var("sum".to_string())),
+                    Box::new(Expression::Var("x".to_string()))
+                ))
+            ))
+        );
+        
+        // Should succeed - iterating over list of integers and using iterator variable correctly
+        assert!(check_stmt(stmt, &env).is_ok());
+    }
+
+    #[test]
+    #[ignore = "for statement type checker not yet implemented"]
+    fn test_for_mixed_type_list() {
+        let env = Environment::new();
+        let stmt = Statement::For(
+            "x".to_string(),
+            Box::new(Expression::ListValue(vec![
+                Expression::CInt(1),
+                Expression::CString("hello".to_string()),
+                Expression::CInt(3)
+            ])),
+            Box::new(Statement::Assignment(
+                "x".to_string(),
+                Box::new(Expression::CInt(1))
+            ))
+        );
+        
+        // Should fail - list contains mixed types (integers and strings)
+        assert!(check_stmt(stmt, &env).is_err());
+    }
+
+    #[test]
+    #[ignore = "for statement type checker not yet implemented"]
+    fn test_for_empty_list() {
+        let env = Environment::new();
+        let stmt = Statement::For(
+            "x".to_string(),
+            Box::new(Expression::ListValue(vec![])),
+            Box::new(Statement::Assignment(
+                "x".to_string(),
+                Box::new(Expression::CInt(1))
+            ))
+        );
+        
+        // Should succeed - empty list is valid, though no iterations will occur
+        assert!(check_stmt(stmt, &env).is_ok());
+    }
+
+    #[test]
+    #[ignore = "for statement type checker not yet implemented"]
+    fn test_for_iterator_variable_reassignment() {
+        let env = Environment::new();
+        let stmt = Statement::For(
+            "x".to_string(),
+            Box::new(Expression::ListValue(vec![
+                Expression::CInt(1),
+                Expression::CInt(2)
+            ])),
+            Box::new(Statement::Assignment(
+                "x".to_string(),
+                Box::new(Expression::CString("invalid".to_string()))
+            ))
+        );
+        
+        // Should fail - trying to assign string to iterator variable when iterating over integers
+        assert!(check_stmt(stmt, &env).is_err());
+    }
+
+    #[test]
+    #[ignore = "for statement type checker not yet implemented"]
+    fn test_for_nested_loops() {
+        let env = Environment::new();
+        let stmt = Statement::For(
+            "i".to_string(),
+            Box::new(Expression::ListValue(vec![
+                Expression::CInt(1),
+                Expression::CInt(2)
+            ])),
+            Box::new(Statement::For(
+                "j".to_string(),
+                Box::new(Expression::ListValue(vec![
+                    Expression::CInt(3),
+                    Expression::CInt(4)
+                ])),
+                Box::new(Statement::Assignment(
+                    "sum".to_string(),
+                    Box::new(Expression::Add(
+                        Box::new(Expression::Var("i".to_string())),
+                        Box::new(Expression::Var("j".to_string()))
+                    ))
+                ))
+            ))
+        );
+        
+        // Should succeed - nested loops with proper variable usage
+        assert!(check_stmt(stmt, &env).is_ok());
+    }
+
+    #[test]
+    #[ignore = "for statement type checker not yet implemented"]
+    fn test_for_variable_scope() {
+        let mut env = Environment::new();
+        env.map_variable("x".to_string(), Type::TString); // x is defined as string in outer scope
+        
+        let stmt = Statement::For(
+            "x".to_string(), // reusing name x as iterator
+            Box::new(Expression::ListValue(vec![
+                Expression::CInt(1),
+                Expression::CInt(2)
+            ])),
+            Box::new(Statement::Assignment(
+                "y".to_string(),
+                Box::new(Expression::Var("x".to_string()))
+            ))
+        );
+        
+        // Should succeed - for loop creates new scope, x is temporarily an integer
+        assert!(check_stmt(stmt, &env).is_ok());
     }
 }

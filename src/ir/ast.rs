@@ -239,6 +239,8 @@ pub enum Expression {
     Propagate(Box<Expression>),
 
     ADTConstructor(Name, Name, Vec<Box<Expression>>),
+
+    ListValue(Vec<Expression>),
 }
 
 #[derive(Debug, PartialEq, Clone)]
