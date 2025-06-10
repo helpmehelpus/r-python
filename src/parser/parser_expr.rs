@@ -12,13 +12,13 @@ use nom::{
 use std::str::FromStr;
 
 use crate::ir::ast::Expression;
-use crate::parser::parser_common::{identifier, is_string_char, keyword};
-
-use crate::ir::ast::Function;
-use crate::ir::ast::Type;
-use crate::ir::ast::{Name, Statement, ValueConstructor};
-
-use crate::parser::keywords::KEYWORDS;
+use crate::parser::parser_common::{
+    identifier, is_string_char, keyword,
+    // Bracket and parentheses constants
+    LEFT_BRACKET, RIGHT_BRACKET, LEFT_PAREN, RIGHT_PAREN,
+    // Other character constants
+    COMMA_CHAR,
+};
 
 pub fn parse_expression(input: &str) -> IResult<&str, Expression> {
     parse_or(input)
@@ -113,9 +113,9 @@ fn parse_factor(input: &str) -> IResult<&str, Expression> {
         parse_function_call,
         parse_var,
         delimited(
-            char::<&str, Error<&str>>('('),
+            char::<&str, Error<&str>>(LEFT_PAREN),
             parse_expression,
-            char::<&str, Error<&str>>(')'),
+            char::<&str, Error<&str>>(RIGHT_PAREN),
         ),
     ))(input)
 }
@@ -193,13 +193,13 @@ pub fn parse_actual_arguments(input: &str) -> IResult<&str, Vec<Expression>> {
     map(
         tuple((
             multispace0,
-            char::<&str, Error<&str>>('('),
+            char::<&str, Error<&str>>(LEFT_PAREN),
             separated_list0(
-                tuple((multispace0, char::<&str, Error<&str>>(','), multispace0)),
+                tuple((multispace0, char::<&str, Error<&str>>(COMMA_CHAR), multispace0)),
                 parse_expression,
             ),
             multispace0,
-            char::<&str, Error<&str>>(')'),
+            char::<&str, Error<&str>>(RIGHT_PAREN),
         )),
         |(_, _, args, _, _)| args,
     )(input)
@@ -207,16 +207,16 @@ pub fn parse_actual_arguments(input: &str) -> IResult<&str, Vec<Expression>> {
 
 fn parse_list(input: &str) -> IResult<&str, Expression> {
     let (input, _) = multispace0(input)?;
-    let (input, _) = char('[')(input)?;
+    let (input, _) = char(LEFT_BRACKET)(input)?;
     let (input, _) = multispace0(input)?;
 
     let (input, elements) = separated_list0(
-        delimited(multispace0, char(','), multispace0),
+        delimited(multispace0, char(COMMA_CHAR), multispace0),
         parse_expression,
     )(input)?;
 
     let (input, _) = multispace0(input)?;
-    let (input, _) = char(']')(input)?;
+    let (input, _) = char(RIGHT_BRACKET)(input)?;
     let (input, _) = multispace0(input)?;
 
     Ok((input, Expression::ListValue(elements)))

@@ -1,39 +1,30 @@
 use nom::{
     branch::alt,
-    bytes::complete::{tag, take_while},
-    character::complete::{alpha1, char, digit1, line_ending, multispace0, space0},
-    combinator::{map, map_res, not, opt, peek, recognize, value, verify},
-    multi::{fold_many0, many0, many1, separated_list0, separated_list1},
-    sequence::{delimited, pair, preceded, terminated, tuple},
+    bytes::complete::tag,
+    character::complete::{char, multispace0},
+    combinator::map,
+    multi::{many1, separated_list0, separated_list1},
+    sequence::{preceded, tuple},
     IResult,
 };
-use std::str::FromStr;
 
 use crate::ir::ast::{Type, ValueConstructor};
 
-use crate::parser::parser_common::{identifier, keyword, separator};
-
-// String constants for type names
-const INT_TYPE: &str = "Int";
-const REAL_TYPE: &str = "Real";
-const BOOLEAN_TYPE: &str = "Boolean";
-const STRING_TYPE: &str = "String";
-const UNIT_TYPE: &str = "Unit";
-const ANY_TYPE: &str = "Any";
-
-// String constants for special type constructors
-const MAYBE_TYPE: &str = "Maybe";
-const RESULT_TYPE: &str = "Result";
-
-// String constants for ADT keywords
-const DATA_KEYWORD: &str = "data";
-const END_KEYWORD: &str = "end";
-
-// String constants for operators and symbols
-const FUNCTION_ARROW: &str = "->";
-const PIPE_SYMBOL: &str = "|";
-const COLON_SYMBOL: &str = ":";
-const COMMA_SYMBOL: &str = ",";
+use crate::parser::parser_common::{
+    identifier, keyword, separator,
+    // Type name constants
+    INT_TYPE, REAL_TYPE, BOOLEAN_TYPE, STRING_TYPE, UNIT_TYPE, ANY_TYPE,
+    // Special type constructor constants
+    MAYBE_TYPE, RESULT_TYPE,
+    // Keyword constants
+    DATA_KEYWORD, END_KEYWORD,
+    // Operator and symbol constants
+    FUNCTION_ARROW, COMMA_SYMBOL,
+    // Bracket and parentheses constants
+    LEFT_BRACKET, RIGHT_BRACKET, LEFT_PAREN, RIGHT_PAREN,
+    // Other character constants
+    COMMA_CHAR, COLON_CHAR, PIPE_CHAR,
+};
 
 pub fn parse_type(input: &str) -> IResult<&str, Type> {
     alt((
@@ -72,9 +63,9 @@ fn parse_basic_types(input: &str) -> IResult<&str, Type> {
 fn parse_list_type(input: &str) -> IResult<&str, Type> {
     map(
         tuple((
-            preceded(multispace0, char('[')),
+            preceded(multispace0, char(LEFT_BRACKET)),
             preceded(multispace0, parse_type),
-            preceded(multispace0, char(']')),
+            preceded(multispace0, char(RIGHT_BRACKET)),
         )),
         |(_, t, _)| Type::TList(Box::new(t)),
     )(input)
@@ -83,12 +74,12 @@ fn parse_list_type(input: &str) -> IResult<&str, Type> {
 fn parse_tuple_type(input: &str) -> IResult<&str, Type> {
     map(
         tuple((
-            preceded(multispace0, char('(')),
+            preceded(multispace0, char(LEFT_PAREN)),
             preceded(
                 multispace0,
                 separated_list1(separator(COMMA_SYMBOL), parse_type),
             ),
-            preceded(multispace0, char(')')),
+            preceded(multispace0, char(RIGHT_PAREN)),
         )),
         |(_, ts, _)| Type::TTuple(ts),
     )(input)
@@ -98,9 +89,9 @@ fn parse_maybe_type(input: &str) -> IResult<&str, Type> {
     map(
         tuple((
             preceded(multispace0, keyword(MAYBE_TYPE)),
-            preceded(multispace0, char('[')),
+            preceded(multispace0, char(LEFT_BRACKET)),
             preceded(multispace0, parse_type),
-            preceded(multispace0, char(']')),
+            preceded(multispace0, char(RIGHT_BRACKET)),
         )),
         |(_, _, t, _)| Type::TMaybe(Box::new(t)),
     )(input)
@@ -110,11 +101,11 @@ fn parse_result_type(input: &str) -> IResult<&str, Type> {
     map(
         tuple((
             preceded(multispace0, keyword(RESULT_TYPE)),
-            preceded(multispace0, char('[')),
+            preceded(multispace0, char(LEFT_BRACKET)),
             preceded(multispace0, parse_type),
-            preceded(multispace0, char(',')),
+            preceded(multispace0, char(COMMA_CHAR)),
             preceded(multispace0, parse_type),
-            preceded(multispace0, char(']')),
+            preceded(multispace0, char(RIGHT_BRACKET)),
         )),
         |(_, _, t_ok, _, t_err, _)| Type::TResult(Box::new(t_ok), Box::new(t_err)),
     )(input)
@@ -123,12 +114,12 @@ fn parse_result_type(input: &str) -> IResult<&str, Type> {
 fn parse_function_type(input: &str) -> IResult<&str, Type> {
     map(
         tuple((
-            preceded(multispace0, char('(')),
+            preceded(multispace0, char(LEFT_PAREN)),
             preceded(
                 multispace0,
                 separated_list0(separator(COMMA_SYMBOL), parse_type),
             ),
-            preceded(multispace0, char(')')),
+            preceded(multispace0, char(RIGHT_PAREN)),
             preceded(multispace0, tag(FUNCTION_ARROW)),
             preceded(multispace0, parse_type),
         )),
@@ -141,7 +132,7 @@ fn parse_adt_type(input: &str) -> IResult<&str, Type> {
         tuple((
             keyword(DATA_KEYWORD),
             preceded(multispace0, identifier),
-            preceded(multispace0, char(':')),
+            preceded(multispace0, char(COLON_CHAR)),
             many1(parse_adt_cons),
             preceded(multispace0, keyword(END_KEYWORD)),
         )),
@@ -152,7 +143,7 @@ fn parse_adt_type(input: &str) -> IResult<&str, Type> {
 fn parse_adt_cons(input: &str) -> IResult<&str, ValueConstructor> {
     map(
         tuple((
-            preceded(multispace0, char('|')),
+            preceded(multispace0, char(PIPE_CHAR)),
             preceded(multispace0, identifier),
             separated_list0(multispace0, parse_type),
         )),
