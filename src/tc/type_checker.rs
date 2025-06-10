@@ -1,5 +1,5 @@
 use crate::environment::environment::Environment;
-use crate::ir::ast::{Expression, Name, Statement, Type, Function, FormalArgument};
+use crate::ir::ast::{Expression, FormalArgument, Function, Name, Statement, Type};
 
 type ErrorMessage = String;
 
@@ -97,7 +97,7 @@ pub fn check_stmt(
                 // because variables in the then branch are conditionally defined
                 new_env = merge_environments(&new_env, &then_env)?;
             }
-            
+
             Ok(new_env)
         }
         Statement::While(cond, stmt) => {
@@ -115,12 +115,15 @@ pub fn check_stmt(
         Statement::FuncDef(function) => {
             let mut new_env = env.clone();
             new_env.push();
-            
+
             // Since params is now a Vec<FormalArgument>, we can iterate directly
             for formal_arg in function.params.iter() {
-                new_env.map_variable(formal_arg.argumentName.clone(), formal_arg.argumentType.clone());
+                new_env.map_variable(
+                    formal_arg.argumentName.clone(),
+                    formal_arg.argumentType.clone(),
+                );
             }
-            
+
             if let Some(body) = function.body.clone() {
                 new_env = check_stmt(*body, &new_env)?;
             }
@@ -330,9 +333,12 @@ fn check_isnothing_type(exp: Expression, env: &Environment<Type>) -> Result<Type
     }
 }
 
-fn merge_environments(env1: &Environment<Type>, env2: &Environment<Type>) -> Result<Environment<Type>, ErrorMessage> {
+fn merge_environments(
+    env1: &Environment<Type>,
+    env2: &Environment<Type>,
+) -> Result<Environment<Type>, ErrorMessage> {
     let mut merged = env1.clone();
-    
+
     // Get all variables defined in either environment
     for (name, type2) in env2.get_all_variables() {
         match env1.lookup(&name) {
@@ -355,14 +361,17 @@ fn merge_environments(env1: &Environment<Type>, env2: &Environment<Type>) -> Res
     Ok(merged)
 }
 
-fn check_list_value(elements: &[Expression], env: &Environment<Type>) -> Result<Type, ErrorMessage> {
+fn check_list_value(
+    elements: &[Expression],
+    env: &Environment<Type>,
+) -> Result<Type, ErrorMessage> {
     if elements.is_empty() {
         return Ok(Type::TList(Box::new(Type::TAny)));
     }
 
     // Check the type of the first element
     let first_type = check_exp(elements[0].clone(), env)?;
-    
+
     // Check that all other elements have the same type
     for element in elements.iter().skip(1) {
         let element_type = check_exp(element.clone(), env)?;
@@ -373,7 +382,7 @@ fn check_list_value(elements: &[Expression], env: &Environment<Type>) -> Result<
             ));
         }
     }
-    
+
     Ok(Type::TList(Box::new(first_type)))
 }
 
@@ -770,14 +779,14 @@ mod tests {
             Box::new(Expression::CTrue),
             Box::new(Statement::Assignment(
                 "x".to_string(),
-                Box::new(Expression::CInt(1))
+                Box::new(Expression::CInt(1)),
             )),
             Some(Box::new(Statement::Assignment(
                 "x".to_string(),
-                Box::new(Expression::CInt(2))
-            )))
+                Box::new(Expression::CInt(2)),
+            ))),
         );
-        
+
         // Should succeed - x is consistently an integer in both branches
         assert!(check_stmt(stmt, &env).is_ok());
     }
@@ -789,14 +798,14 @@ mod tests {
             Box::new(Expression::CTrue),
             Box::new(Statement::Assignment(
                 "x".to_string(),
-                Box::new(Expression::CInt(1))
+                Box::new(Expression::CInt(1)),
             )),
             Some(Box::new(Statement::Assignment(
                 "x".to_string(),
-                Box::new(Expression::CString("hello".to_string()))
-            )))
+                Box::new(Expression::CString("hello".to_string())),
+            ))),
         );
-        
+
         // Should fail - x has different types in different branches
         assert!(check_stmt(stmt, &env).is_err());
     }
@@ -809,16 +818,16 @@ mod tests {
                 Box::new(Expression::CTrue),
                 Box::new(Statement::Assignment(
                     "x".to_string(),
-                    Box::new(Expression::CInt(1))
+                    Box::new(Expression::CInt(1)),
                 )),
-                None
+                None,
             )),
             Box::new(Statement::Assignment(
                 "x".to_string(),
-                Box::new(Expression::CInt(2))
-            ))
+                Box::new(Expression::CInt(2)),
+            )),
         );
-        
+
         // Should succeed - x is conditionally defined in then branch
         // and later used consistently as an integer
         assert!(check_stmt(stmt, &env).is_ok());
@@ -828,7 +837,7 @@ mod tests {
     fn test_undefined_variable() {
         let env = Environment::new();
         let exp = Expression::Var("x".to_string());
-        
+
         // Should fail - x is not defined
         assert!(check_exp(exp, &env).is_err());
     }
@@ -838,7 +847,7 @@ mod tests {
         let mut env = Environment::new();
         env.map_variable("x".to_string(), Type::TInteger);
         let exp = Expression::Var("x".to_string());
-        
+
         // Should succeed and return integer type
         assert_eq!(check_exp(exp, &env), Ok(Type::TInteger));
     }
@@ -846,10 +855,7 @@ mod tests {
     #[test]
     fn test_variable_assignment() {
         let env = Environment::new();
-        let stmt = Statement::Assignment(
-            "x".to_string(), 
-            Box::new(Expression::CInt(42))
-        );
+        let stmt = Statement::Assignment("x".to_string(), Box::new(Expression::CInt(42)));
 
         // Should succeed and add x:integer to environment
         let new_env = check_stmt(stmt, &env).unwrap();
@@ -860,11 +866,8 @@ mod tests {
     fn test_variable_reassignment_same_type() {
         let mut env = Environment::new();
         env.map_variable("x".to_string(), Type::TInteger);
-        
-        let stmt = Statement::Assignment(
-            "x".to_string(),
-            Box::new(Expression::CInt(100))
-        );
+
+        let stmt = Statement::Assignment("x".to_string(), Box::new(Expression::CInt(100)));
 
         // Should succeed - reassigning same type
         assert!(check_stmt(stmt, &env).is_ok());
@@ -874,10 +877,10 @@ mod tests {
     fn test_variable_reassignment_different_type() {
         let mut env = Environment::new();
         env.map_variable("x".to_string(), Type::TInteger);
-        
+
         let stmt = Statement::Assignment(
             "x".to_string(),
-            Box::new(Expression::CString("hello".to_string()))
+            Box::new(Expression::CString("hello".to_string())),
         );
 
         // Should fail - trying to reassign different type
@@ -887,7 +890,7 @@ mod tests {
     #[test]
     fn test_function_scoping() {
         let mut env: Environment<i32> = Environment::new();
-        
+
         let global_func = Function {
             name: "global".to_string(),
             kind: Type::TVoid,
@@ -916,17 +919,17 @@ mod tests {
             Box::new(Expression::ListValue(vec![
                 Expression::CInt(1),
                 Expression::CInt(2),
-                Expression::CInt(3)
+                Expression::CInt(3),
             ])),
             Box::new(Statement::Assignment(
                 "sum".to_string(),
                 Box::new(Expression::Add(
                     Box::new(Expression::Var("sum".to_string())),
-                    Box::new(Expression::Var("x".to_string()))
-                ))
-            ))
+                    Box::new(Expression::Var("x".to_string())),
+                )),
+            )),
         );
-        
+
         // Should succeed - iterating over list of integers and using iterator variable correctly
         assert!(check_stmt(stmt, &env).is_ok());
     }
@@ -940,14 +943,14 @@ mod tests {
             Box::new(Expression::ListValue(vec![
                 Expression::CInt(1),
                 Expression::CString("hello".to_string()),
-                Expression::CInt(3)
+                Expression::CInt(3),
             ])),
             Box::new(Statement::Assignment(
                 "x".to_string(),
-                Box::new(Expression::CInt(1))
-            ))
+                Box::new(Expression::CInt(1)),
+            )),
         );
-        
+
         // Should fail - list contains mixed types (integers and strings)
         assert!(check_stmt(stmt, &env).is_err());
     }
@@ -961,10 +964,10 @@ mod tests {
             Box::new(Expression::ListValue(vec![])),
             Box::new(Statement::Assignment(
                 "x".to_string(),
-                Box::new(Expression::CInt(1))
-            ))
+                Box::new(Expression::CInt(1)),
+            )),
         );
-        
+
         // Should succeed - empty list is valid, though no iterations will occur
         assert!(check_stmt(stmt, &env).is_ok());
     }
@@ -977,14 +980,14 @@ mod tests {
             "x".to_string(),
             Box::new(Expression::ListValue(vec![
                 Expression::CInt(1),
-                Expression::CInt(2)
+                Expression::CInt(2),
             ])),
             Box::new(Statement::Assignment(
                 "x".to_string(),
-                Box::new(Expression::CString("invalid".to_string()))
-            ))
+                Box::new(Expression::CString("invalid".to_string())),
+            )),
         );
-        
+
         // Should fail - trying to assign string to iterator variable when iterating over integers
         assert!(check_stmt(stmt, &env).is_err());
     }
@@ -997,24 +1000,24 @@ mod tests {
             "i".to_string(),
             Box::new(Expression::ListValue(vec![
                 Expression::CInt(1),
-                Expression::CInt(2)
+                Expression::CInt(2),
             ])),
             Box::new(Statement::For(
                 "j".to_string(),
                 Box::new(Expression::ListValue(vec![
                     Expression::CInt(3),
-                    Expression::CInt(4)
+                    Expression::CInt(4),
                 ])),
                 Box::new(Statement::Assignment(
                     "sum".to_string(),
                     Box::new(Expression::Add(
                         Box::new(Expression::Var("i".to_string())),
-                        Box::new(Expression::Var("j".to_string()))
-                    ))
-                ))
-            ))
+                        Box::new(Expression::Var("j".to_string())),
+                    )),
+                )),
+            )),
         );
-        
+
         // Should succeed - nested loops with proper variable usage
         assert!(check_stmt(stmt, &env).is_ok());
     }
@@ -1024,19 +1027,19 @@ mod tests {
     fn test_for_variable_scope() {
         let mut env = Environment::new();
         env.map_variable("x".to_string(), Type::TString); // x is defined as string in outer scope
-        
+
         let stmt = Statement::For(
             "x".to_string(), // reusing name x as iterator
             Box::new(Expression::ListValue(vec![
                 Expression::CInt(1),
-                Expression::CInt(2)
+                Expression::CInt(2),
             ])),
             Box::new(Statement::Assignment(
                 "y".to_string(),
-                Box::new(Expression::Var("x".to_string()))
-            ))
+                Box::new(Expression::Var("x".to_string())),
+            )),
         );
-        
+
         // Should succeed - for loop creates new scope, x is temporarily an integer
         assert!(check_stmt(stmt, &env).is_ok());
     }

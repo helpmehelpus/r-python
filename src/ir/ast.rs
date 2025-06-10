@@ -138,10 +138,10 @@ pub struct FormalArgument {
 
 impl FormalArgument {
     pub fn new(argumentName: Name, argumentType: Type) -> Self {
-	FormalArgument {
-	    argumentName,
-	    argumentType,
-	}
+        FormalArgument {
+            argumentName,
+            argumentType,
+        }
     }
 }
 
@@ -184,10 +184,7 @@ pub struct ValueConstructor {
 
 impl ValueConstructor {
     pub fn new(name: Name, types: Vec<Type>) -> Self {
-	ValueConstructor {
-	    name,
-	    types,
-	}
+        ValueConstructor { name, types }
     }
 }
 

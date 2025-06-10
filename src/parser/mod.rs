@@ -5,7 +5,7 @@ pub mod parser_stmt;
 pub mod parser_type;
 use nom::{
     branch::alt,
-    bytes::complete::{tag},
+    bytes::complete::tag,
     character::complete::{char, multispace0},
     combinator::{map, opt},
     error::Error,
@@ -26,11 +26,11 @@ pub fn parse(input: &str) -> IResult<&str, Vec<Statement>> {
             multispace0,
             separated_list0(
                 tuple((multispace0, char(';'), multispace0)),
-                parse_statement
+                parse_statement,
             ),
-            opt(tuple((multispace0, char(';')))),  // optional trailing semicolon
-            multispace0
+            opt(tuple((multispace0, char(';')))), // optional trailing semicolon
+            multispace0,
         )),
-        |(_, statements, _, _)| statements
+        |(_, statements, _, _)| statements,
     )(input)
-} 
+}

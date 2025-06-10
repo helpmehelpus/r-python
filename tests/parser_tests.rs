@@ -77,10 +77,7 @@ mod expression_tests {
                 "True or False",
                 Expression::Or(Box::new(Expression::CTrue), Box::new(Expression::CFalse)),
             ),
-            (
-                "not True",
-                Expression::Not(Box::new(Expression::CTrue)),
-            ),
+            ("not True", Expression::Not(Box::new(Expression::CTrue))),
             (
                 "not (True and False) or True",
                 Expression::Or(
@@ -157,7 +154,7 @@ mod statement_tests {
                 "y".to_string(),
                 Box::new(Expression::CInt(1)),
             )])),
-            None
+            None,
         );
 
         let (rest, result) = parse_statement(input).unwrap();
@@ -218,12 +215,12 @@ mod statement_tests {
                 FormalArgument::new("x".to_string(), Type::TInteger),
                 FormalArgument::new("y".to_string(), Type::TInteger),
             ],
-            body: Some(Box::new(Statement::Block(vec![Statement::Return(Box::new(
-                Expression::Add(
+            body: Some(Box::new(Statement::Block(vec![Statement::Return(
+                Box::new(Expression::Add(
                     Box::new(Expression::Var("x".to_string())),
                     Box::new(Expression::Var("y".to_string())),
-                ),
-            ))]))),
+                )),
+            )]))),
         });
 
         let (rest, result) = parse_statement(input).unwrap();
@@ -244,7 +241,10 @@ mod adt_tests {
             "Shape".to_string(),
             vec![
                 ValueConstructor::new("Circle".to_string(), vec![Type::TInteger]),
-                ValueConstructor::new("Rectangle".to_string(), vec![Type::TInteger, Type::TInteger]),
+                ValueConstructor::new(
+                    "Rectangle".to_string(),
+                    vec![Type::TInteger, Type::TInteger],
+                ),
             ],
         );
 
@@ -276,11 +276,11 @@ mod error_tests {
     #[ignore]
     fn test_invalid_expressions() {
         let invalid_cases = vec![
-            "1 + ",        // Incomplete expression
-            "* 2",         // Missing left operand
-            "1 + + 2",     // Double operator
-            "(1 + 2",      // Unclosed parenthesis
-            "1 + 2)",      // Extra closing parenthesis
+            "1 + ",    // Incomplete expression
+            "* 2",     // Missing left operand
+            "1 + + 2", // Double operator
+            "(1 + 2",  // Unclosed parenthesis
+            "1 + 2)",  // Extra closing parenthesis
         ];
 
         for input in invalid_cases {

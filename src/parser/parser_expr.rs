@@ -3,16 +3,16 @@ use nom::{
     bytes::complete::{tag, take_while},
     character::complete::{char, digit1, multispace0},
     combinator::{map, map_res, opt, value, verify},
+    error::Error,
     multi::{fold_many0, separated_list0},
     sequence::{delimited, pair, preceded, tuple},
     IResult,
-    error::Error,
 };
 
 use std::str::FromStr;
 
 use crate::ir::ast::Expression;
-use crate::parser::parser_common::{identifier, keyword, is_string_char};
+use crate::parser::parser_common::{identifier, is_string_char, keyword};
 
 use crate::ir::ast::Function;
 use crate::ir::ast::Type;
@@ -81,10 +81,7 @@ fn parse_relational(input: &str) -> IResult<&str, Expression> {
 fn parse_add_sub(input: &str) -> IResult<&str, Expression> {
     let (input, init) = parse_term(input)?;
     fold_many0(
-        pair(
-            alt((operator("+"), operator("-"))),
-            parse_term
-        ),
+        pair(alt((operator("+"), operator("-"))), parse_term),
         move || init.clone(),
         |acc, (op, val)| match op {
             "+" => Expression::Add(Box::new(acc), Box::new(val)),
@@ -97,10 +94,7 @@ fn parse_add_sub(input: &str) -> IResult<&str, Expression> {
 fn parse_term(input: &str) -> IResult<&str, Expression> {
     let (input, init) = parse_factor(input)?;
     fold_many0(
-        pair(
-            alt((operator("*"), operator("/"))),
-            parse_factor
-        ),
+        pair(alt((operator("*"), operator("/"))), parse_factor),
         move || init.clone(),
         |acc, (op, val)| match op {
             "*" => Expression::Mul(Box::new(acc), Box::new(val)),
@@ -118,7 +112,11 @@ fn parse_factor(input: &str) -> IResult<&str, Expression> {
         parse_list,
         parse_function_call,
         parse_var,
-        delimited(char::<&str, Error<&str>>('('), parse_expression, char::<&str, Error<&str>>(')')),
+        delimited(
+            char::<&str, Error<&str>>('('),
+            parse_expression,
+            char::<&str, Error<&str>>(')'),
+        ),
     ))(input)
 }
 
@@ -136,7 +134,7 @@ fn parse_number(input: &str) -> IResult<&str, Expression> {
                 opt(char::<&str, Error<&str>>('-')),
                 digit1,
                 char::<&str, Error<&str>>('.'),
-                digit1
+                digit1,
             )),
             |(_, _, _, _)| true,
         ),
@@ -150,17 +148,14 @@ fn parse_number(input: &str) -> IResult<&str, Expression> {
     );
 
     let int_parser = map_res(
-        tuple((
-            opt(char::<&str, Error<&str>>('-')),
-            digit1
-        )),
+        tuple((opt(char::<&str, Error<&str>>('-')), digit1)),
         |(sign, digits)| {
             let s = match sign {
                 Some(_) => format!("-{}", digits),
                 None => digits.to_string(),
             };
             i32::from_str(&s)
-        }
+        },
     );
 
     alt((
@@ -201,12 +196,12 @@ pub fn parse_actual_arguments(input: &str) -> IResult<&str, Vec<Expression>> {
             char::<&str, Error<&str>>('('),
             separated_list0(
                 tuple((multispace0, char::<&str, Error<&str>>(','), multispace0)),
-                parse_expression
+                parse_expression,
             ),
             multispace0,
-            char::<&str, Error<&str>>(')')
+            char::<&str, Error<&str>>(')'),
         )),
-        |(_, _, args, _, _)| args
+        |(_, _, args, _, _)| args,
     )(input)
 }
 
@@ -214,16 +209,16 @@ fn parse_list(input: &str) -> IResult<&str, Expression> {
     let (input, _) = multispace0(input)?;
     let (input, _) = char('[')(input)?;
     let (input, _) = multispace0(input)?;
-    
+
     let (input, elements) = separated_list0(
         delimited(multispace0, char(','), multispace0),
-        parse_expression
+        parse_expression,
     )(input)?;
-    
+
     let (input, _) = multispace0(input)?;
     let (input, _) = char(']')(input)?;
     let (input, _) = multispace0(input)?;
-    
+
     Ok((input, Expression::ListValue(elements)))
 }
 
