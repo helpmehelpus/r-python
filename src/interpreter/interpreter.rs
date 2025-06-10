@@ -372,11 +372,23 @@ fn call(
             }
 
             // Bind arguments
-            if let Some(params) = &func.params {
-                for (param, arg) in params.iter().zip(args) {
-                    let arg_value = eval(arg, env)?;
-                    new_env.insert_variable(param.0.clone(), arg_value);
+            for (i, formal_arg) in func.params.iter().enumerate() {
+                if i >= args.len() {
+                    return Err((format!(
+                        "[Runtime Error on '{}()'] missing argument '{}'.",
+                        env.scope_name(),
+                        formal_arg.argumentName
+                    ), None));
                 }
+                let arg_value = eval(args[i].clone(), env)?;
+                new_env.insert_variable(formal_arg.argumentName.clone(), arg_value);
+            }
+
+            if args.len() > func.params.len() {
+                return Err((format!(
+                    "[Runtime Error on '{}()'] too many arguments.",
+                    env.scope_name()
+                ), None));
             }
 
             // Execute function

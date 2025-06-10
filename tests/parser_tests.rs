@@ -213,11 +213,11 @@ mod statement_tests {
         let input = "def add(x: Int, y: Int) -> Int: return x + y; end";
         let expected = Statement::FuncDef(Function {
             name: "add".to_string(),
-            kind: Some(Type::TInteger),
-            params: Some(vec![
-                ("x".to_string(), Type::TInteger),
-                ("y".to_string(), Type::TInteger),
-            ]),
+            kind: Type::TInteger,
+            params: vec![
+                FormalArgument::new("x".to_string(), Type::TInteger),
+                FormalArgument::new("y".to_string(), Type::TInteger),
+            ],
             body: Some(Box::new(Statement::Block(vec![Statement::Return(Box::new(
                 Expression::Add(
                     Box::new(Expression::Var("x".to_string())),
