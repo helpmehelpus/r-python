@@ -115,7 +115,7 @@ impl<A> Environment<A> {
 pub struct Function {
     pub name: Name,
     pub kind: Type,
-    pub params: Option<Vec<(Name, Type)>>,
+    pub params: Vec<FormalArgument>,
     pub body: Option<Box<Statement>>,
 }
 
@@ -124,7 +124,7 @@ impl Function {
         return Function {
             name: "__main__".to_string(),
             kind: Type::TVoid,
-            params: None,
+            params: Vec::new(),
             body: None,
         };
     }

@@ -1,5 +1,5 @@
 use crate::environment::environment::Environment;
-use crate::ir::ast::{Expression, Name, Statement, Type};
+use crate::ir::ast::{Expression, Name, Statement, Type, Function, FormalArgument};
 
 type ErrorMessage = String;
 
@@ -114,11 +114,12 @@ pub fn check_stmt(
         Statement::FuncDef(function) => {
             let mut new_env = env.clone();
             new_env.push();
-            if let Some(params) = function.params.clone() {
-                for (param_name, param_type) in params {
-                    new_env.map_variable(param_name, param_type)
-                }
+            
+            // Since params is now a Vec<FormalArgument>, we can iterate directly
+            for formal_arg in function.params.iter() {
+                new_env.map_variable(formal_arg.argumentName.clone(), formal_arg.argumentType.clone());
             }
+            
             if let Some(body) = function.body.clone() {
                 new_env = check_stmt(*body, &new_env)?;
             }
@@ -205,55 +206,6 @@ pub fn check_stmt(
 //             adt_name
 //         ))
 //     }
-// }
-
-// fn check_func_call(
-//     name: String,
-//     args: Vec<Expression>,
-//     env: &Environment<Type>,
-// ) -> Result<Type, ErrorMessage> {
-//     match check_var_name(name.clone(), env, false) {
-//         Ok(Type::TFunction(kind, type_vec)) => {
-//             if args.len() != type_vec.len() {
-//                 return Err(format!(
-//                     "[Type Error on '{}()'] '{}()' expected {} arguments, found {}.",
-//                     env.scope_name(),
-//                     name,
-//                     type_vec.len(),
-//                     args.len()
-//                 ));
-//             }
-
-//             for (arg, param_type) in args.iter().zip(type_vec) {
-//                 let arg_type = check_exp(arg.clone(), env)?;
-//                 if arg_type != param_type {
-//                     return Err(format!("[Type Error on '{}()'] '{}()' has mismatched arguments: expected '{:?}', found '{:?}'.", env.scope_name(), name, param_type, arg_type));
-//                 }
-//             }
-
-//             Ok(kind.unwrap())
-//         }
-//         _ => Err(format!(
-//             "[Name Error on '{}()'] '{}()' is not defined.",
-//             env.scope_name(),
-//             name
-//         )),
-//     }
-// }
-
-// fn check_duplicate_params(params: &Vec<(Name, Type)>) -> Result<(), ErrorMessage> {
-//     let mut seen_params = std::collections::HashSet::new();
-
-//     for (name, _) in params {
-//         if !seen_params.insert(name.clone()) {
-//             return Err(format!(
-//                 "[Parameter Error] Duplicate parameter name '{}'",
-//                 name
-//             ));
-//         }
-//     }
-
-//     Ok(())
 // }
 
 fn check_var_name(name: Name, env: &Environment<Type>, scoped: bool) -> Result<Type, ErrorMessage> {
@@ -773,10 +725,10 @@ mod tests {
         let func = FuncDef(Function {
             name: "add".to_string(),
             kind: Type::TInteger,
-            params: Some(vec![
-                ("a".to_string(), TInteger),
-                ("b".to_string(), TInteger),
-            ]),
+            params: vec![
+                FormalArgument::new("a".to_string(), Type::TInteger),
+                FormalArgument::new("b".to_string(), Type::TInteger),
+            ],
             body: Some(Box::new(Return(Box::new(Add(
                 Box::new(Var("a".to_string())),
                 Box::new(Var("b".to_string())),
@@ -916,14 +868,14 @@ mod tests {
         let global_func = Function {
             name: "global".to_string(),
             kind: Type::TVoid,
-            params: None,
+            params: Vec::new(),
             body: None,
         };
 
         let local_func = Function {
             name: "local".to_string(),
             kind: Type::TVoid,
-            params: None,
+            params: Vec::new(),
             body: None,
         };
 

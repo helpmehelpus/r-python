@@ -132,15 +132,10 @@ fn parse_function_definition_statement(input: &str) -> IResult<&str, Statement> 
             parse_block
         )),
         |(_, name, args, _, t, block)| {
-            let params = args
-                .into_iter()
-                .map(|f| (f.argumentName, f.argumentType))
-                .collect::<Vec<_>>();
-
             Statement::FuncDef(Function {
                 name: name.to_string(),
                 kind: t,
-                params: Some(params),
+                params: args,
                 body: Some(Box::new(block))
             })
         }
@@ -260,7 +255,7 @@ mod tests {
         let expected = Statement::FuncDef(Function {
             name: "f".to_string(),
             kind: Type::TInteger,
-            params: Some(vec![("x".to_string(), Type::TInteger)]),
+            params: vec![FormalArgument::new("x".to_string(), Type::TInteger)],
             body: Some(Box::new(Statement::Block(vec![
                 Statement::Assignment("x".to_string(), Box::new(Expression::CInt(1)))
             ]))),

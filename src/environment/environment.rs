@@ -167,14 +167,14 @@ mod tests {
         let global_func = Function {
             name: "global".to_string(),
             kind: Type::TVoid,
-            params: None,
+            params: Vec::new(),
             body: None,
         };
 
         let local_func = Function {
             name: "local".to_string(),
             kind: Type::TVoid,
-            params: None,
+            params: Vec::new(),
             body: None,
         };
 
