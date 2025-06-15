@@ -13,11 +13,16 @@ use std::str::FromStr;
 
 use crate::ir::ast::Expression;
 use crate::parser::parser_common::{
-    identifier, is_string_char, keyword,
-    // Bracket and parentheses constants
-    LEFT_BRACKET, RIGHT_BRACKET, LEFT_PAREN, RIGHT_PAREN,
+    identifier,
+    is_string_char,
+    keyword,
     // Other character constants
     COMMA_CHAR,
+    // Bracket and parentheses constants
+    LEFT_BRACKET,
+    LEFT_PAREN,
+    RIGHT_BRACKET,
+    RIGHT_PAREN,
 };
 
 pub fn parse_expression(input: &str) -> IResult<&str, Expression> {
@@ -195,7 +200,11 @@ pub fn parse_actual_arguments(input: &str) -> IResult<&str, Vec<Expression>> {
             multispace0,
             char::<&str, Error<&str>>(LEFT_PAREN),
             separated_list0(
-                tuple((multispace0, char::<&str, Error<&str>>(COMMA_CHAR), multispace0)),
+                tuple((
+                    multispace0,
+                    char::<&str, Error<&str>>(COMMA_CHAR),
+                    multispace0,
+                )),
                 parse_expression,
             ),
             multispace0,
