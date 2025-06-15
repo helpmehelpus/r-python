@@ -11,19 +11,34 @@ use nom::{
 use crate::ir::ast::{Type, ValueConstructor};
 
 use crate::parser::parser_common::{
-    identifier, keyword, separator,
-    // Type name constants
-    INT_TYPE, REAL_TYPE, BOOLEAN_TYPE, STRING_TYPE, UNIT_TYPE, ANY_TYPE,
-    // Special type constructor constants
-    MAYBE_TYPE, RESULT_TYPE,
-    // Keyword constants
-    DATA_KEYWORD, END_KEYWORD,
-    // Operator and symbol constants
-    FUNCTION_ARROW, COMMA_SYMBOL,
-    // Bracket and parentheses constants
-    LEFT_BRACKET, RIGHT_BRACKET, LEFT_PAREN, RIGHT_PAREN,
+    identifier,
+    keyword,
+    separator,
+    ANY_TYPE,
+    BOOLEAN_TYPE,
+    COLON_CHAR,
     // Other character constants
-    COMMA_CHAR, COLON_CHAR, PIPE_CHAR,
+    COMMA_CHAR,
+    COMMA_SYMBOL,
+    // Keyword constants
+    DATA_KEYWORD,
+    END_KEYWORD,
+    // Operator and symbol constants
+    FUNCTION_ARROW,
+    // Type name constants
+    INT_TYPE,
+    // Bracket and parentheses constants
+    LEFT_BRACKET,
+    LEFT_PAREN,
+    // Special type constructor constants
+    MAYBE_TYPE,
+    PIPE_CHAR,
+    REAL_TYPE,
+    RESULT_TYPE,
+    RIGHT_BRACKET,
+    RIGHT_PAREN,
+    STRING_TYPE,
+    UNIT_TYPE,
 };
 
 pub fn parse_type(input: &str) -> IResult<&str, Type> {

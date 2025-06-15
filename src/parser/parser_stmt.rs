@@ -11,14 +11,26 @@ use nom::{
 
 use crate::ir::ast::{FormalArgument, Function, Statement};
 use crate::parser::parser_common::{
-    identifier, keyword,
-    // Statement keyword constants
-    IF_KEYWORD, ELSE_KEYWORD, WHILE_KEYWORD, FOR_KEYWORD, IN_KEYWORD, 
-    ASSERT_KEYWORD, DEF_KEYWORD, END_KEYWORD,
+    identifier,
+    keyword,
+    ASSERT_KEYWORD,
+    COLON_CHAR,
+    COMMA_CHAR,
+    DEF_KEYWORD,
+    ELSE_KEYWORD,
+    END_KEYWORD,
+    EQUALS_CHAR,
+    FOR_KEYWORD,
     // Operator and symbol constants
     FUNCTION_ARROW,
+    // Statement keyword constants
+    IF_KEYWORD,
+    IN_KEYWORD,
     // Character constants
-    LEFT_PAREN, RIGHT_PAREN, COLON_CHAR, SEMICOLON_CHAR, COMMA_CHAR, EQUALS_CHAR,
+    LEFT_PAREN,
+    RIGHT_PAREN,
+    SEMICOLON_CHAR,
+    WHILE_KEYWORD,
 };
 use crate::parser::parser_expr::parse_expression;
 use crate::parser::parser_type::parse_type;
@@ -51,7 +63,10 @@ fn parse_if_else_statement(input: &str) -> IResult<&str, Statement> {
             keyword(IF_KEYWORD),
             preceded(multispace1, parse_expression),
             parse_block,
-            opt(preceded(tuple((multispace0, keyword(ELSE_KEYWORD))), parse_block)),
+            opt(preceded(
+                tuple((multispace0, keyword(ELSE_KEYWORD))),
+                parse_block,
+            )),
         )),
         |(_, cond, then_block, else_block)| {
             Statement::IfThenElse(
@@ -94,7 +109,11 @@ fn parse_assert_statement(input: &str) -> IResult<&str, Statement> {
             delimited(
                 char::<&str, Error<&str>>(LEFT_PAREN),
                 separated_list0(
-                    tuple((multispace0, char::<&str, Error<&str>>(COMMA_CHAR), multispace0)),
+                    tuple((
+                        multispace0,
+                        char::<&str, Error<&str>>(COMMA_CHAR),
+                        multispace0,
+                    )),
                     parse_expression,
                 ),
                 char::<&str, Error<&str>>(RIGHT_PAREN),
@@ -117,7 +136,11 @@ fn parse_function_definition_statement(input: &str) -> IResult<&str, Statement> 
             delimited(
                 char::<&str, Error<&str>>(LEFT_PAREN),
                 separated_list0(
-                    tuple((multispace0, char::<&str, Error<&str>>(COMMA_CHAR), multispace0)),
+                    tuple((
+                        multispace0,
+                        char::<&str, Error<&str>>(COMMA_CHAR),
+                        multispace0,
+                    )),
                     parse_formal_argument,
                 ),
                 char::<&str, Error<&str>>(RIGHT_PAREN),
@@ -143,10 +166,17 @@ fn parse_block(input: &str) -> IResult<&str, Statement> {
             char::<&str, Error<&str>>(COLON_CHAR),
             multispace0,
             separated_list0(
-                delimited(multispace0, char::<&str, Error<&str>>(SEMICOLON_CHAR), multispace0),
+                delimited(
+                    multispace0,
+                    char::<&str, Error<&str>>(SEMICOLON_CHAR),
+                    multispace0,
+                ),
                 parse_statement,
             ),
-            opt(preceded(multispace0, char::<&str, Error<&str>>(SEMICOLON_CHAR))),
+            opt(preceded(
+                multispace0,
+                char::<&str, Error<&str>>(SEMICOLON_CHAR),
+            )),
             delimited(multispace0, keyword(END_KEYWORD), multispace0),
         )),
         |(_, _, stmts, _, _)| Statement::Block(stmts),
