@@ -33,6 +33,8 @@ pub const WHILE_KEYWORD: &str = "while";
 pub const FOR_KEYWORD: &str = "for";
 pub const IN_KEYWORD: &str = "in";
 pub const ASSERT_KEYWORD: &str = "assert";
+pub const VAR_KEYWORD: &str = "var";
+pub const VAL_KEYWORD: &str = "val";
 pub const DEF_KEYWORD: &str = "def";
 
 // Operator and symbol constants

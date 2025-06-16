@@ -11,32 +11,17 @@ use nom::{
 
 use crate::ir::ast::{FormalArgument, Function, Statement};
 use crate::parser::parser_common::{
-    identifier,
-    keyword,
-    ASSERT_KEYWORD,
-    COLON_CHAR,
-    COMMA_CHAR,
-    DEF_KEYWORD,
-    ELSE_KEYWORD,
-    END_KEYWORD,
-    EQUALS_CHAR,
-    FOR_KEYWORD,
-    // Operator and symbol constants
-    FUNCTION_ARROW,
-    // Statement keyword constants
-    IF_KEYWORD,
-    IN_KEYWORD,
-    // Character constants
-    LEFT_PAREN,
-    RIGHT_PAREN,
-    SEMICOLON_CHAR,
-    WHILE_KEYWORD,
+    identifier, keyword, ASSERT_KEYWORD, COLON_CHAR, COMMA_CHAR, DEF_KEYWORD, ELSE_KEYWORD,
+    END_KEYWORD, EQUALS_CHAR, FOR_KEYWORD, FUNCTION_ARROW, IF_KEYWORD, IN_KEYWORD, LEFT_PAREN,
+    RIGHT_PAREN, SEMICOLON_CHAR, VAL_KEYWORD, VAR_KEYWORD, WHILE_KEYWORD,
 };
 use crate::parser::parser_expr::parse_expression;
 use crate::parser::parser_type::parse_type;
 
 pub fn parse_statement(input: &str) -> IResult<&str, Statement> {
     alt((
+        parse_var_declaration_statement,
+        parse_val_declaration_statement,
         parse_assignment_statement,
         parse_if_else_statement,
         parse_while_statement,
@@ -46,12 +31,48 @@ pub fn parse_statement(input: &str) -> IResult<&str, Statement> {
     ))(input)
 }
 
+fn parse_var_declaration_statement(input: &str) -> IResult<&str, Statement> {
+    map(
+        tuple((
+            keyword(VAR_KEYWORD),
+            identifier,
+            delimited(
+                multispace0,
+                char::<&str, Error<&str>>(EQUALS_CHAR),
+                multispace0,
+            ),
+            parse_expression,
+        )),
+        |(_, var, _, expr)| Statement::VarDeclaration(var.to_string(), Box::new(expr)),
+    )(input)
+}
+
+fn parse_val_declaration_statement(input: &str) -> IResult<&str, Statement> {
+    map(
+        tuple((
+            keyword(VAL_KEYWORD),
+            identifier,
+            delimited(
+                multispace0,
+                char::<&str, Error<&str>>(EQUALS_CHAR),
+                multispace0,
+            ),
+            parse_expression,
+        )),
+        |(_, var, _, expr)| Statement::ValDeclaration(var.to_string(), Box::new(expr)),
+    )(input)
+}
+
 fn parse_assignment_statement(input: &str) -> IResult<&str, Statement> {
     map(
         tuple((
-            delimited(multispace0, identifier, multispace0),
-            char::<&str, Error<&str>>(EQUALS_CHAR),
-            delimited(multispace0, parse_expression, multispace0),
+            identifier,
+            delimited(
+                multispace0,
+                char::<&str, Error<&str>>(EQUALS_CHAR),
+                multispace0,
+            ),
+            parse_expression,
         )),
         |(var, _, expr)| Statement::Assignment(var.to_string(), Box::new(expr)),
     )(input)
@@ -316,8 +337,8 @@ mod tests {
     fn test_parse_formal_argument() {
         let input = "x: Int";
         let expected = FormalArgument {
-            argumentName: "x".to_string(),
-            argumentType: Type::TInteger,
+            argument_name: "x".to_string(),
+            argument_type: Type::TInteger,
         };
         let parsed = parse_formal_argument(input).unwrap().1;
         assert_eq!(parsed, expected);
