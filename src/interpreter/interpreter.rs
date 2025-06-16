@@ -39,9 +39,9 @@ pub fn eval(exp: Expression, env: &Environment<EnvValue>) -> Result<EnvValue, Er
         Expression::IsError(e) => eval_iserror_expression(*e, env),
         Expression::IsNothing(e) => eval_isnothing_expression(*e, env),
         Expression::FuncCall(name, args) => call(name, args, env),
-        Expression::ADTConstructor(adt_name, constructor_name, args) => {
-            adtconstructor_eval(adt_name, constructor_name, args, env)
-        }
+        // Expression::ADTConstructor(constructor_name, args) => {
+        //     adtconstructor_eval(adt_name, constructor_name, args, env)
+        // }
         _ if is_constant(exp.clone()) => Ok(EnvValue::Exp(exp)),
         _ => Err((String::from("Not implemented yet."), None)),
     }
@@ -218,7 +218,7 @@ fn execute(stmt: Statement, env: &Environment<EnvValue>) -> Result<ControlFlow, 
             Ok(ControlFlow::Return(exp_value))
         }
 
-        Statement::ADTDeclaration(name, constructors) => {
+        Statement::TypeDeclaration(name, constructors) => {
             // Insert the ADT into the new environment
             new_env.insert_type(name, constructors);
             // Return the new environment along with ControlFlow
@@ -240,95 +240,95 @@ fn execute(stmt: Statement, env: &Environment<EnvValue>) -> Result<ControlFlow, 
     }
 }
 
-fn adtconstructor_eval(
-    adt_name: Name,
-    constructor_name: Name,
-    args: Vec<Box<Expression>>,
-    env: &Environment<EnvValue>,
-) -> Result<EnvValue, (String, Option<Expression>)> {
-    if let Some(constructors) = env.get_type(&adt_name) {
-        let value_constructor = constructors.iter().find(|vc| vc.name == constructor_name);
+// fn adtconstructor_eval(
+//     adt_name: Name,
+//     constructor_name: Name,
+//     args: Vec<Box<Expression>>,
+//     env: &Environment<EnvValue>,
+// ) -> Result<EnvValue, (String, Option<Expression>)> {
+//     if let Some(constructors) = env.get_type(&adt_name) {
+//         let value_constructor = constructors.iter().find(|vc| vc.name == constructor_name);
 
-        if let Some(vc) = value_constructor {
-            if vc.types.len() != args.len() {
-                return Err((
-                    format!(
-                        "Error: Constructor {} expects {} arguments, but received {}",
-                        constructor_name,
-                        vc.types.len(),
-                        args.len()
-                    ),
-                    None,
-                ));
-            }
+//         if let Some(vc) = value_constructor {
+//             if vc.types.len() != args.len() {
+//                 return Err((
+//                     format!(
+//                         "Error: Constructor {} expects {} arguments, but received {}",
+//                         constructor_name,
+//                         vc.types.len(),
+//                         args.len()
+//                     ),
+//                     None,
+//                 ));
+//             }
 
-            let evaluated_args: Result<Vec<Box<Expression>>, (String, Option<Expression>)> = args
-                .into_iter()
-                .map(|arg| {
-                    eval(*arg, env).and_then(|res| match res {
-                        EnvValue::Exp(e) => Ok(Box::new(e)),
-                        _ => Err((
-                            String::from("Error: Expected expression in ADT constructor arguments"),
-                            None,
-                        )),
-                    })
-                })
-                .collect();
+//             let evaluated_args: Result<Vec<Box<Expression>>, (String, Option<Expression>)> = args
+//                 .into_iter()
+//                 .map(|arg| {
+//                     eval(*arg, env).and_then(|res| match res {
+//                         EnvValue::Exp(e) => Ok(Box::new(e)),
+//                         _ => Err((
+//                             String::from("Error: Expected expression in ADT constructor arguments"),
+//                             None,
+//                         )),
+//                     })
+//                 })
+//                 .collect();
 
-            evaluated_args.map(|evaluated| {
-                EnvValue::Exp(Expression::ADTConstructor(
-                    adt_name,
-                    constructor_name,
-                    evaluated,
-                ))
-            })
-        } else {
-            Err((
-                format!(
-                    "Error: Constructor {} not found in ADT {}",
-                    constructor_name, adt_name
-                ),
-                None,
-            ))
-        }
-    } else {
-        Err((format!("Error: ADT {} not found", adt_name), None))
-    }
-}
+//             evaluated_args.map(|evaluated| {
+//                 EnvValue::Exp(Expression::ADTConstructor(
+//                     adt_name,
+//                     constructor_name,
+//                     evaluated,
+//                 ))
+//             })
+//         } else {
+//             Err((
+//                 format!(
+//                     "Error: Constructor {} not found in ADT {}",
+//                     constructor_name, adt_name
+//                 ),
+//                 None,
+//             ))
+//         }
+//     } else {
+//         Err((format!("Error: ADT {} not found", adt_name), None))
+//     }
+// }
 
-fn matches_pattern(
-    value: &EnvValue,
-    pattern: &Expression,
-    env: &Environment<EnvValue>,
-) -> Result<bool, ErrorMessage> {
-    match (value, pattern) {
-        // Caso o padrão seja um construtor de ADT
-        (
-            EnvValue::Exp(Expression::ADTConstructor(adt_name1, constructor_name1, args1)),
-            Expression::ADTConstructor(adt_name2, constructor_name2, args2),
-        ) => {
-            // Verifica se o nome do ADT e o construtor correspondem
-            if adt_name1 == adt_name2 && constructor_name1 == constructor_name2 {
-                // Verifica se os argumentos correspondem
-                for (arg1, arg2) in args1.iter().zip(args2.iter()) {
-                    let arg_value = eval(*arg1.clone(), env)?;
-                    if !matches_pattern(&arg_value, arg2, env)? {
-                        return Ok(false);
-                    }
-                }
-                Ok(true)
-            } else {
-                Ok(false)
-            }
-        }
+// fn matches_pattern(
+//     value: &EnvValue,
+//     pattern: &Expression,
+//     env: &Environment<EnvValue>,
+// ) -> Result<bool, ErrorMessage> {
+//     match (value, pattern) {
+//         // Caso o padrão seja um construtor de ADT
+//         (
+//             EnvValue::Exp(Expression::ADTConstructor(adt_name1, constructor_name1, args1)),
+//             Expression::ADTConstructor(adt_name2, constructor_name2, args2),
+//         ) => {
+//             // Verifica se o nome do ADT e o construtor correspondem
+//             if adt_name1 == adt_name2 && constructor_name1 == constructor_name2 {
+//                 // Verifica se os argumentos correspondem
+//                 for (arg1, arg2) in args1.iter().zip(args2.iter()) {
+//                     let arg_value = eval(*arg1.clone(), env)?;
+//                     if !matches_pattern(&arg_value, arg2, env)? {
+//                         return Ok(false);
+//                     }
+//                 }
+//                 Ok(true)
+//             } else {
+//                 Ok(false)
+//             }
+//         }
 
-        // Caso o padrão seja uma constante (como um número ou booleano)
-        (EnvValue::Exp(exp1), exp2) if is_constant(exp2.clone()) => Ok(exp1 == exp2),
+//         // Caso o padrão seja uma constante (como um número ou booleano)
+//         (EnvValue::Exp(exp1), exp2) if is_constant(exp2.clone()) => Ok(exp1 == exp2),
 
-        // Outros casos podem ser adicionados aqui (como variáveis, etc.)
-        _ => Err(("Pattern not supported".to_string(), None)),
-    }
-}
+//         // Outros casos podem ser adicionados aqui (como variáveis, etc.)
+//         _ => Err(("Pattern not supported".to_string(), None)),
+//     }
+// }
 
 //helper function for executing blocks
 fn execute_block(
@@ -378,13 +378,13 @@ fn call(
                         format!(
                             "[Runtime Error on '{}()'] missing argument '{}'.",
                             env.scope_name(),
-                            formal_arg.argumentName
+                            formal_arg.argument_name
                         ),
                         None,
                     ));
                 }
                 let arg_value = eval(args[i].clone(), env)?;
-                new_env.insert_variable(formal_arg.argumentName.clone(), arg_value);
+                new_env.insert_variable(formal_arg.argument_name.clone(), arg_value);
             }
 
             if args.len() > func.params.len() {

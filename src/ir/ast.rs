@@ -132,15 +132,15 @@ impl Function {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct FormalArgument {
-    pub argumentName: Name,
-    pub argumentType: Type,
+    pub argument_name: Name,
+    pub argument_type: Type,
 }
 
 impl FormalArgument {
-    pub fn new(argumentName: Name, argumentType: Type) -> Self {
+    pub fn new(argument_name: Name, argument_type: Type) -> Self {
         FormalArgument {
-            argumentName,
-            argumentType,
+            argument_name,
+            argument_type,
         }
     }
 }
@@ -173,7 +173,7 @@ pub enum Type {
     TMaybe(Box<Type>),
     TResult(Box<Type>, Box<Type>), // Ok, Error
     TAny,
-    Tadt(Name, Vec<ValueConstructor>),
+    TAlgebraicData(Name, Vec<ValueConstructor>),
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -223,27 +223,26 @@ pub enum Expression {
     GTE(Box<Expression>, Box<Expression>),
     LTE(Box<Expression>, Box<Expression>),
 
-    /* error expressions */
+    /* error-related expressions */
     COk(Box<Expression>),
     CErr(Box<Expression>),
 
     CJust(Box<Expression>),
     CNothing,
-
     Unwrap(Box<Expression>),
     IsError(Box<Expression>),
     IsNothing(Box<Expression>),
     Propagate(Box<Expression>),
 
-    ADTConstructor(Name, Name, Vec<Box<Expression>>),
-
     ListValue(Vec<Expression>),
+
+    Constructor(Name, Vec<Box<Expression>>),
 }
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Statement {
-    VarDeclaration(Name),
-    ValDeclaration(Name),
+    VarDeclaration(Name, Box<Expression>),
+    ValDeclaration(Name, Box<Expression>),
     Assignment(Name, Box<Expression>),
     IfThenElse(Box<Expression>, Box<Statement>, Option<Box<Statement>>),
     While(Box<Expression>, Box<Statement>),
@@ -260,7 +259,7 @@ pub enum Statement {
     AssertFails(String),
     FuncDef(Function),
     Return(Box<Expression>),
-    ADTDeclaration(Name, Vec<ValueConstructor>),
+    TypeDeclaration(Name, Vec<ValueConstructor>),
 }
 
 #[derive(Debug)]

@@ -1,14 +1,14 @@
 use crate::ir::ast::Function;
 use crate::ir::ast::Name;
-use crate::ir::ast::Type;
-
+use crate::ir::ast::ValueConstructor;
 use std::collections::HashMap;
 use std::collections::LinkedList;
 
 #[derive(Clone)]
 pub struct Scope<A> {
-    pub variables: HashMap<Name, A>,
+    pub variables: HashMap<Name, (bool, A)>,
     pub functions: HashMap<Name, Function>,
+    pub adts: HashMap<Name, Vec<ValueConstructor>>,
 }
 
 impl<A: Clone> Scope<A> {
@@ -16,11 +16,12 @@ impl<A: Clone> Scope<A> {
         Scope {
             variables: HashMap::new(),
             functions: HashMap::new(),
+            adts: HashMap::new(),
         }
     }
 
-    fn map_variable(&mut self, var: Name, value: A) -> () {
-        self.variables.insert(var, value);
+    fn map_variable(&mut self, var: Name, mutable: bool, value: A) -> () {
+        self.variables.insert(var, (mutable, value));
         return ();
     }
 
@@ -29,12 +30,23 @@ impl<A: Clone> Scope<A> {
         return ();
     }
 
-    fn lookup_var(&self, var: &Name) -> Option<&A> {
-        self.variables.get(var)
+    fn map_adt(&mut self, name: Name, adt: Vec<ValueConstructor>) -> () {
+        self.adts.insert(name.clone(), adt);
+        return ();
+    }
+
+    fn lookup_var(&self, var: &Name) -> Option<(bool, A)> {
+        self.variables
+            .get(var)
+            .map(|(mutable, value)| (*mutable, value.clone()))
     }
 
     fn lookup_function(&self, name: &Name) -> Option<&Function> {
         self.functions.get(name)
+    }
+
+    fn lookup_adt(&self, name: &Name) -> Option<&Vec<ValueConstructor>> {
+        self.adts.get(name)
     }
 }
 
@@ -52,10 +64,10 @@ impl<A: Clone> Environment<A> {
         }
     }
 
-    pub fn map_variable(&mut self, var: Name, value: A) -> () {
+    pub fn map_variable(&mut self, var: Name, mutable: bool, value: A) -> () {
         match self.stack.front_mut() {
-            None => self.globals.map_variable(var, value),
-            Some(top) => top.map_variable(var, value),
+            None => self.globals.map_variable(var, mutable, value),
+            Some(top) => top.map_variable(var, mutable, value),
         }
     }
 
@@ -66,26 +78,38 @@ impl<A: Clone> Environment<A> {
         }
     }
 
-    pub fn lookup(&self, var: &Name) -> Option<&A> {
-        // First check local scopes in order
+    pub fn map_adt(&mut self, name: Name, cons: Vec<ValueConstructor>) -> () {
+        match self.stack.front_mut() {
+            None => self.globals.map_adt(name, cons),
+            Some(top) => top.map_adt(name, cons),
+        }
+    }
+
+    pub fn lookup(&self, var: &Name) -> Option<(bool, A)> {
         for scope in self.stack.iter() {
             if let Some(value) = scope.lookup_var(var) {
                 return Some(value);
             }
         }
-        // Then check global scope
         self.globals.lookup_var(var)
     }
 
     pub fn lookup_function(&self, name: &Name) -> Option<&Function> {
-        // First check local scopes in order
         for scope in self.stack.iter() {
             if let Some(func) = scope.lookup_function(name) {
                 return Some(func);
             }
         }
-        // Then check global scope
         self.globals.lookup_function(name)
+    }
+
+    pub fn lookup_adt(&self, name: &Name) -> Option<&Vec<ValueConstructor>> {
+        for scope in self.stack.iter() {
+            if let Some(cons) = scope.lookup_adt(name) {
+                return Some(cons);
+            }
+        }
+        self.globals.lookup_adt(name)
     }
 
     pub fn scoped_function(&self) -> bool {
@@ -100,7 +124,7 @@ impl<A: Clone> Environment<A> {
         self.stack.pop_front();
     }
 
-    pub fn get_all_variables(&self) -> Vec<(Name, A)> {
+    pub fn get_all_variables(&self) -> Vec<(Name, (bool, A))> {
         let mut vars = Vec::new();
 
         // First get variables from local scopes (in reverse order to respect shadowing)
@@ -126,37 +150,38 @@ impl<A: Clone> Environment<A> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ir::ast::Type;
 
     #[test]
     fn test_variable_scoping() {
         let mut env: Environment<i32> = Environment::new();
 
         // Test global scope
-        env.map_variable("x".to_string(), 32);
-        assert_eq!(Some(&32), env.lookup(&"x".to_string()));
+        env.map_variable("x".to_string(), true, 32);
+        assert_eq!(Some((true, 32)), env.lookup(&"x".to_string()));
 
         // Test nested scopes
         env.push(); // scope 1
-        env.map_variable("y".to_string(), 23);
-        env.map_variable("x".to_string(), 55); // shadows global x
+        env.map_variable("y".to_string(), true, 23);
+        env.map_variable("x".to_string(), true, 55); // shadows global x
 
         env.push(); // scope 2
-        env.map_variable("z".to_string(), 44);
+        env.map_variable("z".to_string(), true, 44);
 
         // Variables from all scopes should be accessible
-        assert_eq!(Some(&55), env.lookup(&"x".to_string())); // from scope 1
-        assert_eq!(Some(&23), env.lookup(&"y".to_string())); // from scope 1
-        assert_eq!(Some(&44), env.lookup(&"z".to_string())); // from scope 2
+        assert_eq!(Some((true, 55)), env.lookup(&"x".to_string())); // from scope 1
+        assert_eq!(Some((true, 23)), env.lookup(&"y".to_string())); // from scope 1
+        assert_eq!(Some((true, 44)), env.lookup(&"z".to_string())); // from scope 2
 
         // Pop scope 2
         env.pop();
-        assert_eq!(Some(&55), env.lookup(&"x".to_string())); // still in scope 1
-        assert_eq!(Some(&23), env.lookup(&"y".to_string())); // still in scope 1
+        assert_eq!(Some((true, 55)), env.lookup(&"x".to_string())); // still in scope 1
+        assert_eq!(Some((true, 23)), env.lookup(&"y".to_string())); // still in scope 1
         assert_eq!(None, env.lookup(&"z".to_string())); // z is gone
 
         // Pop scope 1
         env.pop();
-        assert_eq!(Some(&32), env.lookup(&"x".to_string())); // back to global x
+        assert_eq!(Some((true, 32)), env.lookup(&"x".to_string())); // back to global x
         assert_eq!(None, env.lookup(&"y".to_string())); // y is gone
     }
 

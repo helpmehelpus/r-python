@@ -227,6 +227,85 @@ mod statement_tests {
         assert_eq!(rest, "");
         assert_eq!(result, expected);
     }
+
+    #[test]
+    #[ignore]
+    fn test_var_declarations() {
+        let cases = vec![
+            (
+                "var x = 42",
+                Statement::VarDeclaration("x".to_string(), Box::new(Expression::CInt(42))),
+            ),
+            // (
+            //     "var result = add(5, 3)",
+            //     Statement::VarDeclaration(
+            //         "result".to_string(),
+            //         Box::new(Expression::FuncCall(
+            //             "add".to_string(),
+            //             vec![Expression::CInt(5), Expression::CInt(3)],
+            //         )),
+            //     ),
+            // ),
+            // (
+            //     "var name = \"John\"",
+            //     Statement::VarDeclaration(
+            //         "name".to_string(),
+            //         Box::new(Expression::CString("John".to_string())),
+            //     ),
+            // ),
+            // (
+            //     "var is_valid = True",
+            //     Statement::VarDeclaration(
+            //         "is_valid".to_string(),
+            //         Box::new(Expression::CTrue),
+            //     ),
+            // ),
+        ];
+
+        for (input, expected) in cases {
+            let (rest, result) = parse_statement(input).unwrap();
+            assert_eq!(rest, "");
+            assert_eq!(result, expected);
+        }
+    }
+
+    #[test]
+    #[ignore]
+    fn test_val_declarations() {
+        let cases = vec![
+            (
+                "val x = 42",
+                Statement::ValDeclaration("x".to_string(), Box::new(Expression::CInt(42))),
+            ),
+            (
+                "val result = add(5, 3)",
+                Statement::ValDeclaration(
+                    "result".to_string(),
+                    Box::new(Expression::FuncCall(
+                        "add".to_string(),
+                        vec![Expression::CInt(5), Expression::CInt(3)],
+                    )),
+                ),
+            ),
+            (
+                "val name = \"John\"",
+                Statement::ValDeclaration(
+                    "name".to_string(),
+                    Box::new(Expression::CString("John".to_string())),
+                ),
+            ),
+            (
+                "val is_valid = True",
+                Statement::ValDeclaration("is_valid".to_string(), Box::new(Expression::CTrue)),
+            ),
+        ];
+
+        for (input, expected) in cases {
+            let (rest, result) = parse_statement(input).unwrap();
+            assert_eq!(rest, "");
+            assert_eq!(result, expected);
+        }
+    }
 }
 
 // ADT Tests
@@ -237,7 +316,7 @@ mod adt_tests {
     #[ignore]
     fn test_adt_declarations() {
         let input = "data Shape = Circle Int | Rectangle Int Int";
-        let expected = Statement::ADTDeclaration(
+        let expected = Statement::TypeDeclaration(
             "Shape".to_string(),
             vec![
                 ValueConstructor::new("Circle".to_string(), vec![Type::TInteger]),

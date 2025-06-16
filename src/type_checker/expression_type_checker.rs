@@ -23,7 +23,7 @@ pub fn check_expr(exp: Expression, env: &Environment<Type>) -> Result<Type, Erro
         Expression::LT(l, r) => check_bin_relational_expression(*l, *r, env),
         Expression::GTE(l, r) => check_bin_relational_expression(*l, *r, env),
         Expression::LTE(l, r) => check_bin_relational_expression(*l, *r, env),
-        Expression::Var(name) => check_var_name(name, env, false),
+        Expression::Var(name) => check_var_name(name, env),
         Expression::COk(e) => check_result_ok(*e, env),
         Expression::CErr(e) => check_result_err(*e, env),
         Expression::CJust(e) => check_maybe_just(*e, env),
@@ -33,14 +33,15 @@ pub fn check_expr(exp: Expression, env: &Environment<Type>) -> Result<Type, Erro
         Expression::Unwrap(e) => check_unwrap_type(*e, env),
         Expression::Propagate(e) => check_propagate_type(*e, env),
         Expression::ListValue(elements) => check_list_value(&elements, env),
+        Expression::Constructor(name, args) => check_adt_constructor(name, args, env),
+
         _ => Err("not implemented yet.".to_string()),
     }
 }
 
-fn check_var_name(name: Name, env: &Environment<Type>, scoped: bool) -> Result<Type, ErrorMessage> {
-    let var_type = env.lookup(&name);
-    match var_type {
-        Some(t) => Ok(t.clone()),
+fn check_var_name(name: Name, env: &Environment<Type>) -> Result<Type, ErrorMessage> {
+    match env.lookup(&name) {
+        Some((_, t)) => Ok(t.clone()),
         None => Err(format!("[Name Error] '{}' is not defined.", name)),
     }
 }
@@ -183,12 +184,72 @@ fn check_list_value(
     Ok(Type::TList(Box::new(first_type)))
 }
 
+fn check_adt_constructor(
+    name: Name,
+    args: Vec<Box<Expression>>,
+    env: &Environment<Type>,
+) -> Result<Type, ErrorMessage> {
+    // Gather all ADTs from all scopes (stack and globals)
+    let mut found = None;
+    // Search stack scopes first (innermost to outermost)
+    for scope in env.stack.iter() {
+        for (adt_name, constructors) in scope.adts.iter() {
+            if let Some(constructor) = constructors.iter().find(|c| c.name == name) {
+                found = Some((adt_name.clone(), constructor.clone(), constructors.clone()));
+                break;
+            }
+        }
+        if found.is_some() {
+            break;
+        }
+    }
+    // If not found in stack, search globals
+    if found.is_none() {
+        for (adt_name, constructors) in env.globals.adts.iter() {
+            if let Some(constructor) = constructors.iter().find(|c| c.name == name) {
+                found = Some((adt_name.clone(), constructor.clone(), constructors.clone()));
+                break;
+            }
+        }
+    }
+    match found {
+        Some((adt_type_name, constructor, constructors)) => {
+            // Check that we have the right number of arguments
+            if args.len() != constructor.types.len() {
+                return Err(format!(
+                    "[Type Error] Constructor '{}' expects {} arguments, but got {}.",
+                    name,
+                    constructor.types.len(),
+                    args.len()
+                ));
+            }
+            // Check each argument's type
+            for (arg, expected_type) in args.iter().zip(constructor.types.iter()) {
+                let arg_type = check_expr(*arg.clone(), env)?;
+                if arg_type != *expected_type {
+                    return Err(format!(
+                        "[Type Error] Argument type mismatch in constructor '{}'. Expected '{:?}', found '{:?}'.",
+                        name, expected_type, arg_type
+                    ));
+                }
+            }
+            // Return the algebraic type
+            Ok(Type::TAlgebraicData(adt_type_name, constructors))
+        }
+        None => Err(format!(
+            "[Type Error] Constructor '{}' is not defined in any ADT.",
+            name
+        )),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::environment::environment::Environment;
     use crate::ir::ast::Expression::*;
     use crate::ir::ast::Type::*;
+    use crate::ir::ast::{Type, ValueConstructor};
 
     #[test]
     fn check_constant() {
@@ -457,10 +518,95 @@ mod tests {
     #[test]
     fn test_defined_variable() {
         let mut env = Environment::new();
-        env.map_variable("x".to_string(), Type::TInteger);
+        env.map_variable("x".to_string(), true, Type::TInteger);
         let exp = Expression::Var("x".to_string());
 
         // Should succeed and return integer type
         assert_eq!(check_expr(exp, &env), Ok(Type::TInteger));
+    }
+
+    #[test]
+    fn test_adt_constructor_valid() {
+        let mut env = Environment::new();
+        let figure_type = vec![
+            ValueConstructor::new("Circle".to_string(), vec![Type::TInteger]),
+            ValueConstructor::new(
+                "Rectangle".to_string(),
+                vec![Type::TInteger, Type::TInteger],
+            ),
+        ];
+        env.map_adt("Figure".to_string(), figure_type);
+
+        let circle = Constructor("Circle".to_string(), vec![Box::new(CInt(5))]);
+        let result = check_expr(circle, &env);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_adt_constructor_wrong_args() {
+        let mut env = Environment::new();
+        let figure_type = vec![
+            ValueConstructor::new("Circle".to_string(), vec![Type::TInteger]),
+            ValueConstructor::new(
+                "Rectangle".to_string(),
+                vec![Type::TInteger, Type::TInteger],
+            ),
+        ];
+        env.map_adt("Figure".to_string(), figure_type);
+
+        let circle = Constructor(
+            "Circle".to_string(),
+            vec![Box::new(CString("invalid".to_string()))],
+        );
+        let result = check_expr(circle, &env);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_adt_constructor_wrong_count() {
+        let mut env = Environment::new();
+        let figure_type = vec![
+            ValueConstructor::new("Circle".to_string(), vec![Type::TInteger]),
+            ValueConstructor::new(
+                "Rectangle".to_string(),
+                vec![Type::TInteger, Type::TInteger],
+            ),
+        ];
+        env.map_adt("Figure".to_string(), figure_type);
+
+        let rectangle = Constructor("Rectangle".to_string(), vec![Box::new(CInt(5))]); // Missing second argument
+        let result = check_expr(rectangle, &env);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_adt_constructor_undefined() {
+        let env = Environment::new();
+        let circle = Constructor("Circle".to_string(), vec![Box::new(CInt(5))]);
+        let result = check_expr(circle, &env);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_adt_constructor_with_mutable_vars() {
+        let mut env = Environment::new();
+        let figure_type = vec![
+            ValueConstructor::new("Circle".to_string(), vec![Type::TInteger]),
+            ValueConstructor::new(
+                "Rectangle".to_string(),
+                vec![Type::TInteger, Type::TInteger],
+            ),
+        ];
+        env.map_adt("Figure".to_string(), figure_type);
+
+        // Create a mutable variable to use in constructor
+        env.map_variable("radius".to_string(), true, Type::TInteger);
+
+        let circle = Constructor(
+            "Circle".to_string(),
+            vec![Box::new(Var("radius".to_string()))],
+        );
+        let result = check_expr(circle, &env);
+        assert!(result.is_ok());
     }
 }

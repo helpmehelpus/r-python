@@ -1,5 +1,5 @@
 use crate::environment::environment::Environment;
-use crate::ir::ast::{Expression, FormalArgument, Function, Name, Statement, Type};
+use crate::ir::ast::{Expression, Function, Name, Statement, Type, ValueConstructor};
 use crate::type_checker::expression_type_checker::check_expr;
 
 type ErrorMessage = String;
@@ -9,132 +9,224 @@ pub fn check_stmt(
     env: &Environment<Type>,
 ) -> Result<Environment<Type>, ErrorMessage> {
     match stmt {
-        Statement::Sequence(stmt1, stmt2) => {
-            let new_env = check_stmt(*stmt1, &env)?;
-            check_stmt(*stmt2, &new_env)
-        }
-        Statement::Assignment(name, exp) => {
-            let mut new_env = env.clone();
-            let var_type = new_env.lookup(&name);
-            let exp_type = check_expr(*exp, &new_env)?;
-
-            match var_type {
-                Some(t) if *t == Type::TAny => {
-                    new_env.map_variable(name.clone(), exp_type);
-                    Ok(new_env)
-                }
-                Some(t) => {
-                    if *t != exp_type {
-                        return Err(format!(
-                            "[Type Error] expected '{:?}', found '{:?}'.",
-                            t, exp_type
-                        ));
-                    } else {
-                        return Ok(new_env);
-                    }
-                }
-                None => {
-                    new_env.map_variable(name.clone(), exp_type);
-                    Ok(new_env)
-                }
-            }
-        }
+        Statement::VarDeclaration(var, expr) => check_var_declaration_stmt(var, expr, env),
+        Statement::ValDeclaration(var, expr) => check_val_declaration_stmt(var, expr, env),
+        Statement::Sequence(stmt1, stmt2) => check_squence_stmt(stmt1, stmt2, env),
+        Statement::Assignment(name, exp) => check_assignment_stmt(name, exp, env),
         Statement::IfThenElse(cond, stmt_then, stmt_else_opt) => {
-            let mut new_env = env.clone();
-            let cond_type = check_expr(*cond, &new_env)?;
-            if cond_type != Type::TBool {
-                return Err(
-                    "[Type Error] a condition in a 'if' statement must be of type boolean."
-                        .to_string(),
-                );
-            }
-            let then_env = check_stmt(*stmt_then, &new_env)?;
-            if let Some(stmt_else) = stmt_else_opt {
-                let else_env = check_stmt(*stmt_else, &new_env)?;
-                new_env = merge_environments(&then_env, &else_env)?;
-            } else {
-                new_env = merge_environments(&new_env, &then_env)?;
-            }
-            Ok(new_env)
+            check_if_then_else_stmt(cond, stmt_then, stmt_else_opt, env)
         }
-        Statement::While(cond, stmt) => {
-            let mut new_env = env.clone();
-            let cond_type = check_expr(*cond, &new_env)?;
-            if cond_type != Type::TBool {
-                return Err(
-                    "[Type Error] a condition in a 'while' statement must be of type boolean."
-                        .to_string(),
-                );
-            }
-            new_env = check_stmt(*stmt, &new_env)?;
-            Ok(new_env)
-        }
-        Statement::For(var, expr, stmt) => {
-            let mut new_env = env.clone();
-            let var_type = env.lookup(&var);
-            let expr_type = check_expr(*expr, &new_env)?;
-            match expr_type {
-                Type::TList(base_type) => {
-                    if let Some(t) = env.lookup(&var) {
-                        if *t == *base_type || *base_type == Type::TAny {
-                            new_env = check_stmt(*stmt, &new_env)?;
-                            return Ok(new_env);
-                        } else {
-                            return Err(format!(
-                                "[TypeError] Type mismatch between {:?} and {:?}",
-                                t, base_type
-                            ));
-                        }
-                    } else {
-                        new_env.map_variable(var.clone(), *base_type);
-                        new_env = check_stmt(*stmt, &new_env)?;
-                        return Ok(new_env);
-                    }
-                }
-                _ => {
-                    return Err(format!(
-                        "[TypeError] Expecting a List type, but found a {:?}",
-                        expr_type
-                    ))
-                }
-            }
-        }
-        Statement::FuncDef(function) => {
-            let mut new_env = env.clone();
-            new_env.push();
-
-            for formal_arg in function.params.iter() {
-                new_env.map_variable(
-                    formal_arg.argumentName.clone(),
-                    formal_arg.argumentType.clone(),
-                );
-            }
-
-            if let Some(body) = function.body.clone() {
-                new_env = check_stmt(*body, &new_env)?;
-            }
-            new_env.pop();
-            new_env.map_function(function);
-
-            Ok(new_env)
-        }
-        Statement::Return(exp) => {
-            let mut new_env = env.clone();
-
-            assert!(new_env.scoped_function());
-
-            let ret_type = check_expr(*exp, &new_env)?;
-
-            match new_env.lookup(&"return".to_string()) {
-                Some(ret_type) => Ok(new_env),
-                Some(_) => Err("[Type error] Inconsistent return types.".to_string()),
-                None => {
-                    new_env.map_variable("return".to_string(), ret_type);
-                    Ok(new_env)
-                }
-            }
-        }
+        Statement::While(cond, stmt) => check_while_stmt(cond, stmt, env),
+        Statement::For(var, expr, stmt) => check_for_stmt(var, expr, stmt, env),
+        Statement::FuncDef(function) => check_func_def_stmt(function, env),
+        Statement::TypeDeclaration(name, cons) => check_adt_declarations_stmt(name, cons, env),
+        Statement::Return(exp) => check_return_stmt(exp, env),
         _ => Err("Not implemented yet".to_string()),
+    }
+}
+
+fn check_squence_stmt(
+    stmt1: Box<Statement>,
+    stmt2: Box<Statement>,
+    env: &Environment<Type>,
+) -> Result<Environment<Type>, ErrorMessage> {
+    let new_env = check_stmt(*stmt1, &env)?;
+    check_stmt(*stmt2, &new_env)
+}
+
+fn check_assignment_stmt(
+    name: Name,
+    exp: Box<Expression>,
+    env: &Environment<Type>,
+) -> Result<Environment<Type>, ErrorMessage> {
+    let mut new_env = env.clone();
+    let exp_type = check_expr(*exp, &new_env)?;
+
+    match new_env.lookup(&name) {
+        Some((mutable, var_type)) => {
+            if !mutable {
+                Err(format!("[Type Error] cannot reassign '{:?}' variable, since it was declared as a constant value.", name))
+            } else if var_type == Type::TAny {
+                new_env.map_variable(name.clone(), true, exp_type);
+                Ok(new_env)
+            } else if var_type == exp_type {
+                Ok(new_env)
+            } else {
+                Err(format!(
+                    "[Type Error] expected '{:?}', found '{:?}'.",
+                    var_type, exp_type
+                ))
+            }
+        }
+        None => Err(format!("[Type Error] variable '{:?}' not declared.", name)),
+    }
+}
+
+fn check_var_declaration_stmt(
+    name: Name,
+    exp: Box<Expression>,
+    env: &Environment<Type>,
+) -> Result<Environment<Type>, ErrorMessage> {
+    let mut new_env = env.clone();
+    let var_type = new_env.lookup(&name);
+    let exp_type = check_expr(*exp, &new_env)?;
+
+    if var_type.is_none() {
+        new_env.map_variable(name.clone(), true, exp_type);
+        Ok(new_env)
+    } else {
+        Err(format!(
+            "[Type Error] variable '{:?}' already declared",
+            name
+        ))
+    }
+}
+
+fn check_val_declaration_stmt(
+    name: Name,
+    exp: Box<Expression>,
+    env: &Environment<Type>,
+) -> Result<Environment<Type>, ErrorMessage> {
+    let mut new_env = env.clone();
+    let var_type = new_env.lookup(&name);
+    let exp_type = check_expr(*exp, &new_env)?;
+
+    if var_type.is_none() {
+        new_env.map_variable(name.clone(), false, exp_type);
+        Ok(new_env)
+    } else {
+        Err(format!(
+            "[Type Error] variable '{:?}' already declared",
+            name
+        ))
+    }
+}
+
+fn check_if_then_else_stmt(
+    cond: Box<Expression>,
+    stmt_then: Box<Statement>,
+    stmt_else_opt: Option<Box<Statement>>,
+    env: &Environment<Type>,
+) -> Result<Environment<Type>, ErrorMessage> {
+    let mut new_env = env.clone();
+    let cond_type = check_expr(*cond, &new_env)?;
+    if cond_type != Type::TBool {
+        return Err(
+            "[Type Error] a condition in a 'if' statement must be of type boolean.".to_string(),
+        );
+    }
+    let then_env = check_stmt(*stmt_then, &new_env)?;
+    if let Some(stmt_else) = stmt_else_opt {
+        let else_env = check_stmt(*stmt_else, &new_env)?;
+        new_env = merge_environments(&then_env, &else_env)?;
+    } else {
+        new_env = merge_environments(&new_env, &then_env)?;
+    }
+    Ok(new_env)
+}
+
+fn check_while_stmt(
+    cond: Box<Expression>,
+    stmt: Box<Statement>,
+    env: &Environment<Type>,
+) -> Result<Environment<Type>, ErrorMessage> {
+    let mut new_env = env.clone();
+    let cond_type = check_expr(*cond, &new_env)?;
+    if cond_type != Type::TBool {
+        return Err(
+            "[Type Error] a condition in a 'while' statement must be of type boolean.".to_string(),
+        );
+    }
+    new_env = check_stmt(*stmt, &new_env)?;
+    Ok(new_env)
+}
+
+fn check_for_stmt(
+    var: Name,
+    expr: Box<Expression>,
+    stmt: Box<Statement>,
+    env: &Environment<Type>,
+) -> Result<Environment<Type>, ErrorMessage> {
+    let mut new_env = env.clone();
+    let _var_type = env.lookup(&var);
+    let expr_type = check_expr(*expr, &new_env)?;
+    match expr_type {
+        Type::TList(base_type) => {
+            if let Some((_, t)) = env.lookup(&var) {
+                if t == *base_type || *base_type == Type::TAny {
+                    new_env = check_stmt(*stmt, &new_env)?;
+                    return Ok(new_env);
+                } else {
+                    return Err(format!(
+                        "[TypeError] Type mismatch between {:?} and {:?}",
+                        t, base_type
+                    ));
+                }
+            } else {
+                new_env.map_variable(var.clone(), false, *base_type);
+                new_env = check_stmt(*stmt, &new_env)?;
+                return Ok(new_env);
+            }
+        }
+        _ => {
+            return Err(format!(
+                "[TypeError] Expecting a List type, but found a {:?}",
+                expr_type
+            ))
+        }
+    }
+}
+
+fn check_func_def_stmt(
+    function: Function,
+    env: &Environment<Type>,
+) -> Result<Environment<Type>, ErrorMessage> {
+    let mut new_env = env.clone();
+    new_env.push();
+
+    for formal_arg in function.params.iter() {
+        new_env.map_variable(
+            formal_arg.argument_name.clone(),
+            false,
+            formal_arg.argument_type.clone(),
+        );
+    }
+
+    if let Some(body) = function.body.clone() {
+        new_env = check_stmt(*body, &new_env)?;
+    }
+    new_env.pop();
+    new_env.map_function(function);
+
+    Ok(new_env)
+}
+
+fn check_adt_declarations_stmt(
+    name: Name,
+    cons: Vec<ValueConstructor>,
+    env: &Environment<Type>,
+) -> Result<Environment<Type>, ErrorMessage> {
+    let mut new_env = env.clone();
+    new_env.map_adt(name.clone(), cons);
+    Ok(new_env)
+}
+
+fn check_return_stmt(
+    exp: Box<Expression>,
+    env: &Environment<Type>,
+) -> Result<Environment<Type>, ErrorMessage> {
+    let mut new_env = env.clone();
+
+    assert!(new_env.scoped_function());
+
+    let ret_type = check_expr(*exp, &new_env)?;
+
+    match new_env.lookup(&"return".to_string()) {
+        Some(_) => Ok(new_env),
+        None => {
+            new_env.map_variable("return".to_string(), false, ret_type);
+            Ok(new_env)
+        }
     }
 }
 
@@ -145,24 +237,39 @@ fn merge_environments(
     let mut merged = env1.clone();
 
     // Get all variables defined in either environment
-    for (name, type2) in env2.get_all_variables() {
+    for (name, (mutable2, type2)) in env2.get_all_variables() {
         match env1.lookup(&name) {
-            Some(type1) => {
-                // Variable exists in both branches - types must match
-                if *type1 != type2 {
+            Some((mutable1, type1)) => {
+                // Variable exists in both branches
+                // Check mutability first - if either is constant, result must be constant
+                let final_mutable = mutable1 && mutable2;
+
+                // Then check types
+                if type1 == Type::TAny {
+                    // If type1 is TAny, use type2
+                    merged.map_variable(name.clone(), final_mutable, type2.clone());
+                } else if type2 == Type::TAny {
+                    // If type2 is TAny, keep type1
+                    merged.map_variable(name.clone(), final_mutable, type1.clone());
+                } else if type1 != type2 {
                     return Err(format!(
                         "[Type Error] Variable '{}' has inconsistent types in different branches: '{:?}' and '{:?}'",
                         name, type1, type2
                     ));
+                } else {
+                    // Types match, update with combined mutability
+                    merged.map_variable(name.clone(), final_mutable, type1.clone());
                 }
             }
             None => {
                 // Variable only exists in else branch - it's conditionally defined
-                // For now, we'll add it to the environment but might want to mark it as conditional
-                merged.map_variable(name.clone(), type2.clone());
+                merged.map_variable(name.clone(), mutable2, type2.clone());
             }
         }
     }
+
+    //TODO: should we merge ADTs and functions?
+
     Ok(merged)
 }
 
@@ -171,14 +278,20 @@ mod tests {
     use super::*;
     use crate::environment::environment::Environment;
     use crate::ir::ast::Expression::*;
+    use crate::ir::ast::FormalArgument;
     use crate::ir::ast::Function;
     use crate::ir::ast::Statement::*;
-    use crate::ir::ast::Type::*;
+    use crate::ir::ast::Type;
 
     #[test]
     fn check_assignment() {
         let env: Environment<Type> = Environment::new();
-
+        // Declare variable 'a' first
+        let env = check_stmt(
+            Statement::VarDeclaration("a".to_string(), Box::new(CTrue)),
+            &env,
+        )
+        .unwrap();
         let assignment = Assignment("a".to_string(), Box::new(CTrue));
 
         match check_stmt(assignment, &env) {
@@ -190,7 +303,12 @@ mod tests {
     #[test]
     fn check_assignment_error2() {
         let env: Environment<Type> = Environment::new();
-
+        // Declare variable 'a' first
+        let env = check_stmt(
+            Statement::VarDeclaration("a".to_string(), Box::new(CTrue)),
+            &env,
+        )
+        .unwrap();
         let assignment1 = Assignment("a".to_string(), Box::new(CTrue));
         let assignment2 = Assignment("a".to_string(), Box::new(CInt(1)));
         let program = Sequence(Box::new(assignment1), Box::new(assignment2));
@@ -259,7 +377,7 @@ mod tests {
             ))))),
         });
         match check_stmt(func, &env) {
-            Ok(new_env) => assert!(true),
+            Ok(_) => assert!(true),
             Err(s) => assert!(false, "{}", s),
         }
     }
@@ -267,6 +385,12 @@ mod tests {
     #[test]
     fn test_if_else_consistent_types() {
         let env = Environment::new();
+        // Declare variable 'x' first
+        let env = check_stmt(
+            Statement::VarDeclaration("x".to_string(), Box::new(Expression::CInt(0))),
+            &env,
+        )
+        .unwrap();
         let stmt = Statement::IfThenElse(
             Box::new(Expression::CTrue),
             Box::new(Statement::Assignment(
@@ -305,6 +429,12 @@ mod tests {
     #[test]
     fn test_if_else_partial_definition() {
         let env = Environment::new();
+        // Declare variable 'x' first
+        let env = check_stmt(
+            Statement::VarDeclaration("x".to_string(), Box::new(Expression::CInt(0))),
+            &env,
+        )
+        .unwrap();
         let stmt = Statement::Sequence(
             Box::new(Statement::IfThenElse(
                 Box::new(Expression::CTrue),
@@ -328,17 +458,26 @@ mod tests {
     #[test]
     fn test_variable_assignment() {
         let env = Environment::new();
+        // Declare variable 'x' first
+        let env = check_stmt(
+            Statement::VarDeclaration("x".to_string(), Box::new(Expression::CInt(0))),
+            &env,
+        )
+        .unwrap();
         let stmt = Statement::Assignment("x".to_string(), Box::new(Expression::CInt(42)));
 
         // Should succeed and add x:integer to environment
         let new_env = check_stmt(stmt, &env).unwrap();
-        assert_eq!(new_env.lookup(&"x".to_string()), Some(&Type::TInteger));
+        assert_eq!(
+            new_env.lookup(&"x".to_string()),
+            Some((true, Type::TInteger))
+        );
     }
 
     #[test]
     fn test_variable_reassignment_same_type() {
         let mut env = Environment::new();
-        env.map_variable("x".to_string(), Type::TInteger);
+        env.map_variable("x".to_string(), true, Type::TInteger);
 
         let stmt = Statement::Assignment("x".to_string(), Box::new(Expression::CInt(100)));
 
@@ -349,7 +488,7 @@ mod tests {
     #[test]
     fn test_variable_reassignment_different_type() {
         let mut env = Environment::new();
-        env.map_variable("x".to_string(), Type::TInteger);
+        env.map_variable("x".to_string(), true, Type::TInteger);
 
         let stmt = Statement::Assignment(
             "x".to_string(),
@@ -371,7 +510,7 @@ mod tests {
             body: None,
         };
 
-        let local_func = Function {
+        let _local_func = Function {
             name: "local".to_string(),
             kind: Type::TVoid,
             params: Vec::new(),
@@ -386,7 +525,7 @@ mod tests {
     #[test]
     fn test_for_valid_integer_list() {
         let mut env = Environment::new();
-        env.map_variable("sum".to_string(), Type::TInteger);
+        env.map_variable("sum".to_string(), true, Type::TInteger);
         let stmt = Statement::For(
             "x".to_string(),
             Box::new(Expression::ListValue(vec![
@@ -427,6 +566,12 @@ mod tests {
     #[test]
     fn test_for_empty_list() {
         let env = Environment::new();
+        // Declare variable 'x' first
+        let env = check_stmt(
+            Statement::VarDeclaration("x".to_string(), Box::new(Expression::CInt(0))),
+            &env,
+        )
+        .unwrap();
         let stmt = Statement::For(
             "x".to_string(),
             Box::new(Expression::ListValue(vec![])),
@@ -460,6 +605,12 @@ mod tests {
     #[test]
     fn test_for_nested_loops() {
         let env = Environment::new();
+        // Declare variable 'sum' first
+        let env = check_stmt(
+            Statement::VarDeclaration("sum".to_string(), Box::new(Expression::CInt(0))),
+            &env,
+        )
+        .unwrap();
         let stmt = Statement::For(
             "i".to_string(),
             Box::new(Expression::ListValue(vec![
@@ -489,7 +640,7 @@ mod tests {
     #[test]
     fn test_for_variable_scope() {
         let mut env = Environment::new();
-        env.map_variable("x".to_string(), Type::TString); // x is defined as string in outer scope
+        env.map_variable("x".to_string(), true, Type::TString); // x is defined as string in outer scope
 
         let stmt = Statement::For(
             "x".to_string(), // reusing name x as iterator

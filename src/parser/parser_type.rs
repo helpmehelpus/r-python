@@ -11,34 +11,9 @@ use nom::{
 use crate::ir::ast::{Type, ValueConstructor};
 
 use crate::parser::parser_common::{
-    identifier,
-    keyword,
-    separator,
-    ANY_TYPE,
-    BOOLEAN_TYPE,
-    COLON_CHAR,
-    // Other character constants
-    COMMA_CHAR,
-    COMMA_SYMBOL,
-    // Keyword constants
-    DATA_KEYWORD,
-    END_KEYWORD,
-    // Operator and symbol constants
-    FUNCTION_ARROW,
-    // Type name constants
-    INT_TYPE,
-    // Bracket and parentheses constants
-    LEFT_BRACKET,
-    LEFT_PAREN,
-    // Special type constructor constants
-    MAYBE_TYPE,
-    PIPE_CHAR,
-    REAL_TYPE,
-    RESULT_TYPE,
-    RIGHT_BRACKET,
-    RIGHT_PAREN,
-    STRING_TYPE,
-    UNIT_TYPE,
+    identifier, keyword, separator, ANY_TYPE, BOOLEAN_TYPE, COLON_CHAR, COMMA_CHAR, COMMA_SYMBOL,
+    DATA_KEYWORD, END_KEYWORD, FUNCTION_ARROW, INT_TYPE, LEFT_BRACKET, LEFT_PAREN, MAYBE_TYPE,
+    PIPE_CHAR, REAL_TYPE, RESULT_TYPE, RIGHT_BRACKET, RIGHT_PAREN, STRING_TYPE, UNIT_TYPE,
 };
 
 pub fn parse_type(input: &str) -> IResult<&str, Type> {
@@ -151,7 +126,7 @@ fn parse_adt_type(input: &str) -> IResult<&str, Type> {
             many1(parse_adt_cons),
             preceded(multispace0, keyword(END_KEYWORD)),
         )),
-        |(_, name, _, cons, _)| Type::Tadt(name.to_string(), cons),
+        |(_, name, _, cons, _)| Type::TAlgebraicData(name.to_string(), cons),
     )(input)
 }
 
@@ -229,7 +204,7 @@ mod tests {
     #[ignore]
     fn test_parse_adt_type() {
         let input = "data Maybe:\n  | Just Int\n  | Nothing\nend";
-        let expected = Type::Tadt(
+        let expected = Type::TAlgebraicData(
             "Maybe".to_string(),
             vec![
                 ValueConstructor::new("Just".to_string(), vec![Type::TInteger]),
