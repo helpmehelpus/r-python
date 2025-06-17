@@ -1409,6 +1409,567 @@ mod tests {
         }
     }
 
+    mod boolean_expression_tests {
+        use super::*;
+
+        #[test]
+        fn test_and_true_true() {
+            let env = create_test_env();
+            let expr = Expression::And(
+                Box::new(Expression::CTrue),
+                Box::new(Expression::CTrue),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CTrue);
+        }
+
+        #[test]
+        fn test_and_true_false() {
+            let env = create_test_env();
+            let expr = Expression::And(
+                Box::new(Expression::CTrue),
+                Box::new(Expression::CFalse),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CFalse);
+        }
+
+        #[test]
+        fn test_and_false_true() {
+            let env = create_test_env();
+            let expr = Expression::And(
+                Box::new(Expression::CFalse),
+                Box::new(Expression::CTrue),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CFalse);
+        }
+
+        #[test]
+        fn test_and_false_false() {
+            let env = create_test_env();
+            let expr = Expression::And(
+                Box::new(Expression::CFalse),
+                Box::new(Expression::CFalse),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CFalse);
+        }
+
+        #[test]
+        fn test_or_true_true() {
+            let env = create_test_env();
+            let expr = Expression::Or(
+                Box::new(Expression::CTrue),
+                Box::new(Expression::CTrue),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CTrue);
+        }
+
+        #[test]
+        fn test_or_true_false() {
+            let env = create_test_env();
+            let expr = Expression::Or(
+                Box::new(Expression::CTrue),
+                Box::new(Expression::CFalse),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CTrue);
+        }
+
+        #[test]
+        fn test_or_false_true() {
+            let env = create_test_env();
+            let expr = Expression::Or(
+                Box::new(Expression::CFalse),
+                Box::new(Expression::CTrue),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CTrue);
+        }
+
+        #[test]
+        fn test_or_false_false() {
+            let env = create_test_env();
+            let expr = Expression::Or(
+                Box::new(Expression::CFalse),
+                Box::new(Expression::CFalse),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CFalse);
+        }
+
+        #[test]
+        fn test_not_true() {
+            let env = create_test_env();
+            let expr = Expression::Not(Box::new(Expression::CTrue));
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CFalse);
+        }
+
+        #[test]
+        fn test_not_false() {
+            let env = create_test_env();
+            let expr = Expression::Not(Box::new(Expression::CFalse));
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CTrue);
+        }
+
+        #[test]
+        fn test_boolean_with_variables() {
+            let mut env = create_test_env();
+            env.map_variable("x".to_string(), false, Expression::CTrue);
+            env.map_variable("y".to_string(), false, Expression::CFalse);
+
+            let expr = Expression::And(
+                Box::new(Expression::Var("x".to_string())),
+                Box::new(Expression::Var("y".to_string())),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CFalse);
+        }
+
+        #[test]
+        fn test_nested_and_or() {
+            let env = create_test_env();
+            // (True and False) or True => False or True => True
+            let expr = Expression::Or(
+                Box::new(Expression::And(
+                    Box::new(Expression::CTrue),
+                    Box::new(Expression::CFalse),
+                )),
+                Box::new(Expression::CTrue),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CTrue);
+        }
+
+        #[test]
+        fn test_nested_or_and() {
+            let env = create_test_env();
+            // (True or False) and False => True and False => False
+            let expr = Expression::And(
+                Box::new(Expression::Or(
+                    Box::new(Expression::CTrue),
+                    Box::new(Expression::CFalse),
+                )),
+                Box::new(Expression::CFalse),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CFalse);
+        }
+
+        #[test]
+        fn test_double_negation() {
+            let env = create_test_env();
+            // not (not True) => not False => True
+            let expr = Expression::Not(Box::new(Expression::Not(Box::new(Expression::CTrue))));
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CTrue);
+        }
+
+        #[test]
+        fn test_complex_boolean_expression() {
+            let env = create_test_env();
+            // not (True and False) or (False or True) => not False or True => True or True => True
+            let expr = Expression::Or(
+                Box::new(Expression::Not(Box::new(Expression::And(
+                    Box::new(Expression::CTrue),
+                    Box::new(Expression::CFalse),
+                )))),
+                Box::new(Expression::Or(
+                    Box::new(Expression::CFalse),
+                    Box::new(Expression::CTrue),
+                )),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CTrue);
+        }
+
+        #[test]
+        fn test_boolean_with_relational_expressions() {
+            let env = create_test_env();
+            // (5 > 3) and (2 < 4) => True and True => True
+            let expr = Expression::And(
+                Box::new(Expression::GT(
+                    Box::new(Expression::CInt(5)),
+                    Box::new(Expression::CInt(3)),
+                )),
+                Box::new(Expression::LT(
+                    Box::new(Expression::CInt(2)),
+                    Box::new(Expression::CInt(4)),
+                )),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CTrue);
+        }
+
+        #[test]
+        fn test_boolean_with_mixed_relational() {
+            let env = create_test_env();
+            // (10 == 10) or (5 > 8) => True or False => True
+            let expr = Expression::Or(
+                Box::new(Expression::EQ(
+                    Box::new(Expression::CInt(10)),
+                    Box::new(Expression::CInt(10)),
+                )),
+                Box::new(Expression::GT(
+                    Box::new(Expression::CInt(5)),
+                    Box::new(Expression::CInt(8)),
+                )),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CTrue);
+        }
+
+        #[test]
+        fn test_not_with_relational() {
+            let env = create_test_env();
+            // not (3 > 5) => not False => True
+            let expr = Expression::Not(Box::new(Expression::GT(
+                Box::new(Expression::CInt(3)),
+                Box::new(Expression::CInt(5)),
+            )));
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CTrue);
+        }
+
+        #[test]
+        fn test_boolean_with_variables_and_relational() {
+            let mut env = create_test_env();
+            env.map_variable("a".to_string(), false, Expression::CInt(10));
+            env.map_variable("b".to_string(), false, Expression::CInt(5));
+            env.map_variable("flag".to_string(), false, Expression::CTrue);
+
+            // flag and (a > b) => True and (10 > 5) => True and True => True
+            let expr = Expression::And(
+                Box::new(Expression::Var("flag".to_string())),
+                Box::new(Expression::GT(
+                    Box::new(Expression::Var("a".to_string())),
+                    Box::new(Expression::Var("b".to_string())),
+                )),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CTrue);
+        }
+
+        #[test]
+        fn test_deeply_nested_boolean() {
+            let env = create_test_env();
+            // ((True or False) and True) or ((False and True) or True)
+            // => (True and True) or (False or True)
+            // => True or True
+            // => True
+            let expr = Expression::Or(
+                Box::new(Expression::And(
+                    Box::new(Expression::Or(
+                        Box::new(Expression::CTrue),
+                        Box::new(Expression::CFalse),
+                    )),
+                    Box::new(Expression::CTrue),
+                )),
+                Box::new(Expression::Or(
+                    Box::new(Expression::And(
+                        Box::new(Expression::CFalse),
+                        Box::new(Expression::CTrue),
+                    )),
+                    Box::new(Expression::CTrue),
+                )),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CTrue);
+        }
+
+        #[test]
+        fn test_boolean_arithmetic_mixed_expressions() {
+            let env = create_test_env();
+            // ((2 + 3) == 5) and ((4 * 2) > 7) => (5 == 5) and (8 > 7) => True and True => True
+            let expr = Expression::And(
+                Box::new(Expression::EQ(
+                    Box::new(Expression::Add(
+                        Box::new(Expression::CInt(2)),
+                        Box::new(Expression::CInt(3)),
+                    )),
+                    Box::new(Expression::CInt(5)),
+                )),
+                Box::new(Expression::GT(
+                    Box::new(Expression::Mul(
+                        Box::new(Expression::CInt(4)),
+                        Box::new(Expression::CInt(2)),
+                    )),
+                    Box::new(Expression::CInt(7)),
+                )),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CTrue);
+        }
+
+        #[test]
+        fn test_boolean_with_real_numbers() {
+            let env = create_test_env();
+            // (3.14 > 3.0) or (2.5 < 2.0) => True or False => True
+            let expr = Expression::Or(
+                Box::new(Expression::GT(
+                    Box::new(Expression::CReal(3.14)),
+                    Box::new(Expression::CReal(3.0)),
+                )),
+                Box::new(Expression::LT(
+                    Box::new(Expression::CReal(2.5)),
+                    Box::new(Expression::CReal(2.0)),
+                )),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CTrue);
+        }
+
+        #[test]
+        fn test_and_error_with_integer() {
+            let env = create_test_env();
+            let expr = Expression::And(
+                Box::new(Expression::CTrue),
+                Box::new(Expression::CInt(5)),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert_eq!(error.0, "'and' is only defined for booleans.");
+        }
+
+        #[test]
+        fn test_or_error_with_string() {
+            let env = create_test_env();
+            let expr = Expression::Or(
+                Box::new(Expression::CFalse),
+                Box::new(Expression::CString("hello".to_string())),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert_eq!(error.0, "'or' is only defined for booleans.");
+        }
+
+        #[test]
+        fn test_not_error_with_real() {
+            let env = create_test_env();
+            let expr = Expression::Not(Box::new(Expression::CReal(3.14)));
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert_eq!(error.0, "'not' is only defined for booleans.");
+        }
+
+        #[test]
+        fn test_boolean_error_with_mixed_types() {
+            let env = create_test_env();
+            let expr = Expression::And(
+                Box::new(Expression::CInt(42)),
+                Box::new(Expression::CString("test".to_string())),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert_eq!(error.0, "'and' is only defined for booleans.");
+        }
+
+        #[test]
+        fn test_boolean_with_undefined_variable() {
+            let env = create_test_env();
+            let expr = Expression::Or(
+                Box::new(Expression::CTrue),
+                Box::new(Expression::Var("undefined_var".to_string())),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert_eq!(error.0, "Variable 'undefined_var' not found");
+        }
+
+        #[test]
+        fn test_chained_boolean_operators() {
+            let env = create_test_env();
+            // True and True and False => False
+            let expr = Expression::And(
+                Box::new(Expression::And(
+                    Box::new(Expression::CTrue),
+                    Box::new(Expression::CTrue),
+                )),
+                Box::new(Expression::CFalse),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CFalse);
+        }
+
+        #[test]
+        fn test_chained_or_operators() {
+            let env = create_test_env();
+            // False or False or True => True
+            let expr = Expression::Or(
+                Box::new(Expression::Or(
+                    Box::new(Expression::CFalse),
+                    Box::new(Expression::CFalse),
+                )),
+                Box::new(Expression::CTrue),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CTrue);
+        }
+
+        #[test]
+        fn test_de_morgan_law_example() {
+            let env = create_test_env();
+            // not (True and False) should equal (not True) or (not False)
+            // not (True and False) => not False => True
+            let left_expr = Expression::Not(Box::new(Expression::And(
+                Box::new(Expression::CTrue),
+                Box::new(Expression::CFalse),
+            )));
+
+            // (not True) or (not False) => False or True => True
+            let right_expr = Expression::Or(
+                Box::new(Expression::Not(Box::new(Expression::CTrue))),
+                Box::new(Expression::Not(Box::new(Expression::CFalse))),
+            );
+
+            let left_result = eval(left_expr, &env).unwrap();
+            let right_result = eval(right_expr, &env).unwrap();
+
+            assert_eq!(left_result, right_result);
+            assert_eq!(left_result, Expression::CTrue);
+        }
+
+        #[test]
+        fn test_boolean_precedence_with_relational() {
+            let env = create_test_env();
+            // Test that relational operators are evaluated before boolean operators
+            // 5 > 3 and 2 < 4 should be (5 > 3) and (2 < 4), not 5 > (3 and 2) < 4
+            let expr = Expression::And(
+                Box::new(Expression::GT(
+                    Box::new(Expression::CInt(5)),
+                    Box::new(Expression::CInt(3)),
+                )),
+                Box::new(Expression::LT(
+                    Box::new(Expression::CInt(2)),
+                    Box::new(Expression::CInt(4)),
+                )),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CTrue);
+        }
+
+        #[test]
+        fn test_boolean_with_arithmetic_in_relational() {
+            let env = create_test_env();
+            // ((1 + 2) > 2) and ((3 * 2) < 10) => (3 > 2) and (6 < 10) => True and True => True
+            let expr = Expression::And(
+                Box::new(Expression::GT(
+                    Box::new(Expression::Add(
+                        Box::new(Expression::CInt(1)),
+                        Box::new(Expression::CInt(2)),
+                    )),
+                    Box::new(Expression::CInt(2)),
+                )),
+                Box::new(Expression::LT(
+                    Box::new(Expression::Mul(
+                        Box::new(Expression::CInt(3)),
+                        Box::new(Expression::CInt(2)),
+                    )),
+                    Box::new(Expression::CInt(10)),
+                )),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CTrue);
+        }
+    }
+
     mod relational_expression_tests {
         use super::*;
 
