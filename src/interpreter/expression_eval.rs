@@ -5,20 +5,20 @@ type ErrorMessage = (String, Option<Expression>);
 
 pub fn eval(exp: Expression, env: &Environment<Expression>) -> Result<Expression, ErrorMessage> {
     match exp {
-        Expression::Add(lhs, rhs) => add(*lhs, *rhs, env),
-        Expression::Sub(lhs, rhs) => sub(*lhs, *rhs, env),
-        Expression::Mul(lhs, rhs) => mul(*lhs, *rhs, env),
-        Expression::Div(lhs, rhs) => div(*lhs, *rhs, env),
-        Expression::And(lhs, rhs) => and(*lhs, *rhs, env),
-        Expression::Or(lhs, rhs) => or(*lhs, *rhs, env),
-        Expression::Not(lhs) => not(*lhs, env),
-        Expression::EQ(lhs, rhs) => eq(*lhs, *rhs, env),
-        Expression::NEQ(lhs, rhs) => neq(*lhs, *rhs, env),
-        Expression::GT(lhs, rhs) => gt(*lhs, *rhs, env),
-        Expression::LT(lhs, rhs) => lt(*lhs, *rhs, env),
-        Expression::GTE(lhs, rhs) => gte(*lhs, *rhs, env),
-        Expression::LTE(lhs, rhs) => lte(*lhs, *rhs, env),
-        Expression::Var(name) => lookup(name, env),
+        Expression::Add(lhs, rhs) => eval_add(*lhs, *rhs, env),
+        Expression::Sub(lhs, rhs) => eval_sub(*lhs, *rhs, env),
+        Expression::Mul(lhs, rhs) => eval_mul(*lhs, *rhs, env),
+        Expression::Div(lhs, rhs) => eval_div(*lhs, *rhs, env),
+        Expression::And(lhs, rhs) => eval_and(*lhs, *rhs, env),
+        Expression::Or(lhs, rhs) => eval_or(*lhs, *rhs, env),
+        Expression::Not(lhs) => eval_not(*lhs, env),
+        Expression::EQ(lhs, rhs) => eval_eq(*lhs, *rhs, env),
+        Expression::NEQ(lhs, rhs) => eval_neq(*lhs, *rhs, env),
+        Expression::GT(lhs, rhs) => eval_gt(*lhs, *rhs, env),
+        Expression::LT(lhs, rhs) => eval_lt(*lhs, *rhs, env),
+        Expression::GTE(lhs, rhs) => eval_gte(*lhs, *rhs, env),
+        Expression::LTE(lhs, rhs) => eval_lte(*lhs, *rhs, env),
+        Expression::Var(name) => eval_lookup(name, env),
         Expression::COk(e) => eval_ok(*e, env),
         Expression::CErr(e) => eval_err(*e, env),
         Expression::CJust(e) => eval_just(*e, env),
@@ -26,21 +26,322 @@ pub fn eval(exp: Expression, env: &Environment<Expression>) -> Result<Expression
         Expression::Propagate(e) => eval_propagate_expression(*e, env),
         Expression::IsError(e) => eval_iserror_expression(*e, env),
         Expression::IsNothing(e) => eval_isnothing_expression(*e, env),
-        Expression::FuncCall(name, args) => call(name, args, env),
+        Expression::FuncCall(name, args) => eval_call(name, args, env),
         Expression::ListValue(values) => eval_list_value(values, env),
         _ if is_constant(exp.clone()) => Ok(exp),
         _ => Err((String::from("Not implemented yet."), None)),
     }
 }
 
-pub fn lookup(name: String, env: &Environment<Expression>) -> Result<Expression, ErrorMessage> {
+// Helper function for arithmetic operations
+fn eval_binary_arith_op<F>(
+    lhs: Expression,
+    rhs: Expression,
+    env: &Environment<Expression>,
+    op: F,
+    error_msg: &str,
+) -> Result<Expression, ErrorMessage>
+where
+    F: Fn(f64, f64) -> f64,
+{
+    let v1 = eval(lhs, env)?;
+    let v2 = eval(rhs, env)?;
+
+    match (v1, v2) {
+        (Expression::CInt(v1), Expression::CInt(v2)) => {
+            Ok(Expression::CInt(op(v1 as f64, v2 as f64) as i32))
+        }
+        (Expression::CInt(v1), Expression::CReal(v2)) => Ok(Expression::CReal(op(v1 as f64, v2))),
+        (Expression::CReal(v1), Expression::CInt(v2)) => Ok(Expression::CReal(op(v1, v2 as f64))),
+        (Expression::CReal(v1), Expression::CReal(v2)) => Ok(Expression::CReal(op(v1, v2))),
+        _ => Err((error_msg.to_string(), None)),
+    }
+}
+
+// Helper function for boolean operations
+fn eval_binary_boolean_op<F>(
+    lhs: Expression,
+    rhs: Expression,
+    env: &Environment<Expression>,
+    op: F,
+    error_msg: &str,
+) -> Result<Expression, ErrorMessage>
+where
+    F: Fn(bool, bool) -> Expression,
+{
+    let v1 = eval(lhs, env)?;
+    let v2 = eval(rhs, env)?;
+
+    match (v1, v2) {
+        (Expression::CTrue, Expression::CTrue) => Ok(op(true, true)),
+        (Expression::CTrue, Expression::CFalse) => Ok(op(true, false)),
+        (Expression::CFalse, Expression::CTrue) => Ok(op(false, true)),
+        (Expression::CFalse, Expression::CFalse) => Ok(op(false, false)),
+        _ => Err((error_msg.to_string(), None)),
+    }
+}
+
+// Helper function for relational operations
+fn eval_binary_rel_op<F>(
+    lhs: Expression,
+    rhs: Expression,
+    env: &Environment<Expression>,
+    op: F,
+    error_msg: &str,
+) -> Result<Expression, ErrorMessage>
+where
+    F: Fn(f64, f64) -> Expression,
+{
+    let v1 = eval(lhs, env)?;
+    let v2 = eval(rhs, env)?;
+
+    match (v1, v2) {
+        (Expression::CInt(v1), Expression::CInt(v2)) => Ok(op(v1 as f64, v2 as f64)),
+        (Expression::CInt(v1), Expression::CReal(v2)) => Ok(op(v1 as f64, v2)),
+        (Expression::CReal(v1), Expression::CInt(v2)) => Ok(op(v1, v2 as f64)),
+        (Expression::CReal(v1), Expression::CReal(v2)) => Ok(op(v1, v2)),
+        _ => Err((error_msg.to_string(), None)),
+    }
+}
+
+// Arithmetic Operations
+fn eval_add(
+    lhs: Expression,
+    rhs: Expression,
+    env: &Environment<Expression>,
+) -> Result<Expression, ErrorMessage> {
+    eval_binary_arith_op(
+        lhs,
+        rhs,
+        env,
+        |a, b| a + b,
+        "addition '(+)' is only defined for numbers (integers and real).",
+    )
+}
+
+fn eval_sub(
+    lhs: Expression,
+    rhs: Expression,
+    env: &Environment<Expression>,
+) -> Result<Expression, ErrorMessage> {
+    eval_binary_arith_op(
+        lhs,
+        rhs,
+        env,
+        |a, b| a - b,
+        "subtraction '(-)' is only defined for numbers (integers and real).",
+    )
+}
+
+fn eval_mul(
+    lhs: Expression,
+    rhs: Expression,
+    env: &Environment<Expression>,
+) -> Result<Expression, ErrorMessage> {
+    eval_binary_arith_op(
+        lhs,
+        rhs,
+        env,
+        |a, b| a * b,
+        "multiplication '(*)' is only defined for numbers (integers and real).",
+    )
+}
+
+fn eval_div(
+    lhs: Expression,
+    rhs: Expression,
+    env: &Environment<Expression>,
+) -> Result<Expression, ErrorMessage> {
+    eval_binary_arith_op(
+        lhs,
+        rhs,
+        env,
+        |a, b| a / b,
+        "division '(/)' is only defined for numbers (integers and real).",
+    )
+}
+
+// Boolean Operations
+fn eval_and(
+    lhs: Expression,
+    rhs: Expression,
+    env: &Environment<Expression>,
+) -> Result<Expression, ErrorMessage> {
+    eval_binary_boolean_op(
+        lhs,
+        rhs,
+        env,
+        |a, b| {
+            if a && b {
+                Expression::CTrue
+            } else {
+                Expression::CFalse
+            }
+        },
+        "'and' is only defined for booleans.",
+    )
+}
+
+fn eval_or(
+    lhs: Expression,
+    rhs: Expression,
+    env: &Environment<Expression>,
+) -> Result<Expression, ErrorMessage> {
+    eval_binary_boolean_op(
+        lhs,
+        rhs,
+        env,
+        |a, b| {
+            if a || b {
+                Expression::CTrue
+            } else {
+                Expression::CFalse
+            }
+        },
+        "'or' is only defined for booleans.",
+    )
+}
+
+fn eval_not(lhs: Expression, env: &Environment<Expression>) -> Result<Expression, ErrorMessage> {
+    let v = eval(lhs, env)?;
+    match v {
+        Expression::CTrue => Ok(Expression::CFalse),
+        Expression::CFalse => Ok(Expression::CTrue),
+        _ => Err((String::from("'not' is only defined for booleans."), None)),
+    }
+}
+
+// Relational Operations
+fn eval_eq(
+    lhs: Expression,
+    rhs: Expression,
+    env: &Environment<Expression>,
+) -> Result<Expression, ErrorMessage> {
+    eval_binary_rel_op(
+        lhs,
+        rhs,
+        env,
+        |a, b| {
+            if a == b {
+                Expression::CTrue
+            } else {
+                Expression::CFalse
+            }
+        },
+        "(==) is only defined for numbers (integers and real).",
+    )
+}
+
+fn eval_neq(
+    lhs: Expression,
+    rhs: Expression,
+    env: &Environment<Expression>,
+) -> Result<Expression, ErrorMessage> {
+    eval_binary_rel_op(
+        lhs,
+        rhs,
+        env,
+        |a, b| {
+            if a != b {
+                Expression::CTrue
+            } else {
+                Expression::CFalse
+            }
+        },
+        "(!=) is only defined for numbers (integers and real).",
+    )
+}
+
+fn eval_gt(
+    lhs: Expression,
+    rhs: Expression,
+    env: &Environment<Expression>,
+) -> Result<Expression, ErrorMessage> {
+    eval_binary_rel_op(
+        lhs,
+        rhs,
+        env,
+        |a, b| {
+            if a > b {
+                Expression::CTrue
+            } else {
+                Expression::CFalse
+            }
+        },
+        "(>) is only defined for numbers (integers and real).",
+    )
+}
+
+fn eval_lt(
+    lhs: Expression,
+    rhs: Expression,
+    env: &Environment<Expression>,
+) -> Result<Expression, ErrorMessage> {
+    eval_binary_rel_op(
+        lhs,
+        rhs,
+        env,
+        |a, b| {
+            if a < b {
+                Expression::CTrue
+            } else {
+                Expression::CFalse
+            }
+        },
+        "(<) is only defined for numbers (integers and real).",
+    )
+}
+
+fn eval_gte(
+    lhs: Expression,
+    rhs: Expression,
+    env: &Environment<Expression>,
+) -> Result<Expression, ErrorMessage> {
+    eval_binary_rel_op(
+        lhs,
+        rhs,
+        env,
+        |a, b| {
+            if a >= b {
+                Expression::CTrue
+            } else {
+                Expression::CFalse
+            }
+        },
+        "(>=) is only defined for numbers (integers and real).",
+    )
+}
+
+fn eval_lte(
+    lhs: Expression,
+    rhs: Expression,
+    env: &Environment<Expression>,
+) -> Result<Expression, ErrorMessage> {
+    eval_binary_rel_op(
+        lhs,
+        rhs,
+        env,
+        |a, b| {
+            if a <= b {
+                Expression::CTrue
+            } else {
+                Expression::CFalse
+            }
+        },
+        "(<=) is only defined for numbers (integers and real).",
+    )
+}
+
+// Variable lookup
+pub fn eval_lookup(name: String, env: &Environment<Expression>) -> Result<Expression, ErrorMessage> {
     match env.lookup(&name) {
         Some((_, value)) => Ok(value.clone()),
         None => Err((format!("Variable '{}' not found", name), None)),
     }
 }
 
-pub fn call(
+// Function call
+pub fn eval_call(
     name: Name,
     args: Vec<Expression>,
     env: &Environment<Expression>,
@@ -88,290 +389,6 @@ pub fn call(
         }
         _ => Err((format!("Function {} not found", name), None)),
     }
-}
-
-// Arithmetic Operations
-fn eval_binary_arith_op<F>(
-    lhs: Expression,
-    rhs: Expression,
-    env: &Environment<Expression>,
-    op: F,
-    error_msg: &str,
-) -> Result<Expression, ErrorMessage>
-where
-    F: Fn(f64, f64) -> f64,
-{
-    let v1 = eval(lhs, env)?;
-    let v2 = eval(rhs, env)?;
-
-    match (v1, v2) {
-        (Expression::CInt(v1), Expression::CInt(v2)) => {
-            Ok(Expression::CInt(op(v1 as f64, v2 as f64) as i32))
-        }
-        (Expression::CInt(v1), Expression::CReal(v2)) => Ok(Expression::CReal(op(v1 as f64, v2))),
-        (Expression::CReal(v1), Expression::CInt(v2)) => Ok(Expression::CReal(op(v1, v2 as f64))),
-        (Expression::CReal(v1), Expression::CReal(v2)) => Ok(Expression::CReal(op(v1, v2))),
-        _ => Err((error_msg.to_string(), None)),
-    }
-}
-
-fn add(
-    lhs: Expression,
-    rhs: Expression,
-    env: &Environment<Expression>,
-) -> Result<Expression, ErrorMessage> {
-    eval_binary_arith_op(
-        lhs,
-        rhs,
-        env,
-        |a, b| a + b,
-        "addition '(+)' is only defined for numbers (integers and real).",
-    )
-}
-fn sub(
-    lhs: Expression,
-    rhs: Expression,
-    env: &Environment<Expression>,
-) -> Result<Expression, ErrorMessage> {
-    eval_binary_arith_op(
-        lhs,
-        rhs,
-        env,
-        |a, b| a - b,
-        "subtraction '(-)' is only defined for numbers (integers and real).",
-    )
-}
-fn mul(
-    lhs: Expression,
-    rhs: Expression,
-    env: &Environment<Expression>,
-) -> Result<Expression, ErrorMessage> {
-    eval_binary_arith_op(
-        lhs,
-        rhs,
-        env,
-        |a, b| a * b,
-        "multiplication '(*)' is only defined for numbers (integers and real).",
-    )
-}
-fn div(
-    lhs: Expression,
-    rhs: Expression,
-    env: &Environment<Expression>,
-) -> Result<Expression, ErrorMessage> {
-    eval_binary_arith_op(
-        lhs,
-        rhs,
-        env,
-        |a, b| a / b,
-        "division '(/)' is only defined for numbers (integers and real).",
-    )
-}
-
-// Boolean Operations
-fn eval_binary_boolean_op<F>(
-    lhs: Expression,
-    rhs: Expression,
-    env: &Environment<Expression>,
-    op: F,
-    error_msg: &str,
-) -> Result<Expression, ErrorMessage>
-where
-    F: Fn(bool, bool) -> Expression,
-{
-    let v1 = eval(lhs, env)?;
-    let v2 = eval(rhs, env)?;
-
-    match (v1, v2) {
-        (Expression::CTrue, Expression::CTrue) => Ok(op(true, true)),
-        (Expression::CTrue, Expression::CFalse) => Ok(op(true, false)),
-        (Expression::CFalse, Expression::CTrue) => Ok(op(false, true)),
-        (Expression::CFalse, Expression::CFalse) => Ok(op(false, false)),
-        _ => Err((error_msg.to_string(), None)),
-    }
-}
-fn and(
-    lhs: Expression,
-    rhs: Expression,
-    env: &Environment<Expression>,
-) -> Result<Expression, ErrorMessage> {
-    eval_binary_boolean_op(
-        lhs,
-        rhs,
-        env,
-        |a, b| {
-            if a && b {
-                Expression::CTrue
-            } else {
-                Expression::CFalse
-            }
-        },
-        "'and' is only defined for booleans.",
-    )
-}
-fn or(
-    lhs: Expression,
-    rhs: Expression,
-    env: &Environment<Expression>,
-) -> Result<Expression, ErrorMessage> {
-    eval_binary_boolean_op(
-        lhs,
-        rhs,
-        env,
-        |a, b| {
-            if a || b {
-                Expression::CTrue
-            } else {
-                Expression::CFalse
-            }
-        },
-        "'or' is only defined for booleans.",
-    )
-}
-fn not(lhs: Expression, env: &Environment<Expression>) -> Result<Expression, ErrorMessage> {
-    let v = eval(lhs, env)?;
-    match v {
-        Expression::CTrue => Ok(Expression::CFalse),
-        Expression::CFalse => Ok(Expression::CTrue),
-        _ => Err((String::from("'not' is only defined for booleans."), None)),
-    }
-}
-
-// Relational Operations
-fn eval_binary_rel_op<F>(
-    lhs: Expression,
-    rhs: Expression,
-    env: &Environment<Expression>,
-    op: F,
-    error_msg: &str,
-) -> Result<Expression, ErrorMessage>
-where
-    F: Fn(f64, f64) -> Expression,
-{
-    let v1 = eval(lhs, env)?;
-    let v2 = eval(rhs, env)?;
-
-    match (v1, v2) {
-        (Expression::CInt(v1), Expression::CInt(v2)) => Ok(op(v1 as f64, v2 as f64)),
-        (Expression::CInt(v1), Expression::CReal(v2)) => Ok(op(v1 as f64, v2)),
-        (Expression::CReal(v1), Expression::CInt(v2)) => Ok(op(v1, v2 as f64)),
-        (Expression::CReal(v1), Expression::CReal(v2)) => Ok(op(v1, v2)),
-        _ => Err((error_msg.to_string(), None)),
-    }
-}
-fn eq(
-    lhs: Expression,
-    rhs: Expression,
-    env: &Environment<Expression>,
-) -> Result<Expression, ErrorMessage> {
-    eval_binary_rel_op(
-        lhs,
-        rhs,
-        env,
-        |a, b| {
-            if a == b {
-                Expression::CTrue
-            } else {
-                Expression::CFalse
-            }
-        },
-        "(==) is only defined for numbers (integers and real).",
-    )
-}
-fn neq(
-    lhs: Expression,
-    rhs: Expression,
-    env: &Environment<Expression>,
-) -> Result<Expression, ErrorMessage> {
-    eval_binary_rel_op(
-        lhs,
-        rhs,
-        env,
-        |a, b| {
-            if a != b {
-                Expression::CTrue
-            } else {
-                Expression::CFalse
-            }
-        },
-        "(!=) is only defined for numbers (integers and real).",
-    )
-}
-fn gt(
-    lhs: Expression,
-    rhs: Expression,
-    env: &Environment<Expression>,
-) -> Result<Expression, ErrorMessage> {
-    eval_binary_rel_op(
-        lhs,
-        rhs,
-        env,
-        |a, b| {
-            if a > b {
-                Expression::CTrue
-            } else {
-                Expression::CFalse
-            }
-        },
-        "(>) is only defined for numbers (integers and real).",
-    )
-}
-fn lt(
-    lhs: Expression,
-    rhs: Expression,
-    env: &Environment<Expression>,
-) -> Result<Expression, ErrorMessage> {
-    eval_binary_rel_op(
-        lhs,
-        rhs,
-        env,
-        |a, b| {
-            if a < b {
-                Expression::CTrue
-            } else {
-                Expression::CFalse
-            }
-        },
-        "(<) is only defined for numbers (integers and real).",
-    )
-}
-fn gte(
-    lhs: Expression,
-    rhs: Expression,
-    env: &Environment<Expression>,
-) -> Result<Expression, ErrorMessage> {
-    eval_binary_rel_op(
-        lhs,
-        rhs,
-        env,
-        |a, b| {
-            if a >= b {
-                Expression::CTrue
-            } else {
-                Expression::CFalse
-            }
-        },
-        "(>=) is only defined for numbers (integers and real).",
-    )
-}
-fn lte(
-    lhs: Expression,
-    rhs: Expression,
-    env: &Environment<Expression>,
-) -> Result<Expression, ErrorMessage> {
-    eval_binary_rel_op(
-        lhs,
-        rhs,
-        env,
-        |a, b| {
-            if a <= b {
-                Expression::CTrue
-            } else {
-                Expression::CFalse
-            }
-        },
-        "(<=) is only defined for numbers (integers and real).",
-    )
 }
 
 // Other helpers
