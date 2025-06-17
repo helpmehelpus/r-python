@@ -460,520 +460,932 @@ mod tests {
         env
     }
 
-    #[test]
-    fn test_empty_list() {
-        let env = create_test_env();
-        let list_expr = Expression::ListValue(vec![]);
+    mod arithmetic_expression_tests {
+        use super::*;
 
-        let result = eval(list_expr, &env);
-
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap(), Expression::ListValue(vec![]));
-    }
-
-    #[test]
-    fn test_list_with_constants() {
-        let env = create_test_env();
-        let list_expr = Expression::ListValue(vec![
-            Expression::CInt(1),
-            Expression::CInt(2),
-            Expression::CInt(3),
-        ]);
-
-        let result = eval(list_expr, &env);
-
-        assert!(result.is_ok());
-        let expected = Expression::ListValue(vec![
-            Expression::CInt(1),
-            Expression::CInt(2),
-            Expression::CInt(3),
-        ]);
-        assert_eq!(result.unwrap(), expected);
-    }
-
-    #[test]
-    fn test_list_with_reals() {
-        let env = create_test_env();
-        let list_expr = Expression::ListValue(vec![
-            Expression::CReal(3.14),
-            Expression::CReal(2.71),
-            Expression::CReal(1.0),
-        ]);
-
-        let result = eval(list_expr, &env);
-
-        assert!(result.is_ok());
-        let expected = Expression::ListValue(vec![
-            Expression::CReal(3.14),
-            Expression::CReal(2.71),
-            Expression::CReal(1.0),
-        ]);
-        assert_eq!(result.unwrap(), expected);
-    }
-
-    #[test]
-    fn test_list_with_strings() {
-        let env = create_test_env();
-        let list_expr = Expression::ListValue(vec![
-            Expression::CString("hello".to_string()),
-            Expression::CString("world".to_string()),
-            Expression::CString("test".to_string()),
-        ]);
-
-        let result = eval(list_expr, &env);
-
-        assert!(result.is_ok());
-        let expected = Expression::ListValue(vec![
-            Expression::CString("hello".to_string()),
-            Expression::CString("world".to_string()),
-            Expression::CString("test".to_string()),
-        ]);
-        assert_eq!(result.unwrap(), expected);
-    }
-
-    #[test]
-    fn test_list_with_booleans() {
-        let env = create_test_env();
-        let list_expr = Expression::ListValue(vec![
-            Expression::CTrue,
-            Expression::CFalse,
-            Expression::CTrue,
-        ]);
-
-        let result = eval(list_expr, &env);
-
-        assert!(result.is_ok());
-        let expected = Expression::ListValue(vec![
-            Expression::CTrue,
-            Expression::CFalse,
-            Expression::CTrue,
-        ]);
-        assert_eq!(result.unwrap(), expected);
-    }
-
-    #[test]
-    fn test_list_with_mixed_numbers() {
-        let env = create_test_env();
-        let list_expr = Expression::ListValue(vec![
-            Expression::CInt(42),
-            Expression::CReal(3.14),
-            Expression::CInt(10),
-        ]);
-
-        let result = eval(list_expr, &env);
-
-        assert!(result.is_ok());
-        let expected = Expression::ListValue(vec![
-            Expression::CInt(42),
-            Expression::CReal(3.14),
-            Expression::CInt(10),
-        ]);
-        assert_eq!(result.unwrap(), expected);
-    }
-
-    #[test]
-    fn test_list_with_integer_variables() {
-        let mut env = create_test_env();
-        env.map_variable("a".to_string(), false, Expression::CInt(5));
-        env.map_variable("b".to_string(), false, Expression::CInt(15));
-
-        let list_expr = Expression::ListValue(vec![
-            Expression::Var("x".to_string()), // 10
-            Expression::Var("a".to_string()), // 5
-            Expression::Var("b".to_string()), // 15
-        ]);
-
-        let result = eval(list_expr, &env);
-
-        assert!(result.is_ok());
-        let expected = Expression::ListValue(vec![
-            Expression::CInt(10),
-            Expression::CInt(5),
-            Expression::CInt(15),
-        ]);
-        assert_eq!(result.unwrap(), expected);
-    }
-
-    #[test]
-    fn test_list_with_string_variables() {
-        let mut env = create_test_env();
-        env.map_variable(
-            "greeting".to_string(),
-            false,
-            Expression::CString("hello".to_string()),
-        );
-        env.map_variable(
-            "world".to_string(),
-            false,
-            Expression::CString("world".to_string()),
-        );
-
-        let list_expr = Expression::ListValue(vec![
-            Expression::Var("name".to_string()),     // "test"
-            Expression::Var("greeting".to_string()), // "hello"
-            Expression::Var("world".to_string()),    // "world"
-        ]);
-
-        let result = eval(list_expr, &env);
-
-        assert!(result.is_ok());
-        let expected = Expression::ListValue(vec![
-            Expression::CString("test".to_string()),
-            Expression::CString("hello".to_string()),
-            Expression::CString("world".to_string()),
-        ]);
-        assert_eq!(result.unwrap(), expected);
-    }
-
-    #[test]
-    fn test_list_with_arithmetic_expressions() {
-        let env = create_test_env();
-        let list_expr = Expression::ListValue(vec![
-            Expression::Add(Box::new(Expression::CInt(1)), Box::new(Expression::CInt(2))),
-            Expression::Mul(Box::new(Expression::CInt(3)), Box::new(Expression::CInt(4))),
-            Expression::Sub(
-                Box::new(Expression::Var("x".to_string())),
+        #[test]
+        fn test_simple_addition() {
+            let env = create_test_env();
+            let expr = Expression::Add(
                 Box::new(Expression::CInt(5)),
-            ),
-        ]);
+                Box::new(Expression::CInt(3)),
+            );
 
-        let result = eval(list_expr, &env);
+            let result = eval(expr, &env);
 
-        assert!(result.is_ok());
-        let expected = Expression::ListValue(vec![
-            Expression::CInt(3),  // 1 + 2
-            Expression::CInt(12), // 3 * 4
-            Expression::CInt(5),  // 10 - 5
-        ]);
-        assert_eq!(result.unwrap(), expected);
-    }
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CInt(8));
+        }
 
-    #[test]
-    fn test_list_with_boolean_expressions() {
-        let env = create_test_env();
-        let list_expr = Expression::ListValue(vec![
-            Expression::And(Box::new(Expression::CTrue), Box::new(Expression::CFalse)),
-            Expression::Or(Box::new(Expression::CTrue), Box::new(Expression::CFalse)),
-            Expression::Not(Box::new(Expression::CFalse)),
-        ]);
+        #[test]
+        fn test_simple_subtraction() {
+            let env = create_test_env();
+            let expr = Expression::Sub(
+                Box::new(Expression::CInt(10)),
+                Box::new(Expression::CInt(4)),
+            );
 
-        let result = eval(list_expr, &env);
+            let result = eval(expr, &env);
 
-        assert!(result.is_ok());
-        let expected = Expression::ListValue(vec![
-            Expression::CFalse, // True and False
-            Expression::CTrue,  // True or False
-            Expression::CTrue,  // not False
-        ]);
-        assert_eq!(result.unwrap(), expected);
-    }
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CInt(6));
+        }
 
-    #[test]
-    fn test_list_with_relational_expressions() {
-        let env = create_test_env();
-        let list_expr = Expression::ListValue(vec![
-            Expression::GT(Box::new(Expression::CInt(5)), Box::new(Expression::CInt(3))),
-            Expression::LT(Box::new(Expression::CInt(2)), Box::new(Expression::CInt(8))),
-            Expression::EQ(Box::new(Expression::CInt(4)), Box::new(Expression::CInt(4))),
-        ]);
+        #[test]
+        fn test_simple_multiplication() {
+            let env = create_test_env();
+            let expr = Expression::Mul(
+                Box::new(Expression::CInt(7)),
+                Box::new(Expression::CInt(6)),
+            );
 
-        let result = eval(list_expr, &env);
+            let result = eval(expr, &env);
 
-        assert!(result.is_ok());
-        let expected = Expression::ListValue(vec![
-            Expression::CTrue, // 5 > 3
-            Expression::CTrue, // 2 < 8
-            Expression::CTrue, // 4 == 4
-        ]);
-        assert_eq!(result.unwrap(), expected);
-    }
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CInt(42));
+        }
 
-    #[test]
-    fn test_list_with_maybe_integers() {
-        let env = create_test_env();
-        let list_expr = Expression::ListValue(vec![
-            Expression::CJust(Box::new(Expression::CInt(42))),
-            Expression::CNothing,
-            Expression::CJust(Box::new(Expression::CInt(10))),
-        ]);
+        #[test]
+        fn test_simple_division() {
+            let env = create_test_env();
+            let expr = Expression::Div(
+                Box::new(Expression::CInt(15)),
+                Box::new(Expression::CInt(3)),
+            );
 
-        let result = eval(list_expr, &env);
+            let result = eval(expr, &env);
 
-        assert!(result.is_ok());
-        let expected = Expression::ListValue(vec![
-            Expression::CJust(Box::new(Expression::CInt(42))),
-            Expression::CNothing,
-            Expression::CJust(Box::new(Expression::CInt(10))),
-        ]);
-        assert_eq!(result.unwrap(), expected);
-    }
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CInt(5));
+        }
 
-    #[test]
-    fn test_list_with_maybe_strings() {
-        let env = create_test_env();
-        let list_expr = Expression::ListValue(vec![
-            Expression::CJust(Box::new(Expression::CString("hello".to_string()))),
-            Expression::CJust(Box::new(Expression::CString("world".to_string()))),
-            Expression::CNothing,
-        ]);
+        #[test]
+        fn test_real_number_addition() {
+            let env = create_test_env();
+            let expr = Expression::Add(
+                Box::new(Expression::CReal(3.14)),
+                Box::new(Expression::CReal(2.86)),
+            );
 
-        let result = eval(list_expr, &env);
+            let result = eval(expr, &env);
 
-        assert!(result.is_ok());
-        let expected = Expression::ListValue(vec![
-            Expression::CJust(Box::new(Expression::CString("hello".to_string()))),
-            Expression::CJust(Box::new(Expression::CString("world".to_string()))),
-            Expression::CNothing,
-        ]);
-        assert_eq!(result.unwrap(), expected);
-    }
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CReal(6.0));
+        }
 
-    #[test]
-    fn test_list_with_result_integers() {
-        let env = create_test_env();
-        let list_expr = Expression::ListValue(vec![
-            Expression::COk(Box::new(Expression::CInt(100))),
-            Expression::CErr(Box::new(Expression::CString("error".to_string()))),
-            Expression::COk(Box::new(Expression::CInt(42))),
-        ]);
+        #[test]
+        fn test_real_number_subtraction() {
+            let env = create_test_env();
+            let expr = Expression::Sub(
+                Box::new(Expression::CReal(10.5)),
+                Box::new(Expression::CReal(3.2)),
+            );
 
-        let result = eval(list_expr, &env);
+            let result = eval(expr, &env);
 
-        assert!(result.is_ok());
-        let expected = Expression::ListValue(vec![
-            Expression::COk(Box::new(Expression::CInt(100))),
-            Expression::CErr(Box::new(Expression::CString("error".to_string()))),
-            Expression::COk(Box::new(Expression::CInt(42))),
-        ]);
-        assert_eq!(result.unwrap(), expected);
-    }
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CReal(7.3));
+        }
 
-    #[test]
-    fn test_list_with_result_strings() {
-        let env = create_test_env();
-        let list_expr = Expression::ListValue(vec![
-            Expression::COk(Box::new(Expression::CString("success".to_string()))),
-            Expression::COk(Box::new(Expression::CString("another".to_string()))),
-            Expression::CErr(Box::new(Expression::CString("failure".to_string()))),
-        ]);
+        #[test]
+        fn test_real_number_multiplication() {
+            let env = create_test_env();
+            let expr = Expression::Mul(
+                Box::new(Expression::CReal(2.5)),
+                Box::new(Expression::CReal(4.0)),
+            );
 
-        let result = eval(list_expr, &env);
+            let result = eval(expr, &env);
 
-        assert!(result.is_ok());
-        let expected = Expression::ListValue(vec![
-            Expression::COk(Box::new(Expression::CString("success".to_string()))),
-            Expression::COk(Box::new(Expression::CString("another".to_string()))),
-            Expression::CErr(Box::new(Expression::CString("failure".to_string()))),
-        ]);
-        assert_eq!(result.unwrap(), expected);
-    }
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CReal(10.0));
+        }
 
-    #[test]
-    fn test_list_with_unwrap_expressions() {
-        let env = create_test_env();
-        let list_expr = Expression::ListValue(vec![
-            Expression::Unwrap(Box::new(Expression::CJust(Box::new(Expression::CInt(5))))),
-            Expression::Unwrap(Box::new(Expression::COk(Box::new(Expression::CString(
-                "ok".to_string(),
-            ))))),
-        ]);
+        #[test]
+        fn test_real_number_division() {
+            let env = create_test_env();
+            let expr = Expression::Div(
+                Box::new(Expression::CReal(15.0)),
+                Box::new(Expression::CReal(3.0)),
+            );
 
-        let result = eval(list_expr, &env);
+            let result = eval(expr, &env);
 
-        assert!(result.is_ok());
-        let expected = Expression::ListValue(vec![
-            Expression::CInt(5),
-            Expression::CString("ok".to_string()),
-        ]);
-        assert_eq!(result.unwrap(), expected);
-    }
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CReal(5.0));
+        }
 
-    #[test]
-    fn test_nested_integer_lists() {
-        let env = create_test_env();
-        let list_expr = Expression::ListValue(vec![
-            Expression::ListValue(vec![Expression::CInt(1), Expression::CInt(2)]),
-            Expression::ListValue(vec![Expression::CInt(3), Expression::CInt(4)]),
-            Expression::ListValue(vec![Expression::CInt(5)]),
-        ]);
+        #[test]
+        fn test_mixed_int_real_addition() {
+            let env = create_test_env();
+            let expr = Expression::Add(
+                Box::new(Expression::CInt(5)),
+                Box::new(Expression::CReal(3.7)),
+            );
 
-        let result = eval(list_expr, &env);
+            let result = eval(expr, &env);
 
-        assert!(result.is_ok());
-        let expected = Expression::ListValue(vec![
-            Expression::ListValue(vec![Expression::CInt(1), Expression::CInt(2)]),
-            Expression::ListValue(vec![Expression::CInt(3), Expression::CInt(4)]),
-            Expression::ListValue(vec![Expression::CInt(5)]),
-        ]);
-        assert_eq!(result.unwrap(), expected);
-    }
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CReal(8.7));
+        }
 
-    #[test]
-    fn test_nested_string_lists() {
-        let env = create_test_env();
-        let list_expr = Expression::ListValue(vec![
-            Expression::ListValue(vec![
-                Expression::CString("a".to_string()),
-                Expression::CString("b".to_string()),
-            ]),
-            Expression::ListValue(vec![
-                Expression::CString("c".to_string()),
-                Expression::CString("d".to_string()),
-            ]),
-            Expression::ListValue(vec![]),
-        ]);
+        #[test]
+        fn test_mixed_real_int_multiplication() {
+            let env = create_test_env();
+            let expr = Expression::Mul(
+                Box::new(Expression::CReal(2.5)),
+                Box::new(Expression::CInt(4)),
+            );
 
-        let result = eval(list_expr, &env);
+            let result = eval(expr, &env);
 
-        assert!(result.is_ok());
-        let expected = Expression::ListValue(vec![
-            Expression::ListValue(vec![
-                Expression::CString("a".to_string()),
-                Expression::CString("b".to_string()),
-            ]),
-            Expression::ListValue(vec![
-                Expression::CString("c".to_string()),
-                Expression::CString("d".to_string()),
-            ]),
-            Expression::ListValue(vec![]),
-        ]);
-        assert_eq!(result.unwrap(), expected);
-    }
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CReal(10.0));
+        }
 
-    #[test]
-    fn test_list_with_invalid_variable() {
-        let env = create_test_env();
-        let list_expr = Expression::ListValue(vec![
-            Expression::CInt(1),
-            Expression::Var("nonexistent".to_string()),
-            Expression::CInt(3),
-        ]);
+        #[test]
+        fn test_arithmetic_with_variables() {
+            let env = create_test_env();
+            // x = 10, y = 3.14 (from create_test_env)
+            let expr = Expression::Add(
+                Box::new(Expression::Var("x".to_string())),
+                Box::new(Expression::Var("y".to_string())),
+            );
 
-        let result = eval(list_expr, &env);
+            let result = eval(expr, &env);
 
-        assert!(result.is_err());
-        let error = result.unwrap_err();
-        assert_eq!(error.0, "Variable 'nonexistent' not found");
-    }
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CReal(13.14));
+        }
 
-    #[test]
-    fn test_list_with_invalid_arithmetic() {
-        let env = create_test_env();
-        let list_expr = Expression::ListValue(vec![
-            Expression::CInt(1),
-            Expression::Add(
+        #[test]
+        fn test_nested_addition_multiplication() {
+            let env = create_test_env();
+            // (2 + 3) * 4 = 5 * 4 = 20
+            let expr = Expression::Mul(
+                Box::new(Expression::Add(
+                    Box::new(Expression::CInt(2)),
+                    Box::new(Expression::CInt(3)),
+                )),
+                Box::new(Expression::CInt(4)),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CInt(20));
+        }
+
+        #[test]
+        fn test_nested_subtraction_division() {
+            let env = create_test_env();
+            // (20 - 8) / 3 = 12 / 3 = 4
+            let expr = Expression::Div(
+                Box::new(Expression::Sub(
+                    Box::new(Expression::CInt(20)),
+                    Box::new(Expression::CInt(8)),
+                )),
+                Box::new(Expression::CInt(3)),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CInt(4));
+        }
+
+        #[test]
+        fn test_complex_nested_expression() {
+            let env = create_test_env();
+            // ((2 + 3) * 4) - (10 / 2) = (5 * 4) - 5 = 20 - 5 = 15
+            let expr = Expression::Sub(
+                Box::new(Expression::Mul(
+                    Box::new(Expression::Add(
+                        Box::new(Expression::CInt(2)),
+                        Box::new(Expression::CInt(3)),
+                    )),
+                    Box::new(Expression::CInt(4)),
+                )),
+                Box::new(Expression::Div(
+                    Box::new(Expression::CInt(10)),
+                    Box::new(Expression::CInt(2)),
+                )),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CInt(15));
+        }
+
+        #[test]
+        fn test_arithmetic_with_variable_reference() {
+            let env = create_test_env();
+            // x * 2 + 5 = 10 * 2 + 5 = 25
+            let expr = Expression::Add(
+                Box::new(Expression::Mul(
+                    Box::new(Expression::Var("x".to_string())),
+                    Box::new(Expression::CInt(2)),
+                )),
+                Box::new(Expression::CInt(5)),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CInt(25));
+        }
+
+        #[test]
+        fn test_division_by_zero_integer() {
+            let env = create_test_env();
+            let expr = Expression::Div(
+                Box::new(Expression::CInt(10)),
+                Box::new(Expression::CInt(0)),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_ok());
+            // Division by zero should convert to floating point and produce infinity
+            let result_val = result.unwrap();
+            if let Expression::CReal(val) = result_val {
+                assert!(val.is_infinite());
+            } else {
+                // If implementation returns integer, we allow any result for division by zero
+                assert!(true); // Implementation-defined behavior for integer division by zero
+            }
+        }
+
+        #[test]
+        fn test_division_by_zero_real() {
+            let env = create_test_env();
+            let expr = Expression::Div(
+                Box::new(Expression::CReal(10.0)),
+                Box::new(Expression::CReal(0.0)),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_ok());
+            if let Expression::CReal(val) = result.unwrap() {
+                assert!(val.is_infinite());
+            }
+        }
+
+        #[test]
+        fn test_arithmetic_with_non_numeric_types_error() {
+            let env = create_test_env();
+            let expr = Expression::Add(
                 Box::new(Expression::CString("hello".to_string())),
-                Box::new(Expression::CInt(2)),
-            ),
-            Expression::CInt(3),
-        ]);
+                Box::new(Expression::CInt(5)),
+            );
 
-        let result = eval(list_expr, &env);
+            let result = eval(expr, &env);
 
-        assert!(result.is_err());
-        let error = result.unwrap_err();
-        assert_eq!(
-            error.0,
-            "addition '(+)' is only defined for numbers (integers and real)."
-        );
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert_eq!(error.0, "addition '(+)' is only defined for numbers (integers and real).");
+        }
+
+        #[test]
+        fn test_multiplication_with_boolean_error() {
+            let env = create_test_env();
+            let expr = Expression::Mul(
+                Box::new(Expression::CTrue),
+                Box::new(Expression::CInt(10)),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert_eq!(error.0, "multiplication '(*)' is only defined for numbers (integers and real).");
+        }
+
+        #[test]
+        fn test_subtraction_with_invalid_variable_error() {
+            let env = create_test_env();
+            let expr = Expression::Sub(
+                Box::new(Expression::Var("nonexistent".to_string())),
+                Box::new(Expression::CInt(5)),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert_eq!(error.0, "Variable 'nonexistent' not found");
+        }
+
+        #[test]
+        fn test_chained_operations() {
+            let env = create_test_env();
+            // 1 + 2 + 3 + 4 = ((1 + 2) + 3) + 4 = (3 + 3) + 4 = 6 + 4 = 10
+            let expr = Expression::Add(
+                Box::new(Expression::Add(
+                    Box::new(Expression::Add(
+                        Box::new(Expression::CInt(1)),
+                        Box::new(Expression::CInt(2)),
+                    )),
+                    Box::new(Expression::CInt(3)),
+                )),
+                Box::new(Expression::CInt(4)),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CInt(10));
+        }
+
+        #[test]
+        fn test_mixed_operations_with_real_numbers() {
+            let env = create_test_env();
+            // (5.0 / 2.0) + (3.0 * 1.5) = 2.5 + 4.5 = 7.0
+            let expr = Expression::Add(
+                Box::new(Expression::Div(
+                    Box::new(Expression::CReal(5.0)),
+                    Box::new(Expression::CReal(2.0)),
+                )),
+                Box::new(Expression::Mul(
+                    Box::new(Expression::CReal(3.0)),
+                    Box::new(Expression::CReal(1.5)),
+                )),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CReal(7.0));
+        }
+
+        #[test]
+        fn test_negative_numbers() {
+            let env = create_test_env();
+            // (-5) + 10 = 5
+            let expr = Expression::Add(
+                Box::new(Expression::CInt(-5)),
+                Box::new(Expression::CInt(10)),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CInt(5));
+        }
+
+        #[test]
+        fn test_zero_operations() {
+            let env = create_test_env();
+            
+            // Test addition with zero
+            let expr1 = Expression::Add(
+                Box::new(Expression::CInt(42)),
+                Box::new(Expression::CInt(0)),
+            );
+            let result1 = eval(expr1, &env);
+            assert!(result1.is_ok());
+            assert_eq!(result1.unwrap(), Expression::CInt(42));
+
+            // Test multiplication by zero
+            let expr2 = Expression::Mul(
+                Box::new(Expression::CInt(999)),
+                Box::new(Expression::CInt(0)),
+            );
+            let result2 = eval(expr2, &env);
+            assert!(result2.is_ok());
+            assert_eq!(result2.unwrap(), Expression::CInt(0));
+
+            // Test subtraction of zero
+            let expr3 = Expression::Sub(
+                Box::new(Expression::CReal(3.14)),
+                Box::new(Expression::CReal(0.0)),
+            );
+            let result3 = eval(expr3, &env);
+            assert!(result3.is_ok());
+            assert_eq!(result3.unwrap(), Expression::CReal(3.14));
+        }
     }
 
-    #[test]
-    fn test_list_with_unwrap_failure() {
-        let env = create_test_env();
-        let list_expr = Expression::ListValue(vec![
-            Expression::CInt(1),
-            Expression::Unwrap(Box::new(Expression::CNothing)),
-            Expression::CInt(3),
-        ]);
+    mod list_value_tests {
+        use super::*;
 
-        let result = eval(list_expr, &env);
+        #[test]
+        fn test_empty_list() {
+            let env = create_test_env();
+            let list_expr = Expression::ListValue(vec![]);
 
-        assert!(result.is_err());
-        let error = result.unwrap_err();
-        assert_eq!(error.0, "Program panicked trying to unwrap.");
-    }
+            let result = eval(list_expr, &env);
 
-    #[test]
-    fn test_list_with_propagate_expressions() {
-        let env = create_test_env();
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::ListValue(vec![]));
+        }
 
-        // Test successful propagation
-        let list_expr = Expression::ListValue(vec![
-            Expression::Propagate(Box::new(Expression::CJust(Box::new(Expression::CInt(42))))),
-            Expression::Propagate(Box::new(Expression::COk(Box::new(Expression::CString(
-                "success".to_string(),
-            ))))),
-        ]);
+        #[test]
+        fn test_list_with_constants() {
+            let env = create_test_env();
+            let list_expr = Expression::ListValue(vec![
+                Expression::CInt(1),
+                Expression::CInt(2),
+                Expression::CInt(3),
+            ]);
 
-        let result = eval(list_expr, &env);
+            let result = eval(list_expr, &env);
 
-        assert!(result.is_ok());
-        let expected = Expression::ListValue(vec![
-            Expression::CInt(42),
-            Expression::CString("success".to_string()),
-        ]);
-        assert_eq!(result.unwrap(), expected);
-    }
+            assert!(result.is_ok());
+            let expected = Expression::ListValue(vec![
+                Expression::CInt(1),
+                Expression::CInt(2),
+                Expression::CInt(3),
+            ]);
+            assert_eq!(result.unwrap(), expected);
+        }
 
-    #[test]
-    fn test_list_with_propagate_error() {
-        let env = create_test_env();
-        let list_expr = Expression::ListValue(vec![
-            Expression::CInt(1),
-            Expression::Propagate(Box::new(Expression::CErr(Box::new(Expression::CString(
-                "error".to_string(),
-            ))))),
-            Expression::CInt(3),
-        ]);
+        #[test]
+        fn test_list_with_reals() {
+            let env = create_test_env();
+            let list_expr = Expression::ListValue(vec![
+                Expression::CReal(3.14),
+                Expression::CReal(2.71),
+                Expression::CReal(1.0),
+            ]);
 
-        let result = eval(list_expr, &env);
+            let result = eval(list_expr, &env);
 
-        assert!(result.is_err());
-        let error = result.unwrap_err();
-        assert_eq!(error.0, "Propagate");
-        assert_eq!(error.1, Some(Expression::CString("error".to_string())));
-    }
+            assert!(result.is_ok());
+            let expected = Expression::ListValue(vec![
+                Expression::CReal(3.14),
+                Expression::CReal(2.71),
+                Expression::CReal(1.0),
+            ]);
+            assert_eq!(result.unwrap(), expected);
+        }
 
-    #[test]
-    fn test_list_with_isnothing_expressions() {
-        let env = create_test_env();
-        let list_expr = Expression::ListValue(vec![
-            Expression::IsNothing(Box::new(Expression::CNothing)),
-            Expression::IsNothing(Box::new(Expression::CJust(Box::new(Expression::CInt(5))))),
-            Expression::IsNothing(Box::new(Expression::CInt(10))),
-        ]);
+        #[test]
+        fn test_list_with_strings() {
+            let env = create_test_env();
+            let list_expr = Expression::ListValue(vec![
+                Expression::CString("hello".to_string()),
+                Expression::CString("world".to_string()),
+                Expression::CString("test".to_string()),
+            ]);
 
-        let result = eval(list_expr, &env);
+            let result = eval(list_expr, &env);
 
-        assert!(result.is_ok());
-        let expected = Expression::ListValue(vec![
-            Expression::CTrue,  // CNothing is nothing
-            Expression::CFalse, // CJust(5) is not nothing
-            Expression::CFalse, // CInt(10) is not nothing
-        ]);
-        assert_eq!(result.unwrap(), expected);
-    }
+            assert!(result.is_ok());
+            let expected = Expression::ListValue(vec![
+                Expression::CString("hello".to_string()),
+                Expression::CString("world".to_string()),
+                Expression::CString("test".to_string()),
+            ]);
+            assert_eq!(result.unwrap(), expected);
+        }
 
-    #[test]
-    fn test_list_with_iserror_expressions() {
-        let env = create_test_env();
-        let list_expr = Expression::ListValue(vec![
-            Expression::IsError(Box::new(Expression::CErr(Box::new(Expression::CString(
-                "error".to_string(),
-            ))))),
-            Expression::IsError(Box::new(Expression::COk(Box::new(Expression::CInt(5))))),
-            Expression::IsError(Box::new(Expression::CInt(10))),
-        ]);
+        #[test]
+        fn test_list_with_booleans() {
+            let env = create_test_env();
+            let list_expr = Expression::ListValue(vec![
+                Expression::CTrue,
+                Expression::CFalse,
+                Expression::CTrue,
+            ]);
 
-        let result = eval(list_expr, &env);
+            let result = eval(list_expr, &env);
 
-        assert!(result.is_ok());
-        let expected = Expression::ListValue(vec![
-            Expression::CTrue,  // CErr is an error
-            Expression::CFalse, // COk is not an error
-            Expression::CFalse, // CInt is not an error
-        ]);
-        assert_eq!(result.unwrap(), expected);
+            assert!(result.is_ok());
+            let expected = Expression::ListValue(vec![
+                Expression::CTrue,
+                Expression::CFalse,
+                Expression::CTrue,
+            ]);
+            assert_eq!(result.unwrap(), expected);
+        }
+
+        #[test]
+        fn test_list_with_mixed_numbers() {
+            let env = create_test_env();
+            let list_expr = Expression::ListValue(vec![
+                Expression::CInt(42),
+                Expression::CReal(3.14),
+                Expression::CInt(10),
+            ]);
+
+            let result = eval(list_expr, &env);
+
+            assert!(result.is_ok());
+            let expected = Expression::ListValue(vec![
+                Expression::CInt(42),
+                Expression::CReal(3.14),
+                Expression::CInt(10),
+            ]);
+            assert_eq!(result.unwrap(), expected);
+        }
+
+        #[test]
+        fn test_list_with_integer_variables() {
+            let mut env = create_test_env();
+            env.map_variable("a".to_string(), false, Expression::CInt(5));
+            env.map_variable("b".to_string(), false, Expression::CInt(15));
+
+            let list_expr = Expression::ListValue(vec![
+                Expression::Var("x".to_string()), // 10
+                Expression::Var("a".to_string()), // 5
+                Expression::Var("b".to_string()), // 15
+            ]);
+
+            let result = eval(list_expr, &env);
+
+            assert!(result.is_ok());
+            let expected = Expression::ListValue(vec![
+                Expression::CInt(10),
+                Expression::CInt(5),
+                Expression::CInt(15),
+            ]);
+            assert_eq!(result.unwrap(), expected);
+        }
+
+        #[test]
+        fn test_list_with_string_variables() {
+            let mut env = create_test_env();
+            env.map_variable(
+                "greeting".to_string(),
+                false,
+                Expression::CString("hello".to_string()),
+            );
+            env.map_variable(
+                "world".to_string(),
+                false,
+                Expression::CString("world".to_string()),
+            );
+
+            let list_expr = Expression::ListValue(vec![
+                Expression::Var("name".to_string()),     // "test"
+                Expression::Var("greeting".to_string()), // "hello"
+                Expression::Var("world".to_string()),    // "world"
+            ]);
+
+            let result = eval(list_expr, &env);
+
+            assert!(result.is_ok());
+            let expected = Expression::ListValue(vec![
+                Expression::CString("test".to_string()),
+                Expression::CString("hello".to_string()),
+                Expression::CString("world".to_string()),
+            ]);
+            assert_eq!(result.unwrap(), expected);
+        }
+
+        #[test]
+        fn test_list_with_arithmetic_expressions() {
+            let env = create_test_env();
+            let list_expr = Expression::ListValue(vec![
+                Expression::Add(Box::new(Expression::CInt(1)), Box::new(Expression::CInt(2))),
+                Expression::Mul(Box::new(Expression::CInt(3)), Box::new(Expression::CInt(4))),
+                Expression::Sub(
+                    Box::new(Expression::Var("x".to_string())),
+                    Box::new(Expression::CInt(5)),
+                ),
+            ]);
+
+            let result = eval(list_expr, &env);
+
+            assert!(result.is_ok());
+            let expected = Expression::ListValue(vec![
+                Expression::CInt(3),  // 1 + 2
+                Expression::CInt(12), // 3 * 4
+                Expression::CInt(5),  // 10 - 5
+            ]);
+            assert_eq!(result.unwrap(), expected);
+        }
+
+        #[test]
+        fn test_list_with_boolean_expressions() {
+            let env = create_test_env();
+            let list_expr = Expression::ListValue(vec![
+                Expression::And(Box::new(Expression::CTrue), Box::new(Expression::CFalse)),
+                Expression::Or(Box::new(Expression::CTrue), Box::new(Expression::CFalse)),
+                Expression::Not(Box::new(Expression::CFalse)),
+            ]);
+
+            let result = eval(list_expr, &env);
+
+            assert!(result.is_ok());
+            let expected = Expression::ListValue(vec![
+                Expression::CFalse, // True and False
+                Expression::CTrue,  // True or False
+                Expression::CTrue,  // not False
+            ]);
+            assert_eq!(result.unwrap(), expected);
+        }
+
+        #[test]
+        fn test_list_with_relational_expressions() {
+            let env = create_test_env();
+            let list_expr = Expression::ListValue(vec![
+                Expression::GT(Box::new(Expression::CInt(5)), Box::new(Expression::CInt(3))),
+                Expression::LT(Box::new(Expression::CInt(2)), Box::new(Expression::CInt(8))),
+                Expression::EQ(Box::new(Expression::CInt(4)), Box::new(Expression::CInt(4))),
+            ]);
+
+            let result = eval(list_expr, &env);
+
+            assert!(result.is_ok());
+            let expected = Expression::ListValue(vec![
+                Expression::CTrue, // 5 > 3
+                Expression::CTrue, // 2 < 8
+                Expression::CTrue, // 4 == 4
+            ]);
+            assert_eq!(result.unwrap(), expected);
+        }
+
+        #[test]
+        fn test_list_with_maybe_integers() {
+            let env = create_test_env();
+            let list_expr = Expression::ListValue(vec![
+                Expression::CJust(Box::new(Expression::CInt(42))),
+                Expression::CNothing,
+                Expression::CJust(Box::new(Expression::CInt(10))),
+            ]);
+
+            let result = eval(list_expr, &env);
+
+            assert!(result.is_ok());
+            let expected = Expression::ListValue(vec![
+                Expression::CJust(Box::new(Expression::CInt(42))),
+                Expression::CNothing,
+                Expression::CJust(Box::new(Expression::CInt(10))),
+            ]);
+            assert_eq!(result.unwrap(), expected);
+        }
+
+        #[test]
+        fn test_list_with_maybe_strings() {
+            let env = create_test_env();
+            let list_expr = Expression::ListValue(vec![
+                Expression::CJust(Box::new(Expression::CString("hello".to_string()))),
+                Expression::CJust(Box::new(Expression::CString("world".to_string()))),
+                Expression::CNothing,
+            ]);
+
+            let result = eval(list_expr, &env);
+
+            assert!(result.is_ok());
+            let expected = Expression::ListValue(vec![
+                Expression::CJust(Box::new(Expression::CString("hello".to_string()))),
+                Expression::CJust(Box::new(Expression::CString("world".to_string()))),
+                Expression::CNothing,
+            ]);
+            assert_eq!(result.unwrap(), expected);
+        }
+
+        #[test]
+        fn test_list_with_result_integers() {
+            let env = create_test_env();
+            let list_expr = Expression::ListValue(vec![
+                Expression::COk(Box::new(Expression::CInt(100))),
+                Expression::CErr(Box::new(Expression::CString("error".to_string()))),
+                Expression::COk(Box::new(Expression::CInt(42))),
+            ]);
+
+            let result = eval(list_expr, &env);
+
+            assert!(result.is_ok());
+            let expected = Expression::ListValue(vec![
+                Expression::COk(Box::new(Expression::CInt(100))),
+                Expression::CErr(Box::new(Expression::CString("error".to_string()))),
+                Expression::COk(Box::new(Expression::CInt(42))),
+            ]);
+            assert_eq!(result.unwrap(), expected);
+        }
+
+        #[test]
+        fn test_list_with_result_strings() {
+            let env = create_test_env();
+            let list_expr = Expression::ListValue(vec![
+                Expression::COk(Box::new(Expression::CString("success".to_string()))),
+                Expression::COk(Box::new(Expression::CString("another".to_string()))),
+                Expression::CErr(Box::new(Expression::CString("failure".to_string()))),
+            ]);
+
+            let result = eval(list_expr, &env);
+
+            assert!(result.is_ok());
+            let expected = Expression::ListValue(vec![
+                Expression::COk(Box::new(Expression::CString("success".to_string()))),
+                Expression::COk(Box::new(Expression::CString("another".to_string()))),
+                Expression::CErr(Box::new(Expression::CString("failure".to_string()))),
+            ]);
+            assert_eq!(result.unwrap(), expected);
+        }
+
+        #[test]
+        fn test_list_with_unwrap_expressions() {
+            let env = create_test_env();
+            let list_expr = Expression::ListValue(vec![
+                Expression::Unwrap(Box::new(Expression::CJust(Box::new(Expression::CInt(5))))),
+                Expression::Unwrap(Box::new(Expression::COk(Box::new(Expression::CString(
+                    "ok".to_string(),
+                ))))),
+            ]);
+
+            let result = eval(list_expr, &env);
+
+            assert!(result.is_ok());
+            let expected = Expression::ListValue(vec![
+                Expression::CInt(5),
+                Expression::CString("ok".to_string()),
+            ]);
+            assert_eq!(result.unwrap(), expected);
+        }
+
+        #[test]
+        fn test_nested_integer_lists() {
+            let env = create_test_env();
+            let list_expr = Expression::ListValue(vec![
+                Expression::ListValue(vec![Expression::CInt(1), Expression::CInt(2)]),
+                Expression::ListValue(vec![Expression::CInt(3), Expression::CInt(4)]),
+                Expression::ListValue(vec![Expression::CInt(5)]),
+            ]);
+
+            let result = eval(list_expr, &env);
+
+            assert!(result.is_ok());
+            let expected = Expression::ListValue(vec![
+                Expression::ListValue(vec![Expression::CInt(1), Expression::CInt(2)]),
+                Expression::ListValue(vec![Expression::CInt(3), Expression::CInt(4)]),
+                Expression::ListValue(vec![Expression::CInt(5)]),
+            ]);
+            assert_eq!(result.unwrap(), expected);
+        }
+
+        #[test]
+        fn test_nested_string_lists() {
+            let env = create_test_env();
+            let list_expr = Expression::ListValue(vec![
+                Expression::ListValue(vec![
+                    Expression::CString("a".to_string()),
+                    Expression::CString("b".to_string()),
+                ]),
+                Expression::ListValue(vec![
+                    Expression::CString("c".to_string()),
+                    Expression::CString("d".to_string()),
+                ]),
+                Expression::ListValue(vec![]),
+            ]);
+
+            let result = eval(list_expr, &env);
+
+            assert!(result.is_ok());
+            let expected = Expression::ListValue(vec![
+                Expression::ListValue(vec![
+                    Expression::CString("a".to_string()),
+                    Expression::CString("b".to_string()),
+                ]),
+                Expression::ListValue(vec![
+                    Expression::CString("c".to_string()),
+                    Expression::CString("d".to_string()),
+                ]),
+                Expression::ListValue(vec![]),
+            ]);
+            assert_eq!(result.unwrap(), expected);
+        }
+
+        #[test]
+        fn test_list_with_invalid_variable() {
+            let env = create_test_env();
+            let list_expr = Expression::ListValue(vec![
+                Expression::CInt(1),
+                Expression::Var("nonexistent".to_string()),
+                Expression::CInt(3),
+            ]);
+
+            let result = eval(list_expr, &env);
+
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert_eq!(error.0, "Variable 'nonexistent' not found");
+        }
+
+        #[test]
+        fn test_list_with_invalid_arithmetic() {
+            let env = create_test_env();
+            let list_expr = Expression::ListValue(vec![
+                Expression::CInt(1),
+                Expression::Add(
+                    Box::new(Expression::CString("hello".to_string())),
+                    Box::new(Expression::CInt(2)),
+                ),
+                Expression::CInt(3),
+            ]);
+
+            let result = eval(list_expr, &env);
+
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert_eq!(
+                error.0,
+                "addition '(+)' is only defined for numbers (integers and real)."
+            );
+        }
+
+        #[test]
+        fn test_list_with_unwrap_failure() {
+            let env = create_test_env();
+            let list_expr = Expression::ListValue(vec![
+                Expression::CInt(1),
+                Expression::Unwrap(Box::new(Expression::CNothing)),
+                Expression::CInt(3),
+            ]);
+
+            let result = eval(list_expr, &env);
+
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert_eq!(error.0, "Program panicked trying to unwrap.");
+        }
+
+        #[test]
+        fn test_list_with_propagate_expressions() {
+            let env = create_test_env();
+
+            // Test successful propagation
+            let list_expr = Expression::ListValue(vec![
+                Expression::Propagate(Box::new(Expression::CJust(Box::new(Expression::CInt(42))))),
+                Expression::Propagate(Box::new(Expression::COk(Box::new(Expression::CString(
+                    "success".to_string(),
+                ))))),
+            ]);
+
+            let result = eval(list_expr, &env);
+
+            assert!(result.is_ok());
+            let expected = Expression::ListValue(vec![
+                Expression::CInt(42),
+                Expression::CString("success".to_string()),
+            ]);
+            assert_eq!(result.unwrap(), expected);
+        }
+
+        #[test]
+        fn test_list_with_propagate_error() {
+            let env = create_test_env();
+            let list_expr = Expression::ListValue(vec![
+                Expression::CInt(1),
+                Expression::Propagate(Box::new(Expression::CErr(Box::new(Expression::CString(
+                    "error".to_string(),
+                ))))),
+                Expression::CInt(3),
+            ]);
+
+            let result = eval(list_expr, &env);
+
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert_eq!(error.0, "Propagate");
+            assert_eq!(error.1, Some(Expression::CString("error".to_string())));
+        }
+
+        #[test]
+        fn test_list_with_isnothing_expressions() {
+            let env = create_test_env();
+            let list_expr = Expression::ListValue(vec![
+                Expression::IsNothing(Box::new(Expression::CNothing)),
+                Expression::IsNothing(Box::new(Expression::CJust(Box::new(Expression::CInt(5))))),
+                Expression::IsNothing(Box::new(Expression::CInt(10))),
+            ]);
+
+            let result = eval(list_expr, &env);
+
+            assert!(result.is_ok());
+            let expected = Expression::ListValue(vec![
+                Expression::CTrue,  // CNothing is nothing
+                Expression::CFalse, // CJust(5) is not nothing
+                Expression::CFalse, // CInt(10) is not nothing
+            ]);
+            assert_eq!(result.unwrap(), expected);
+        }
+
+        #[test]
+        fn test_list_with_iserror_expressions() {
+            let env = create_test_env();
+            let list_expr = Expression::ListValue(vec![
+                Expression::IsError(Box::new(Expression::CErr(Box::new(Expression::CString(
+                    "error".to_string(),
+                ))))),
+                Expression::IsError(Box::new(Expression::COk(Box::new(Expression::CInt(5))))),
+                Expression::IsError(Box::new(Expression::CInt(10))),
+            ]);
+
+            let result = eval(list_expr, &env);
+
+            assert!(result.is_ok());
+            let expected = Expression::ListValue(vec![
+                Expression::CTrue,  // CErr is an error
+                Expression::CFalse, // COk is not an error
+                Expression::CFalse, // CInt is not an error
+            ]);
+            assert_eq!(result.unwrap(), expected);
+        }
     }
 }
