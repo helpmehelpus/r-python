@@ -13,6 +13,7 @@ pub fn eval(exp: Expression, env: &Environment<Expression>) -> Result<Expression
         Expression::Or(lhs, rhs) => or(*lhs, *rhs, env),
         Expression::Not(lhs) => not(*lhs, env),
         Expression::EQ(lhs, rhs) => eq(*lhs, *rhs, env),
+        Expression::NEQ(lhs, rhs) => neq(*lhs, *rhs, env),
         Expression::GT(lhs, rhs) => gt(*lhs, *rhs, env),
         Expression::LT(lhs, rhs) => lt(*lhs, *rhs, env),
         Expression::GTE(lhs, rhs) => gte(*lhs, *rhs, env),
@@ -275,6 +276,25 @@ fn eq(
             }
         },
         "(==) is only defined for numbers (integers and real).",
+    )
+}
+fn neq(
+    lhs: Expression,
+    rhs: Expression,
+    env: &Environment<Expression>,
+) -> Result<Expression, ErrorMessage> {
+    eval_binary_rel_op(
+        lhs,
+        rhs,
+        env,
+        |a, b| {
+            if a != b {
+                Expression::CTrue
+            } else {
+                Expression::CFalse
+            }
+        },
+        "(!=) is only defined for numbers (integers and real).",
     )
 }
 fn gt(
@@ -1386,6 +1406,607 @@ mod tests {
                 Expression::CFalse, // CInt is not an error
             ]);
             assert_eq!(result.unwrap(), expected);
+        }
+    }
+
+    mod relational_expression_tests {
+        use super::*;
+
+        #[test]
+        fn test_eq_integers_true() {
+            let env = create_test_env();
+            let expr = Expression::EQ(
+                Box::new(Expression::CInt(5)),
+                Box::new(Expression::CInt(5)),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CTrue);
+        }
+
+        #[test]
+        fn test_eq_integers_false() {
+            let env = create_test_env();
+            let expr = Expression::EQ(
+                Box::new(Expression::CInt(3)),
+                Box::new(Expression::CInt(7)),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CFalse);
+        }
+
+        #[test]
+        fn test_eq_reals_true() {
+            let env = create_test_env();
+            let expr = Expression::EQ(
+                Box::new(Expression::CReal(3.14)),
+                Box::new(Expression::CReal(3.14)),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CTrue);
+        }
+
+        #[test]
+        fn test_eq_reals_false() {
+            let env = create_test_env();
+            let expr = Expression::EQ(
+                Box::new(Expression::CReal(2.5)),
+                Box::new(Expression::CReal(2.6)),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CFalse);
+        }
+
+        #[test]
+        fn test_eq_mixed_int_real_true() {
+            let env = create_test_env();
+            let expr = Expression::EQ(
+                Box::new(Expression::CInt(5)),
+                Box::new(Expression::CReal(5.0)),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CTrue);
+        }
+
+        #[test]
+        fn test_eq_mixed_real_int_false() {
+            let env = create_test_env();
+            let expr = Expression::EQ(
+                Box::new(Expression::CReal(4.2)),
+                Box::new(Expression::CInt(4)),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CFalse);
+        }
+
+        #[test]
+        fn test_neq_integers_true() {
+            let env = create_test_env();
+            let expr = Expression::NEQ(
+                Box::new(Expression::CInt(3)),
+                Box::new(Expression::CInt(7)),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CTrue);
+        }
+
+        #[test]
+        fn test_neq_integers_false() {
+            let env = create_test_env();
+            let expr = Expression::NEQ(
+                Box::new(Expression::CInt(5)),
+                Box::new(Expression::CInt(5)),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CFalse);
+        }
+
+        #[test]
+        fn test_neq_reals_true() {
+            let env = create_test_env();
+            let expr = Expression::NEQ(
+                Box::new(Expression::CReal(2.5)),
+                Box::new(Expression::CReal(2.6)),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CTrue);
+        }
+
+        #[test]
+        fn test_neq_mixed_int_real_false() {
+            let env = create_test_env();
+            let expr = Expression::NEQ(
+                Box::new(Expression::CInt(5)),
+                Box::new(Expression::CReal(5.0)),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CFalse);
+        }
+
+        #[test]
+        fn test_gt_integers_true() {
+            let env = create_test_env();
+            let expr = Expression::GT(
+                Box::new(Expression::CInt(10)),
+                Box::new(Expression::CInt(5)),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CTrue);
+        }
+
+        #[test]
+        fn test_gt_integers_false() {
+            let env = create_test_env();
+            let expr = Expression::GT(
+                Box::new(Expression::CInt(3)),
+                Box::new(Expression::CInt(7)),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CFalse);
+        }
+
+        #[test]
+        fn test_gt_equal_integers_false() {
+            let env = create_test_env();
+            let expr = Expression::GT(
+                Box::new(Expression::CInt(5)),
+                Box::new(Expression::CInt(5)),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CFalse);
+        }
+
+        #[test]
+        fn test_gt_reals_true() {
+            let env = create_test_env();
+            let expr = Expression::GT(
+                Box::new(Expression::CReal(7.5)),
+                Box::new(Expression::CReal(3.2)),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CTrue);
+        }
+
+        #[test]
+        fn test_gt_mixed_real_int_true() {
+            let env = create_test_env();
+            let expr = Expression::GT(
+                Box::new(Expression::CReal(5.1)),
+                Box::new(Expression::CInt(5)),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CTrue);
+        }
+
+        #[test]
+        fn test_lt_integers_true() {
+            let env = create_test_env();
+            let expr = Expression::LT(
+                Box::new(Expression::CInt(3)),
+                Box::new(Expression::CInt(8)),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CTrue);
+        }
+
+        #[test]
+        fn test_lt_integers_false() {
+            let env = create_test_env();
+            let expr = Expression::LT(
+                Box::new(Expression::CInt(10)),
+                Box::new(Expression::CInt(5)),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CFalse);
+        }
+
+        #[test]
+        fn test_lt_equal_reals_false() {
+            let env = create_test_env();
+            let expr = Expression::LT(
+                Box::new(Expression::CReal(3.14)),
+                Box::new(Expression::CReal(3.14)),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CFalse);
+        }
+
+        #[test]
+        fn test_lt_mixed_int_real_true() {
+            let env = create_test_env();
+            let expr = Expression::LT(
+                Box::new(Expression::CInt(4)),
+                Box::new(Expression::CReal(4.5)),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CTrue);
+        }
+
+        #[test]
+        fn test_gte_integers_greater_true() {
+            let env = create_test_env();
+            let expr = Expression::GTE(
+                Box::new(Expression::CInt(10)),
+                Box::new(Expression::CInt(5)),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CTrue);
+        }
+
+        #[test]
+        fn test_gte_integers_equal_true() {
+            let env = create_test_env();
+            let expr = Expression::GTE(
+                Box::new(Expression::CInt(7)),
+                Box::new(Expression::CInt(7)),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CTrue);
+        }
+
+        #[test]
+        fn test_gte_integers_false() {
+            let env = create_test_env();
+            let expr = Expression::GTE(
+                Box::new(Expression::CInt(3)),
+                Box::new(Expression::CInt(9)),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CFalse);
+        }
+
+        #[test]
+        fn test_gte_mixed_real_int_equal_true() {
+            let env = create_test_env();
+            let expr = Expression::GTE(
+                Box::new(Expression::CReal(5.0)),
+                Box::new(Expression::CInt(5)),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CTrue);
+        }
+
+        #[test]
+        fn test_lte_integers_less_true() {
+            let env = create_test_env();
+            let expr = Expression::LTE(
+                Box::new(Expression::CInt(3)),
+                Box::new(Expression::CInt(8)),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CTrue);
+        }
+
+        #[test]
+        fn test_lte_integers_equal_true() {
+            let env = create_test_env();
+            let expr = Expression::LTE(
+                Box::new(Expression::CInt(6)),
+                Box::new(Expression::CInt(6)),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CTrue);
+        }
+
+        #[test]
+        fn test_lte_reals_false() {
+            let env = create_test_env();
+            let expr = Expression::LTE(
+                Box::new(Expression::CReal(9.5)),
+                Box::new(Expression::CReal(3.2)),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CFalse);
+        }
+
+        #[test]
+        fn test_lte_mixed_int_real_true() {
+            let env = create_test_env();
+            let expr = Expression::LTE(
+                Box::new(Expression::CInt(4)),
+                Box::new(Expression::CReal(4.0)),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CTrue);
+        }
+
+        #[test]
+        fn test_relational_with_variables() {
+            let mut env = create_test_env();
+            env.map_variable("x".to_string(), false, Expression::CInt(10));
+            env.map_variable("y".to_string(), false, Expression::CInt(5));
+
+            let expr = Expression::GT(
+                Box::new(Expression::Var("x".to_string())),
+                Box::new(Expression::Var("y".to_string())),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CTrue);
+        }
+
+        #[test]
+        fn test_relational_with_arithmetic_expressions() {
+            let env = create_test_env();
+            // (3 + 2) == (4 + 1) => 5 == 5 => true
+            let expr = Expression::EQ(
+                Box::new(Expression::Add(
+                    Box::new(Expression::CInt(3)),
+                    Box::new(Expression::CInt(2)),
+                )),
+                Box::new(Expression::Add(
+                    Box::new(Expression::CInt(4)),
+                    Box::new(Expression::CInt(1)),
+                )),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CTrue);
+        }
+
+        #[test]
+        fn test_nested_relational_expressions() {
+            let env = create_test_env();
+            // (2 * 3) > (4 + 1) => 6 > 5 => true
+            let expr = Expression::GT(
+                Box::new(Expression::Mul(
+                    Box::new(Expression::CInt(2)),
+                    Box::new(Expression::CInt(3)),
+                )),
+                Box::new(Expression::Add(
+                    Box::new(Expression::CInt(4)),
+                    Box::new(Expression::CInt(1)),
+                )),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CTrue);
+        }
+
+        #[test]
+        fn test_relational_with_negative_numbers() {
+            let env = create_test_env();
+            let expr = Expression::LT(
+                Box::new(Expression::CInt(-5)),
+                Box::new(Expression::CInt(-2)),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CTrue);
+        }
+
+        #[test]
+        fn test_relational_with_zero() {
+            let env = create_test_env();
+            let expr = Expression::GTE(
+                Box::new(Expression::CInt(0)),
+                Box::new(Expression::CInt(-1)),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CTrue);
+        }
+
+        #[test]
+        fn test_relational_with_decimals() {
+            let env = create_test_env();
+            let expr = Expression::LTE(
+                Box::new(Expression::CReal(3.14159)),
+                Box::new(Expression::CReal(3.14160)),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CTrue);
+        }
+
+        #[test]
+        fn test_relational_with_large_numbers() {
+            let env = create_test_env();
+            let expr = Expression::NEQ(
+                Box::new(Expression::CInt(1000000)),
+                Box::new(Expression::CInt(999999)),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CTrue);
+        }
+
+        #[test]
+        fn test_relational_operators_error_with_booleans() {
+            let env = create_test_env();
+            let expr = Expression::GT(
+                Box::new(Expression::CTrue),
+                Box::new(Expression::CFalse),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert_eq!(error.0, "(>) is only defined for numbers (integers and real).");
+        }
+
+        #[test]
+        fn test_relational_operators_error_with_strings() {
+            let env = create_test_env();
+            let expr = Expression::EQ(
+                Box::new(Expression::CString("hello".to_string())),
+                Box::new(Expression::CString("world".to_string())),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert_eq!(error.0, "(==) is only defined for numbers (integers and real).");
+        }
+
+        #[test]
+        fn test_relational_operators_error_mixed_types() {
+            let env = create_test_env();
+            let expr = Expression::LT(
+                Box::new(Expression::CInt(5)),
+                Box::new(Expression::CString("test".to_string())),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert_eq!(error.0, "(<) is only defined for numbers (integers and real).");
+        }
+
+        #[test]
+        fn test_relational_with_undefined_variable() {
+            let env = create_test_env();
+            let expr = Expression::GTE(
+                Box::new(Expression::Var("undefined_var".to_string())),
+                Box::new(Expression::CInt(5)),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert_eq!(error.0, "Variable 'undefined_var' not found");
+        }
+
+        #[test]
+        fn test_complex_relational_expression() {
+            let mut env = create_test_env();
+            env.map_variable("a".to_string(), false, Expression::CInt(10));
+            env.map_variable("b".to_string(), false, Expression::CReal(5.5));
+
+            // (a * 2) != (b + 4.5) => (10 * 2) != (5.5 + 4.5) => 20 != 10 => true
+            let expr = Expression::NEQ(
+                Box::new(Expression::Mul(
+                    Box::new(Expression::Var("a".to_string())),
+                    Box::new(Expression::CInt(2)),
+                )),
+                Box::new(Expression::Add(
+                    Box::new(Expression::Var("b".to_string())),
+                    Box::new(Expression::CReal(4.5)),
+                )),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), Expression::CTrue);
+        }
+
+        #[test]
+        fn test_chained_relational_in_arithmetic() {
+            let env = create_test_env();
+            // Test that 5 > 3 is evaluated to true (which becomes 1 in arithmetic context)
+            // But this should fail because we can't do arithmetic on boolean results
+            let expr = Expression::Add(
+                Box::new(Expression::GT(
+                    Box::new(Expression::CInt(5)),
+                    Box::new(Expression::CInt(3)),
+                )),
+                Box::new(Expression::CInt(1)),
+            );
+
+            let result = eval(expr, &env);
+
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert_eq!(error.0, "addition '(+)' is only defined for numbers (integers and real).");
         }
     }
 }
