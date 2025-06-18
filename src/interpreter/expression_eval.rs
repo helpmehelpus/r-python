@@ -1,9 +1,14 @@
+use super::statement_execute::Computation;
 use crate::environment::environment::Environment;
 use crate::ir::ast::{Expression, Name};
 
-type ErrorMessage = (String, Option<Expression>);
+#[derive(Debug, PartialEq, Clone)]
+pub enum ExpressionResult {
+    Value(Expression),
+    Propagate(Expression), // For error propagation in Maybe/Result types
+}
 
-pub fn eval(exp: Expression, env: &Environment<Expression>) -> Result<Expression, ErrorMessage> {
+pub fn eval(exp: Expression, env: &Environment<Expression>) -> Result<ExpressionResult, String> {
     match exp {
         Expression::Add(lhs, rhs) => eval_add(*lhs, *rhs, env),
         Expression::Sub(lhs, rhs) => eval_sub(*lhs, *rhs, env),
@@ -28,8 +33,8 @@ pub fn eval(exp: Expression, env: &Environment<Expression>) -> Result<Expression
         Expression::IsNothing(e) => eval_isnothing_expression(*e, env),
         Expression::FuncCall(name, args) => eval_call(name, args, env),
         Expression::ListValue(values) => eval_list_value(values, env),
-        _ if is_constant(exp.clone()) => Ok(exp),
-        _ => Err((String::from("Not implemented yet."), None)),
+        _ if is_constant(exp.clone()) => Ok(ExpressionResult::Value(exp)),
+        _ => Err(String::from("Not implemented yet.")),
     }
 }
 
@@ -40,21 +45,33 @@ fn eval_binary_arith_op<F>(
     env: &Environment<Expression>,
     op: F,
     error_msg: &str,
-) -> Result<Expression, ErrorMessage>
+) -> Result<ExpressionResult, String>
 where
     F: Fn(f64, f64) -> f64,
 {
-    let v1 = eval(lhs, env)?;
-    let v2 = eval(rhs, env)?;
+    let v1 = match eval(lhs, env)? {
+        ExpressionResult::Value(expr) => expr,
+        ExpressionResult::Propagate(expr) => return Ok(ExpressionResult::Propagate(expr)),
+    };
+    let v2 = match eval(rhs, env)? {
+        ExpressionResult::Value(expr) => expr,
+        ExpressionResult::Propagate(expr) => return Ok(ExpressionResult::Propagate(expr)),
+    };
 
     match (v1, v2) {
-        (Expression::CInt(v1), Expression::CInt(v2)) => {
-            Ok(Expression::CInt(op(v1 as f64, v2 as f64) as i32))
+        (Expression::CInt(v1), Expression::CInt(v2)) => Ok(ExpressionResult::Value(
+            Expression::CInt(op(v1 as f64, v2 as f64) as i32),
+        )),
+        (Expression::CInt(v1), Expression::CReal(v2)) => Ok(ExpressionResult::Value(
+            Expression::CReal(op(v1 as f64, v2)),
+        )),
+        (Expression::CReal(v1), Expression::CInt(v2)) => Ok(ExpressionResult::Value(
+            Expression::CReal(op(v1, v2 as f64)),
+        )),
+        (Expression::CReal(v1), Expression::CReal(v2)) => {
+            Ok(ExpressionResult::Value(Expression::CReal(op(v1, v2))))
         }
-        (Expression::CInt(v1), Expression::CReal(v2)) => Ok(Expression::CReal(op(v1 as f64, v2))),
-        (Expression::CReal(v1), Expression::CInt(v2)) => Ok(Expression::CReal(op(v1, v2 as f64))),
-        (Expression::CReal(v1), Expression::CReal(v2)) => Ok(Expression::CReal(op(v1, v2))),
-        _ => Err((error_msg.to_string(), None)),
+        _ => Err(error_msg.to_string()),
     }
 }
 
@@ -65,19 +82,25 @@ fn eval_binary_boolean_op<F>(
     env: &Environment<Expression>,
     op: F,
     error_msg: &str,
-) -> Result<Expression, ErrorMessage>
+) -> Result<ExpressionResult, String>
 where
     F: Fn(bool, bool) -> Expression,
 {
-    let v1 = eval(lhs, env)?;
-    let v2 = eval(rhs, env)?;
+    let v1 = match eval(lhs, env)? {
+        ExpressionResult::Value(expr) => expr,
+        ExpressionResult::Propagate(expr) => return Ok(ExpressionResult::Propagate(expr)),
+    };
+    let v2 = match eval(rhs, env)? {
+        ExpressionResult::Value(expr) => expr,
+        ExpressionResult::Propagate(expr) => return Ok(ExpressionResult::Propagate(expr)),
+    };
 
     match (v1, v2) {
-        (Expression::CTrue, Expression::CTrue) => Ok(op(true, true)),
-        (Expression::CTrue, Expression::CFalse) => Ok(op(true, false)),
-        (Expression::CFalse, Expression::CTrue) => Ok(op(false, true)),
-        (Expression::CFalse, Expression::CFalse) => Ok(op(false, false)),
-        _ => Err((error_msg.to_string(), None)),
+        (Expression::CTrue, Expression::CTrue) => Ok(ExpressionResult::Value(op(true, true))),
+        (Expression::CTrue, Expression::CFalse) => Ok(ExpressionResult::Value(op(true, false))),
+        (Expression::CFalse, Expression::CTrue) => Ok(ExpressionResult::Value(op(false, true))),
+        (Expression::CFalse, Expression::CFalse) => Ok(ExpressionResult::Value(op(false, false))),
+        _ => Err(error_msg.to_string()),
     }
 }
 
@@ -88,19 +111,31 @@ fn eval_binary_rel_op<F>(
     env: &Environment<Expression>,
     op: F,
     error_msg: &str,
-) -> Result<Expression, ErrorMessage>
+) -> Result<ExpressionResult, String>
 where
     F: Fn(f64, f64) -> Expression,
 {
-    let v1 = eval(lhs, env)?;
-    let v2 = eval(rhs, env)?;
+    let v1 = match eval(lhs, env)? {
+        ExpressionResult::Value(expr) => expr,
+        ExpressionResult::Propagate(expr) => return Ok(ExpressionResult::Propagate(expr)),
+    };
+    let v2 = match eval(rhs, env)? {
+        ExpressionResult::Value(expr) => expr,
+        ExpressionResult::Propagate(expr) => return Ok(ExpressionResult::Propagate(expr)),
+    };
 
     match (v1, v2) {
-        (Expression::CInt(v1), Expression::CInt(v2)) => Ok(op(v1 as f64, v2 as f64)),
-        (Expression::CInt(v1), Expression::CReal(v2)) => Ok(op(v1 as f64, v2)),
-        (Expression::CReal(v1), Expression::CInt(v2)) => Ok(op(v1, v2 as f64)),
-        (Expression::CReal(v1), Expression::CReal(v2)) => Ok(op(v1, v2)),
-        _ => Err((error_msg.to_string(), None)),
+        (Expression::CInt(v1), Expression::CInt(v2)) => {
+            Ok(ExpressionResult::Value(op(v1 as f64, v2 as f64)))
+        }
+        (Expression::CInt(v1), Expression::CReal(v2)) => {
+            Ok(ExpressionResult::Value(op(v1 as f64, v2)))
+        }
+        (Expression::CReal(v1), Expression::CInt(v2)) => {
+            Ok(ExpressionResult::Value(op(v1, v2 as f64)))
+        }
+        (Expression::CReal(v1), Expression::CReal(v2)) => Ok(ExpressionResult::Value(op(v1, v2))),
+        _ => Err(error_msg.to_string()),
     }
 }
 
@@ -109,7 +144,7 @@ fn eval_add(
     lhs: Expression,
     rhs: Expression,
     env: &Environment<Expression>,
-) -> Result<Expression, ErrorMessage> {
+) -> Result<ExpressionResult, String> {
     eval_binary_arith_op(
         lhs,
         rhs,
@@ -123,7 +158,7 @@ fn eval_sub(
     lhs: Expression,
     rhs: Expression,
     env: &Environment<Expression>,
-) -> Result<Expression, ErrorMessage> {
+) -> Result<ExpressionResult, String> {
     eval_binary_arith_op(
         lhs,
         rhs,
@@ -137,7 +172,7 @@ fn eval_mul(
     lhs: Expression,
     rhs: Expression,
     env: &Environment<Expression>,
-) -> Result<Expression, ErrorMessage> {
+) -> Result<ExpressionResult, String> {
     eval_binary_arith_op(
         lhs,
         rhs,
@@ -151,7 +186,7 @@ fn eval_div(
     lhs: Expression,
     rhs: Expression,
     env: &Environment<Expression>,
-) -> Result<Expression, ErrorMessage> {
+) -> Result<ExpressionResult, String> {
     eval_binary_arith_op(
         lhs,
         rhs,
@@ -166,7 +201,7 @@ fn eval_and(
     lhs: Expression,
     rhs: Expression,
     env: &Environment<Expression>,
-) -> Result<Expression, ErrorMessage> {
+) -> Result<ExpressionResult, String> {
     eval_binary_boolean_op(
         lhs,
         rhs,
@@ -186,7 +221,7 @@ fn eval_or(
     lhs: Expression,
     rhs: Expression,
     env: &Environment<Expression>,
-) -> Result<Expression, ErrorMessage> {
+) -> Result<ExpressionResult, String> {
     eval_binary_boolean_op(
         lhs,
         rhs,
@@ -202,12 +237,15 @@ fn eval_or(
     )
 }
 
-fn eval_not(lhs: Expression, env: &Environment<Expression>) -> Result<Expression, ErrorMessage> {
-    let v = eval(lhs, env)?;
+fn eval_not(lhs: Expression, env: &Environment<Expression>) -> Result<ExpressionResult, String> {
+    let v = match eval(lhs, env)? {
+        ExpressionResult::Value(expr) => expr,
+        ExpressionResult::Propagate(expr) => return Ok(ExpressionResult::Propagate(expr)),
+    };
     match v {
-        Expression::CTrue => Ok(Expression::CFalse),
-        Expression::CFalse => Ok(Expression::CTrue),
-        _ => Err((String::from("'not' is only defined for booleans."), None)),
+        Expression::CTrue => Ok(ExpressionResult::Value(Expression::CFalse)),
+        Expression::CFalse => Ok(ExpressionResult::Value(Expression::CTrue)),
+        _ => Err(String::from("'not' is only defined for booleans.")),
     }
 }
 
@@ -216,7 +254,7 @@ fn eval_eq(
     lhs: Expression,
     rhs: Expression,
     env: &Environment<Expression>,
-) -> Result<Expression, ErrorMessage> {
+) -> Result<ExpressionResult, String> {
     eval_binary_rel_op(
         lhs,
         rhs,
@@ -228,7 +266,7 @@ fn eval_eq(
                 Expression::CFalse
             }
         },
-        "(==) is only defined for numbers (integers and real).",
+        "equality '(==)' is only defined for numbers (integers and real).",
     )
 }
 
@@ -236,7 +274,7 @@ fn eval_neq(
     lhs: Expression,
     rhs: Expression,
     env: &Environment<Expression>,
-) -> Result<Expression, ErrorMessage> {
+) -> Result<ExpressionResult, String> {
     eval_binary_rel_op(
         lhs,
         rhs,
@@ -248,7 +286,7 @@ fn eval_neq(
                 Expression::CFalse
             }
         },
-        "(!=) is only defined for numbers (integers and real).",
+        "inequality '(!=)' is only defined for numbers (integers and real).",
     )
 }
 
@@ -256,7 +294,7 @@ fn eval_gt(
     lhs: Expression,
     rhs: Expression,
     env: &Environment<Expression>,
-) -> Result<Expression, ErrorMessage> {
+) -> Result<ExpressionResult, String> {
     eval_binary_rel_op(
         lhs,
         rhs,
@@ -268,7 +306,7 @@ fn eval_gt(
                 Expression::CFalse
             }
         },
-        "(>) is only defined for numbers (integers and real).",
+        "greater than '(>)' is only defined for numbers (integers and real).",
     )
 }
 
@@ -276,7 +314,7 @@ fn eval_lt(
     lhs: Expression,
     rhs: Expression,
     env: &Environment<Expression>,
-) -> Result<Expression, ErrorMessage> {
+) -> Result<ExpressionResult, String> {
     eval_binary_rel_op(
         lhs,
         rhs,
@@ -288,7 +326,7 @@ fn eval_lt(
                 Expression::CFalse
             }
         },
-        "(<) is only defined for numbers (integers and real).",
+        "less than '(<)' is only defined for numbers (integers and real).",
     )
 }
 
@@ -296,7 +334,7 @@ fn eval_gte(
     lhs: Expression,
     rhs: Expression,
     env: &Environment<Expression>,
-) -> Result<Expression, ErrorMessage> {
+) -> Result<ExpressionResult, String> {
     eval_binary_rel_op(
         lhs,
         rhs,
@@ -308,7 +346,7 @@ fn eval_gte(
                 Expression::CFalse
             }
         },
-        "(>=) is only defined for numbers (integers and real).",
+        "greater than or equal '(>=)' is only defined for numbers (integers and real).",
     )
 }
 
@@ -316,7 +354,7 @@ fn eval_lte(
     lhs: Expression,
     rhs: Expression,
     env: &Environment<Expression>,
-) -> Result<Expression, ErrorMessage> {
+) -> Result<ExpressionResult, String> {
     eval_binary_rel_op(
         lhs,
         rhs,
@@ -328,15 +366,18 @@ fn eval_lte(
                 Expression::CFalse
             }
         },
-        "(<=) is only defined for numbers (integers and real).",
+        "less than or equal '(<=)' is only defined for numbers (integers and real).",
     )
 }
 
 // Variable lookup
-pub fn eval_lookup(name: String, env: &Environment<Expression>) -> Result<Expression, ErrorMessage> {
+pub fn eval_lookup(
+    name: String,
+    env: &Environment<Expression>,
+) -> Result<ExpressionResult, String> {
     match env.lookup(&name) {
-        Some((_, value)) => Ok(value.clone()),
-        None => Err((format!("Variable '{}' not found", name), None)),
+        Some((_, value)) => Ok(ExpressionResult::Value(value.clone())),
+        None => Err(format!("Variable '{}' not found", name)),
     }
 }
 
@@ -345,7 +386,7 @@ pub fn eval_call(
     name: Name,
     args: Vec<Expression>,
     env: &Environment<Expression>,
-) -> Result<Expression, ErrorMessage> {
+) -> Result<ExpressionResult, String> {
     match env.lookup_function(&name) {
         Some(func) => {
             let mut new_env = Environment::new();
@@ -360,34 +401,37 @@ pub fn eval_call(
             // Bind arguments
             for (i, formal_arg) in func.params.iter().enumerate() {
                 if i >= args.len() {
-                    return Err((
-                        format!(
-                            "[Runtime Error on '{}()'] missing argument '{}'.",
-                            name, formal_arg.argument_name
-                        ),
-                        None,
+                    return Err(format!(
+                        "[Runtime Error on '{}()'] missing argument '{}'.",
+                        name, formal_arg.argument_name
                     ));
                 }
-                let arg_value = eval(args[i].clone(), env)?;
+                let arg_value = match eval(args[i].clone(), env)? {
+                    ExpressionResult::Value(expr) => expr,
+                    ExpressionResult::Propagate(expr) => {
+                        return Ok(ExpressionResult::Propagate(expr))
+                    }
+                };
                 new_env.map_variable(formal_arg.argument_name.clone(), false, arg_value);
             }
 
             if args.len() > func.params.len() {
-                return Err((
-                    format!("[Runtime Error on '{}()'] too many arguments.", name),
-                    None,
+                return Err(format!(
+                    "[Runtime Error on '{}()'] too many arguments.",
+                    name
                 ));
             }
 
             // Execute function
             match super::statement_execute::execute(*func.body.as_ref().unwrap().clone(), &new_env)
             {
-                Ok(_) => Err(("Function did not return a value".to_string(), None)),
-                Err((_, Some(value))) => Ok(value),
+                Ok(Computation::Continue(_)) => Err("Function did not return a value".to_string()),
+                Ok(Computation::Return(value, _)) => Ok(ExpressionResult::Value(value)),
+                Ok(Computation::PropagateError(value, _)) => Ok(ExpressionResult::Propagate(value)),
                 Err(e) => Err(e),
             }
         }
-        _ => Err((format!("Function {} not found", name), None)),
+        _ => Err(format!("Function {} not found", name)),
     }
 }
 
@@ -395,61 +439,81 @@ pub fn eval_call(
 fn eval_unwrap_expression(
     exp: Expression,
     env: &Environment<Expression>,
-) -> Result<Expression, ErrorMessage> {
-    let v = eval(exp, env)?;
+) -> Result<ExpressionResult, String> {
+    let v = match eval(exp, env)? {
+        ExpressionResult::Value(expr) => expr,
+        ExpressionResult::Propagate(expr) => return Ok(ExpressionResult::Propagate(expr)),
+    };
     match v {
-        Expression::CJust(e) => Ok(*e),
-        Expression::COk(e) => Ok(*e),
-        _ => Err((String::from("Program panicked trying to unwrap."), None)),
+        Expression::CJust(e) => Ok(ExpressionResult::Value(*e)),
+        Expression::COk(e) => Ok(ExpressionResult::Value(*e)),
+        _ => Err(String::from("Program panicked trying to unwrap.")),
     }
 }
 fn eval_propagate_expression(
     exp: Expression,
     env: &Environment<Expression>,
-) -> Result<Expression, ErrorMessage> {
-    let v = eval(exp, env)?;
+) -> Result<ExpressionResult, String> {
+    let v = match eval(exp, env)? {
+        ExpressionResult::Value(expr) => expr,
+        ExpressionResult::Propagate(expr) => return Ok(ExpressionResult::Propagate(expr)),
+    };
     match v {
-        Expression::CJust(e) => Ok(*e),
-        Expression::COk(e) => Ok(*e),
-        Expression::CErr(e) => Err(("Propagate".to_string(), Some(*e))),
-        Expression::CNothing => Err((
-            "Propagate".to_string(),
-            Some(Expression::CString("Couldn't unwrap Nothing".to_string())),
-        )),
-        _ => Err((String::from("'propagate' is expects a Just or Ok."), None)),
+        Expression::CJust(e) => Ok(ExpressionResult::Value(*e)),
+        Expression::COk(e) => Ok(ExpressionResult::Value(*e)),
+        Expression::CErr(e) => Ok(ExpressionResult::Propagate(*e)),
+        Expression::CNothing => Ok(ExpressionResult::Propagate(Expression::CString(
+            "Couldn't unwrap Nothing".to_string(),
+        ))),
+        _ => Err(String::from("'propagate' expects a Just or Ok.")),
     }
 }
 fn eval_isnothing_expression(
     exp: Expression,
     env: &Environment<Expression>,
-) -> Result<Expression, ErrorMessage> {
-    let v = eval(exp, env)?;
+) -> Result<ExpressionResult, String> {
+    let v = match eval(exp, env)? {
+        ExpressionResult::Value(expr) => expr,
+        ExpressionResult::Propagate(expr) => return Ok(ExpressionResult::Propagate(expr)),
+    };
     match v {
-        Expression::CNothing => Ok(Expression::CTrue),
-        _ => Ok(Expression::CFalse),
+        Expression::CNothing => Ok(ExpressionResult::Value(Expression::CTrue)),
+        _ => Ok(ExpressionResult::Value(Expression::CFalse)),
     }
 }
 fn eval_iserror_expression(
     exp: Expression,
     env: &Environment<Expression>,
-) -> Result<Expression, ErrorMessage> {
-    let v = eval(exp, env)?;
+) -> Result<ExpressionResult, String> {
+    let v = match eval(exp, env)? {
+        ExpressionResult::Value(expr) => expr,
+        ExpressionResult::Propagate(expr) => return Ok(ExpressionResult::Propagate(expr)),
+    };
     match v {
-        Expression::CErr(_) => Ok(Expression::CTrue),
-        _ => Ok(Expression::CFalse),
+        Expression::CErr(_) => Ok(ExpressionResult::Value(Expression::CTrue)),
+        _ => Ok(ExpressionResult::Value(Expression::CFalse)),
     }
 }
-fn eval_just(exp: Expression, env: &Environment<Expression>) -> Result<Expression, ErrorMessage> {
-    let v = eval(exp, env)?;
-    Ok(Expression::CJust(Box::new(v)))
+fn eval_just(exp: Expression, env: &Environment<Expression>) -> Result<ExpressionResult, String> {
+    let v = match eval(exp, env)? {
+        ExpressionResult::Value(expr) => expr,
+        ExpressionResult::Propagate(expr) => return Ok(ExpressionResult::Propagate(expr)),
+    };
+    Ok(ExpressionResult::Value(Expression::CJust(Box::new(v))))
 }
-fn eval_ok(exp: Expression, env: &Environment<Expression>) -> Result<Expression, ErrorMessage> {
-    let v = eval(exp, env)?;
-    Ok(Expression::COk(Box::new(v)))
+fn eval_ok(exp: Expression, env: &Environment<Expression>) -> Result<ExpressionResult, String> {
+    let v = match eval(exp, env)? {
+        ExpressionResult::Value(expr) => expr,
+        ExpressionResult::Propagate(expr) => return Ok(ExpressionResult::Propagate(expr)),
+    };
+    Ok(ExpressionResult::Value(Expression::COk(Box::new(v))))
 }
-fn eval_err(exp: Expression, env: &Environment<Expression>) -> Result<Expression, ErrorMessage> {
-    let v = eval(exp, env)?;
-    Ok(Expression::CErr(Box::new(v)))
+fn eval_err(exp: Expression, env: &Environment<Expression>) -> Result<ExpressionResult, String> {
+    let v = match eval(exp, env)? {
+        ExpressionResult::Value(expr) => expr,
+        ExpressionResult::Propagate(expr) => return Ok(ExpressionResult::Propagate(expr)),
+    };
+    Ok(ExpressionResult::Value(Expression::CErr(Box::new(v))))
 }
 
 fn is_constant(exp: Expression) -> bool {
@@ -468,12 +532,15 @@ fn is_constant(exp: Expression) -> bool {
 fn eval_list_value(
     sub_expressions: Vec<Expression>,
     env: &Environment<Expression>,
-) -> Result<Expression, ErrorMessage> {
+) -> Result<ExpressionResult, String> {
     let mut values = Vec::new();
     for exp in sub_expressions {
-        values.push(eval(exp, env)?);
+        match eval(exp, env)? {
+            ExpressionResult::Value(expr) => values.push(expr),
+            ExpressionResult::Propagate(expr) => return Ok(ExpressionResult::Propagate(expr)),
+        }
     }
-    Ok(Expression::ListValue(values))
+    Ok(ExpressionResult::Value(Expression::ListValue(values)))
 }
 
 #[cfg(test)]
@@ -497,21 +564,28 @@ mod tests {
         env
     }
 
+    fn extract_value(result: ExpressionResult) -> Expression {
+        match result {
+            ExpressionResult::Value(expr) => expr,
+            ExpressionResult::Propagate(expr) => {
+                panic!("Expected Value but got Propagate: {:?}", expr)
+            }
+        }
+    }
+
     mod arithmetic_expression_tests {
         use super::*;
 
         #[test]
         fn test_simple_addition() {
             let env = create_test_env();
-            let expr = Expression::Add(
-                Box::new(Expression::CInt(5)),
-                Box::new(Expression::CInt(3)),
-            );
+            let expr =
+                Expression::Add(Box::new(Expression::CInt(5)), Box::new(Expression::CInt(3)));
 
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CInt(8));
+            assert_eq!(extract_value(result.unwrap()), Expression::CInt(8));
         }
 
         #[test]
@@ -525,21 +599,19 @@ mod tests {
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CInt(6));
+            assert_eq!(extract_value(result.unwrap()), Expression::CInt(6));
         }
 
         #[test]
         fn test_simple_multiplication() {
             let env = create_test_env();
-            let expr = Expression::Mul(
-                Box::new(Expression::CInt(7)),
-                Box::new(Expression::CInt(6)),
-            );
+            let expr =
+                Expression::Mul(Box::new(Expression::CInt(7)), Box::new(Expression::CInt(6)));
 
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CInt(42));
+            assert_eq!(extract_value(result.unwrap()), Expression::CInt(42));
         }
 
         #[test]
@@ -553,7 +625,7 @@ mod tests {
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CInt(5));
+            assert_eq!(extract_value(result.unwrap()), Expression::CInt(5));
         }
 
         #[test]
@@ -567,7 +639,7 @@ mod tests {
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CReal(6.0));
+            assert_eq!(extract_value(result.unwrap()), Expression::CReal(6.0));
         }
 
         #[test]
@@ -581,7 +653,7 @@ mod tests {
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CReal(7.3));
+            assert_eq!(extract_value(result.unwrap()), Expression::CReal(7.3));
         }
 
         #[test]
@@ -595,7 +667,7 @@ mod tests {
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CReal(10.0));
+            assert_eq!(extract_value(result.unwrap()), Expression::CReal(10.0));
         }
 
         #[test]
@@ -609,7 +681,7 @@ mod tests {
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CReal(5.0));
+            assert_eq!(extract_value(result.unwrap()), Expression::CReal(5.0));
         }
 
         #[test]
@@ -623,7 +695,7 @@ mod tests {
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CReal(8.7));
+            assert_eq!(extract_value(result.unwrap()), Expression::CReal(8.7));
         }
 
         #[test]
@@ -637,7 +709,7 @@ mod tests {
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CReal(10.0));
+            assert_eq!(extract_value(result.unwrap()), Expression::CReal(10.0));
         }
 
         #[test]
@@ -652,7 +724,7 @@ mod tests {
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CReal(13.14));
+            assert_eq!(extract_value(result.unwrap()), Expression::CReal(13.14));
         }
 
         #[test]
@@ -670,7 +742,7 @@ mod tests {
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CInt(20));
+            assert_eq!(extract_value(result.unwrap()), Expression::CInt(20));
         }
 
         #[test]
@@ -688,7 +760,7 @@ mod tests {
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CInt(4));
+            assert_eq!(extract_value(result.unwrap()), Expression::CInt(4));
         }
 
         #[test]
@@ -712,7 +784,7 @@ mod tests {
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CInt(15));
+            assert_eq!(extract_value(result.unwrap()), Expression::CInt(15));
         }
 
         #[test]
@@ -730,7 +802,7 @@ mod tests {
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CInt(25));
+            assert_eq!(extract_value(result.unwrap()), Expression::CInt(25));
         }
 
         #[test]
@@ -746,7 +818,7 @@ mod tests {
             assert!(result.is_ok());
             // Division by zero should convert to floating point and produce infinity
             let result_val = result.unwrap();
-            if let Expression::CReal(val) = result_val {
+            if let ExpressionResult::Value(Expression::CReal(val)) = result_val {
                 assert!(val.is_infinite());
             } else {
                 // If implementation returns integer, we allow any result for division by zero
@@ -765,7 +837,7 @@ mod tests {
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            if let Expression::CReal(val) = result.unwrap() {
+            if let ExpressionResult::Value(Expression::CReal(val)) = result.unwrap() {
                 assert!(val.is_infinite());
             }
         }
@@ -782,22 +854,25 @@ mod tests {
 
             assert!(result.is_err());
             let error = result.unwrap_err();
-            assert_eq!(error.0, "addition '(+)' is only defined for numbers (integers and real).");
+            assert_eq!(
+                error,
+                "addition '(+)' is only defined for numbers (integers and real)."
+            );
         }
 
         #[test]
         fn test_multiplication_with_boolean_error() {
             let env = create_test_env();
-            let expr = Expression::Mul(
-                Box::new(Expression::CTrue),
-                Box::new(Expression::CInt(10)),
-            );
+            let expr = Expression::Mul(Box::new(Expression::CTrue), Box::new(Expression::CInt(10)));
 
             let result = eval(expr, &env);
 
             assert!(result.is_err());
             let error = result.unwrap_err();
-            assert_eq!(error.0, "multiplication '(*)' is only defined for numbers (integers and real).");
+            assert_eq!(
+                error,
+                "multiplication '(*)' is only defined for numbers (integers and real)."
+            );
         }
 
         #[test]
@@ -812,7 +887,7 @@ mod tests {
 
             assert!(result.is_err());
             let error = result.unwrap_err();
-            assert_eq!(error.0, "Variable 'nonexistent' not found");
+            assert_eq!(error, "Variable 'nonexistent' not found");
         }
 
         #[test]
@@ -833,7 +908,7 @@ mod tests {
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CInt(10));
+            assert_eq!(extract_value(result.unwrap()), Expression::CInt(10));
         }
 
         #[test]
@@ -854,7 +929,7 @@ mod tests {
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CReal(7.0));
+            assert_eq!(extract_value(result.unwrap()), Expression::CReal(7.0));
         }
 
         #[test]
@@ -869,13 +944,13 @@ mod tests {
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CInt(5));
+            assert_eq!(extract_value(result.unwrap()), Expression::CInt(5));
         }
 
         #[test]
         fn test_zero_operations() {
             let env = create_test_env();
-            
+
             // Test addition with zero
             let expr1 = Expression::Add(
                 Box::new(Expression::CInt(42)),
@@ -883,7 +958,7 @@ mod tests {
             );
             let result1 = eval(expr1, &env);
             assert!(result1.is_ok());
-            assert_eq!(result1.unwrap(), Expression::CInt(42));
+            assert_eq!(extract_value(result1.unwrap()), Expression::CInt(42));
 
             // Test multiplication by zero
             let expr2 = Expression::Mul(
@@ -892,7 +967,7 @@ mod tests {
             );
             let result2 = eval(expr2, &env);
             assert!(result2.is_ok());
-            assert_eq!(result2.unwrap(), Expression::CInt(0));
+            assert_eq!(extract_value(result2.unwrap()), Expression::CInt(0));
 
             // Test subtraction of zero
             let expr3 = Expression::Sub(
@@ -901,7 +976,7 @@ mod tests {
             );
             let result3 = eval(expr3, &env);
             assert!(result3.is_ok());
-            assert_eq!(result3.unwrap(), Expression::CReal(3.14));
+            assert_eq!(extract_value(result3.unwrap()), Expression::CReal(3.14));
         }
     }
 
@@ -916,7 +991,10 @@ mod tests {
             let result = eval(list_expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::ListValue(vec![]));
+            assert_eq!(
+                extract_value(result.unwrap()),
+                Expression::ListValue(vec![])
+            );
         }
 
         #[test]
@@ -936,7 +1014,7 @@ mod tests {
                 Expression::CInt(2),
                 Expression::CInt(3),
             ]);
-            assert_eq!(result.unwrap(), expected);
+            assert_eq!(extract_value(result.unwrap()), expected);
         }
 
         #[test]
@@ -956,7 +1034,7 @@ mod tests {
                 Expression::CReal(2.71),
                 Expression::CReal(1.0),
             ]);
-            assert_eq!(result.unwrap(), expected);
+            assert_eq!(extract_value(result.unwrap()), expected);
         }
 
         #[test]
@@ -976,7 +1054,7 @@ mod tests {
                 Expression::CString("world".to_string()),
                 Expression::CString("test".to_string()),
             ]);
-            assert_eq!(result.unwrap(), expected);
+            assert_eq!(extract_value(result.unwrap()), expected);
         }
 
         #[test]
@@ -996,7 +1074,7 @@ mod tests {
                 Expression::CFalse,
                 Expression::CTrue,
             ]);
-            assert_eq!(result.unwrap(), expected);
+            assert_eq!(extract_value(result.unwrap()), expected);
         }
 
         #[test]
@@ -1016,7 +1094,7 @@ mod tests {
                 Expression::CReal(3.14),
                 Expression::CInt(10),
             ]);
-            assert_eq!(result.unwrap(), expected);
+            assert_eq!(extract_value(result.unwrap()), expected);
         }
 
         #[test]
@@ -1039,7 +1117,7 @@ mod tests {
                 Expression::CInt(5),
                 Expression::CInt(15),
             ]);
-            assert_eq!(result.unwrap(), expected);
+            assert_eq!(extract_value(result.unwrap()), expected);
         }
 
         #[test]
@@ -1070,7 +1148,7 @@ mod tests {
                 Expression::CString("hello".to_string()),
                 Expression::CString("world".to_string()),
             ]);
-            assert_eq!(result.unwrap(), expected);
+            assert_eq!(extract_value(result.unwrap()), expected);
         }
 
         #[test]
@@ -1093,7 +1171,7 @@ mod tests {
                 Expression::CInt(12), // 3 * 4
                 Expression::CInt(5),  // 10 - 5
             ]);
-            assert_eq!(result.unwrap(), expected);
+            assert_eq!(extract_value(result.unwrap()), expected);
         }
 
         #[test]
@@ -1113,7 +1191,7 @@ mod tests {
                 Expression::CTrue,  // True or False
                 Expression::CTrue,  // not False
             ]);
-            assert_eq!(result.unwrap(), expected);
+            assert_eq!(extract_value(result.unwrap()), expected);
         }
 
         #[test]
@@ -1133,7 +1211,7 @@ mod tests {
                 Expression::CTrue, // 2 < 8
                 Expression::CTrue, // 4 == 4
             ]);
-            assert_eq!(result.unwrap(), expected);
+            assert_eq!(extract_value(result.unwrap()), expected);
         }
 
         #[test]
@@ -1153,7 +1231,7 @@ mod tests {
                 Expression::CNothing,
                 Expression::CJust(Box::new(Expression::CInt(10))),
             ]);
-            assert_eq!(result.unwrap(), expected);
+            assert_eq!(extract_value(result.unwrap()), expected);
         }
 
         #[test]
@@ -1173,7 +1251,7 @@ mod tests {
                 Expression::CJust(Box::new(Expression::CString("world".to_string()))),
                 Expression::CNothing,
             ]);
-            assert_eq!(result.unwrap(), expected);
+            assert_eq!(extract_value(result.unwrap()), expected);
         }
 
         #[test]
@@ -1193,7 +1271,7 @@ mod tests {
                 Expression::CErr(Box::new(Expression::CString("error".to_string()))),
                 Expression::COk(Box::new(Expression::CInt(42))),
             ]);
-            assert_eq!(result.unwrap(), expected);
+            assert_eq!(extract_value(result.unwrap()), expected);
         }
 
         #[test]
@@ -1213,7 +1291,7 @@ mod tests {
                 Expression::COk(Box::new(Expression::CString("another".to_string()))),
                 Expression::CErr(Box::new(Expression::CString("failure".to_string()))),
             ]);
-            assert_eq!(result.unwrap(), expected);
+            assert_eq!(extract_value(result.unwrap()), expected);
         }
 
         #[test]
@@ -1233,7 +1311,7 @@ mod tests {
                 Expression::CInt(5),
                 Expression::CString("ok".to_string()),
             ]);
-            assert_eq!(result.unwrap(), expected);
+            assert_eq!(extract_value(result.unwrap()), expected);
         }
 
         #[test]
@@ -1253,7 +1331,7 @@ mod tests {
                 Expression::ListValue(vec![Expression::CInt(3), Expression::CInt(4)]),
                 Expression::ListValue(vec![Expression::CInt(5)]),
             ]);
-            assert_eq!(result.unwrap(), expected);
+            assert_eq!(extract_value(result.unwrap()), expected);
         }
 
         #[test]
@@ -1285,7 +1363,7 @@ mod tests {
                 ]),
                 Expression::ListValue(vec![]),
             ]);
-            assert_eq!(result.unwrap(), expected);
+            assert_eq!(extract_value(result.unwrap()), expected);
         }
 
         #[test]
@@ -1301,7 +1379,7 @@ mod tests {
 
             assert!(result.is_err());
             let error = result.unwrap_err();
-            assert_eq!(error.0, "Variable 'nonexistent' not found");
+            assert_eq!(error, "Variable 'nonexistent' not found");
         }
 
         #[test]
@@ -1321,7 +1399,7 @@ mod tests {
             assert!(result.is_err());
             let error = result.unwrap_err();
             assert_eq!(
-                error.0,
+                error,
                 "addition '(+)' is only defined for numbers (integers and real)."
             );
         }
@@ -1339,7 +1417,7 @@ mod tests {
 
             assert!(result.is_err());
             let error = result.unwrap_err();
-            assert_eq!(error.0, "Program panicked trying to unwrap.");
+            assert_eq!(error, "Program panicked trying to unwrap.");
         }
 
         #[test]
@@ -1361,7 +1439,7 @@ mod tests {
                 Expression::CInt(42),
                 Expression::CString("success".to_string()),
             ]);
-            assert_eq!(result.unwrap(), expected);
+            assert_eq!(extract_value(result.unwrap()), expected);
         }
 
         #[test]
@@ -1377,10 +1455,13 @@ mod tests {
 
             let result = eval(list_expr, &env);
 
-            assert!(result.is_err());
-            let error = result.unwrap_err();
-            assert_eq!(error.0, "Propagate");
-            assert_eq!(error.1, Some(Expression::CString("error".to_string())));
+            // In the new design, propagate expressions result in Ok(ExpressionResult::Propagate(...))
+            assert!(result.is_ok());
+            if let Ok(ExpressionResult::Propagate(error_expr)) = result {
+                assert_eq!(error_expr, Expression::CString("error".to_string()));
+            } else {
+                panic!("Expected propagate result");
+            }
         }
 
         #[test]
@@ -1400,7 +1481,7 @@ mod tests {
                 Expression::CFalse, // CJust(5) is not nothing
                 Expression::CFalse, // CInt(10) is not nothing
             ]);
-            assert_eq!(result.unwrap(), expected);
+            assert_eq!(extract_value(result.unwrap()), expected);
         }
 
         #[test]
@@ -1422,7 +1503,7 @@ mod tests {
                 Expression::CFalse, // COk is not an error
                 Expression::CFalse, // CInt is not an error
             ]);
-            assert_eq!(result.unwrap(), expected);
+            assert_eq!(extract_value(result.unwrap()), expected);
         }
     }
 
@@ -1432,113 +1513,89 @@ mod tests {
         #[test]
         fn test_and_true_true() {
             let env = create_test_env();
-            let expr = Expression::And(
-                Box::new(Expression::CTrue),
-                Box::new(Expression::CTrue),
-            );
+            let expr = Expression::And(Box::new(Expression::CTrue), Box::new(Expression::CTrue));
 
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CTrue);
+            assert_eq!(extract_value(result.unwrap()), Expression::CTrue);
         }
 
         #[test]
         fn test_and_true_false() {
             let env = create_test_env();
-            let expr = Expression::And(
-                Box::new(Expression::CTrue),
-                Box::new(Expression::CFalse),
-            );
+            let expr = Expression::And(Box::new(Expression::CTrue), Box::new(Expression::CFalse));
 
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CFalse);
+            assert_eq!(extract_value(result.unwrap()), Expression::CFalse);
         }
 
         #[test]
         fn test_and_false_true() {
             let env = create_test_env();
-            let expr = Expression::And(
-                Box::new(Expression::CFalse),
-                Box::new(Expression::CTrue),
-            );
+            let expr = Expression::And(Box::new(Expression::CFalse), Box::new(Expression::CTrue));
 
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CFalse);
+            assert_eq!(extract_value(result.unwrap()), Expression::CFalse);
         }
 
         #[test]
         fn test_and_false_false() {
             let env = create_test_env();
-            let expr = Expression::And(
-                Box::new(Expression::CFalse),
-                Box::new(Expression::CFalse),
-            );
+            let expr = Expression::And(Box::new(Expression::CFalse), Box::new(Expression::CFalse));
 
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CFalse);
+            assert_eq!(extract_value(result.unwrap()), Expression::CFalse);
         }
 
         #[test]
         fn test_or_true_true() {
             let env = create_test_env();
-            let expr = Expression::Or(
-                Box::new(Expression::CTrue),
-                Box::new(Expression::CTrue),
-            );
+            let expr = Expression::Or(Box::new(Expression::CTrue), Box::new(Expression::CTrue));
 
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CTrue);
+            assert_eq!(extract_value(result.unwrap()), Expression::CTrue);
         }
 
         #[test]
         fn test_or_true_false() {
             let env = create_test_env();
-            let expr = Expression::Or(
-                Box::new(Expression::CTrue),
-                Box::new(Expression::CFalse),
-            );
+            let expr = Expression::Or(Box::new(Expression::CTrue), Box::new(Expression::CFalse));
 
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CTrue);
+            assert_eq!(extract_value(result.unwrap()), Expression::CTrue);
         }
 
         #[test]
         fn test_or_false_true() {
             let env = create_test_env();
-            let expr = Expression::Or(
-                Box::new(Expression::CFalse),
-                Box::new(Expression::CTrue),
-            );
+            let expr = Expression::Or(Box::new(Expression::CFalse), Box::new(Expression::CTrue));
 
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CTrue);
+            assert_eq!(extract_value(result.unwrap()), Expression::CTrue);
         }
 
         #[test]
         fn test_or_false_false() {
             let env = create_test_env();
-            let expr = Expression::Or(
-                Box::new(Expression::CFalse),
-                Box::new(Expression::CFalse),
-            );
+            let expr = Expression::Or(Box::new(Expression::CFalse), Box::new(Expression::CFalse));
 
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CFalse);
+            assert_eq!(extract_value(result.unwrap()), Expression::CFalse);
         }
 
         #[test]
@@ -1549,7 +1606,7 @@ mod tests {
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CFalse);
+            assert_eq!(extract_value(result.unwrap()), Expression::CFalse);
         }
 
         #[test]
@@ -1560,7 +1617,7 @@ mod tests {
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CTrue);
+            assert_eq!(extract_value(result.unwrap()), Expression::CTrue);
         }
 
         #[test]
@@ -1577,7 +1634,7 @@ mod tests {
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CFalse);
+            assert_eq!(extract_value(result.unwrap()), Expression::CFalse);
         }
 
         #[test]
@@ -1595,7 +1652,7 @@ mod tests {
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CTrue);
+            assert_eq!(extract_value(result.unwrap()), Expression::CTrue);
         }
 
         #[test]
@@ -1613,7 +1670,7 @@ mod tests {
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CFalse);
+            assert_eq!(extract_value(result.unwrap()), Expression::CFalse);
         }
 
         #[test]
@@ -1625,7 +1682,7 @@ mod tests {
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CTrue);
+            assert_eq!(extract_value(result.unwrap()), Expression::CTrue);
         }
 
         #[test]
@@ -1646,7 +1703,7 @@ mod tests {
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CTrue);
+            assert_eq!(extract_value(result.unwrap()), Expression::CTrue);
         }
 
         #[test]
@@ -1667,7 +1724,7 @@ mod tests {
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CTrue);
+            assert_eq!(extract_value(result.unwrap()), Expression::CTrue);
         }
 
         #[test]
@@ -1688,7 +1745,7 @@ mod tests {
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CTrue);
+            assert_eq!(extract_value(result.unwrap()), Expression::CTrue);
         }
 
         #[test]
@@ -1703,7 +1760,7 @@ mod tests {
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CTrue);
+            assert_eq!(extract_value(result.unwrap()), Expression::CTrue);
         }
 
         #[test]
@@ -1725,7 +1782,7 @@ mod tests {
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CTrue);
+            assert_eq!(extract_value(result.unwrap()), Expression::CTrue);
         }
 
         #[test]
@@ -1755,7 +1812,7 @@ mod tests {
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CTrue);
+            assert_eq!(extract_value(result.unwrap()), Expression::CTrue);
         }
 
         #[test]
@@ -1782,7 +1839,7 @@ mod tests {
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CTrue);
+            assert_eq!(extract_value(result.unwrap()), Expression::CTrue);
         }
 
         #[test]
@@ -1803,22 +1860,19 @@ mod tests {
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CTrue);
+            assert_eq!(extract_value(result.unwrap()), Expression::CTrue);
         }
 
         #[test]
         fn test_and_error_with_integer() {
             let env = create_test_env();
-            let expr = Expression::And(
-                Box::new(Expression::CTrue),
-                Box::new(Expression::CInt(5)),
-            );
+            let expr = Expression::And(Box::new(Expression::CTrue), Box::new(Expression::CInt(5)));
 
             let result = eval(expr, &env);
 
             assert!(result.is_err());
             let error = result.unwrap_err();
-            assert_eq!(error.0, "'and' is only defined for booleans.");
+            assert_eq!(error, "'and' is only defined for booleans.");
         }
 
         #[test]
@@ -1833,7 +1887,7 @@ mod tests {
 
             assert!(result.is_err());
             let error = result.unwrap_err();
-            assert_eq!(error.0, "'or' is only defined for booleans.");
+            assert_eq!(error, "'or' is only defined for booleans.");
         }
 
         #[test]
@@ -1845,7 +1899,7 @@ mod tests {
 
             assert!(result.is_err());
             let error = result.unwrap_err();
-            assert_eq!(error.0, "'not' is only defined for booleans.");
+            assert_eq!(error, "'not' is only defined for booleans.");
         }
 
         #[test]
@@ -1860,7 +1914,7 @@ mod tests {
 
             assert!(result.is_err());
             let error = result.unwrap_err();
-            assert_eq!(error.0, "'and' is only defined for booleans.");
+            assert_eq!(error, "'and' is only defined for booleans.");
         }
 
         #[test]
@@ -1875,7 +1929,7 @@ mod tests {
 
             assert!(result.is_err());
             let error = result.unwrap_err();
-            assert_eq!(error.0, "Variable 'undefined_var' not found");
+            assert_eq!(error, "Variable 'undefined_var' not found");
         }
 
         #[test]
@@ -1893,7 +1947,7 @@ mod tests {
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CFalse);
+            assert_eq!(extract_value(result.unwrap()), Expression::CFalse);
         }
 
         #[test]
@@ -1911,7 +1965,7 @@ mod tests {
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CTrue);
+            assert_eq!(extract_value(result.unwrap()), Expression::CTrue);
         }
 
         #[test]
@@ -1934,7 +1988,7 @@ mod tests {
             let right_result = eval(right_expr, &env).unwrap();
 
             assert_eq!(left_result, right_result);
-            assert_eq!(left_result, Expression::CTrue);
+            assert_eq!(extract_value(left_result), Expression::CTrue);
         }
 
         #[test]
@@ -1956,7 +2010,7 @@ mod tests {
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CTrue);
+            assert_eq!(extract_value(result.unwrap()), Expression::CTrue);
         }
 
         #[test]
@@ -1983,7 +2037,7 @@ mod tests {
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CTrue);
+            assert_eq!(extract_value(result.unwrap()), Expression::CTrue);
         }
     }
 
@@ -1993,29 +2047,23 @@ mod tests {
         #[test]
         fn test_eq_integers_true() {
             let env = create_test_env();
-            let expr = Expression::EQ(
-                Box::new(Expression::CInt(5)),
-                Box::new(Expression::CInt(5)),
-            );
+            let expr = Expression::EQ(Box::new(Expression::CInt(5)), Box::new(Expression::CInt(5)));
 
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CTrue);
+            assert_eq!(extract_value(result.unwrap()), Expression::CTrue);
         }
 
         #[test]
         fn test_eq_integers_false() {
             let env = create_test_env();
-            let expr = Expression::EQ(
-                Box::new(Expression::CInt(3)),
-                Box::new(Expression::CInt(7)),
-            );
+            let expr = Expression::EQ(Box::new(Expression::CInt(3)), Box::new(Expression::CInt(7)));
 
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CFalse);
+            assert_eq!(extract_value(result.unwrap()), Expression::CFalse);
         }
 
         #[test]
@@ -2029,7 +2077,7 @@ mod tests {
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CTrue);
+            assert_eq!(extract_value(result.unwrap()), Expression::CTrue);
         }
 
         #[test]
@@ -2043,7 +2091,7 @@ mod tests {
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CFalse);
+            assert_eq!(extract_value(result.unwrap()), Expression::CFalse);
         }
 
         #[test]
@@ -2057,7 +2105,7 @@ mod tests {
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CTrue);
+            assert_eq!(extract_value(result.unwrap()), Expression::CTrue);
         }
 
         #[test]
@@ -2071,35 +2119,31 @@ mod tests {
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CFalse);
+            assert_eq!(extract_value(result.unwrap()), Expression::CFalse);
         }
 
         #[test]
         fn test_neq_integers_true() {
             let env = create_test_env();
-            let expr = Expression::NEQ(
-                Box::new(Expression::CInt(3)),
-                Box::new(Expression::CInt(7)),
-            );
+            let expr =
+                Expression::NEQ(Box::new(Expression::CInt(3)), Box::new(Expression::CInt(7)));
 
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CTrue);
+            assert_eq!(extract_value(result.unwrap()), Expression::CTrue);
         }
 
         #[test]
         fn test_neq_integers_false() {
             let env = create_test_env();
-            let expr = Expression::NEQ(
-                Box::new(Expression::CInt(5)),
-                Box::new(Expression::CInt(5)),
-            );
+            let expr =
+                Expression::NEQ(Box::new(Expression::CInt(5)), Box::new(Expression::CInt(5)));
 
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CFalse);
+            assert_eq!(extract_value(result.unwrap()), Expression::CFalse);
         }
 
         #[test]
@@ -2113,7 +2157,7 @@ mod tests {
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CTrue);
+            assert_eq!(extract_value(result.unwrap()), Expression::CTrue);
         }
 
         #[test]
@@ -2127,7 +2171,7 @@ mod tests {
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CFalse);
+            assert_eq!(extract_value(result.unwrap()), Expression::CFalse);
         }
 
         #[test]
@@ -2141,35 +2185,29 @@ mod tests {
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CTrue);
+            assert_eq!(extract_value(result.unwrap()), Expression::CTrue);
         }
 
         #[test]
         fn test_gt_integers_false() {
             let env = create_test_env();
-            let expr = Expression::GT(
-                Box::new(Expression::CInt(3)),
-                Box::new(Expression::CInt(7)),
-            );
+            let expr = Expression::GT(Box::new(Expression::CInt(3)), Box::new(Expression::CInt(7)));
 
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CFalse);
+            assert_eq!(extract_value(result.unwrap()), Expression::CFalse);
         }
 
         #[test]
         fn test_gt_equal_integers_false() {
             let env = create_test_env();
-            let expr = Expression::GT(
-                Box::new(Expression::CInt(5)),
-                Box::new(Expression::CInt(5)),
-            );
+            let expr = Expression::GT(Box::new(Expression::CInt(5)), Box::new(Expression::CInt(5)));
 
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CFalse);
+            assert_eq!(extract_value(result.unwrap()), Expression::CFalse);
         }
 
         #[test]
@@ -2183,7 +2221,7 @@ mod tests {
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CTrue);
+            assert_eq!(extract_value(result.unwrap()), Expression::CTrue);
         }
 
         #[test]
@@ -2197,21 +2235,18 @@ mod tests {
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CTrue);
+            assert_eq!(extract_value(result.unwrap()), Expression::CTrue);
         }
 
         #[test]
         fn test_lt_integers_true() {
             let env = create_test_env();
-            let expr = Expression::LT(
-                Box::new(Expression::CInt(3)),
-                Box::new(Expression::CInt(8)),
-            );
+            let expr = Expression::LT(Box::new(Expression::CInt(3)), Box::new(Expression::CInt(8)));
 
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CTrue);
+            assert_eq!(extract_value(result.unwrap()), Expression::CTrue);
         }
 
         #[test]
@@ -2225,7 +2260,7 @@ mod tests {
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CFalse);
+            assert_eq!(extract_value(result.unwrap()), Expression::CFalse);
         }
 
         #[test]
@@ -2239,7 +2274,7 @@ mod tests {
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CFalse);
+            assert_eq!(extract_value(result.unwrap()), Expression::CFalse);
         }
 
         #[test]
@@ -2253,7 +2288,7 @@ mod tests {
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CTrue);
+            assert_eq!(extract_value(result.unwrap()), Expression::CTrue);
         }
 
         #[test]
@@ -2267,35 +2302,31 @@ mod tests {
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CTrue);
+            assert_eq!(extract_value(result.unwrap()), Expression::CTrue);
         }
 
         #[test]
         fn test_gte_integers_equal_true() {
             let env = create_test_env();
-            let expr = Expression::GTE(
-                Box::new(Expression::CInt(7)),
-                Box::new(Expression::CInt(7)),
-            );
+            let expr =
+                Expression::GTE(Box::new(Expression::CInt(7)), Box::new(Expression::CInt(7)));
 
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CTrue);
+            assert_eq!(extract_value(result.unwrap()), Expression::CTrue);
         }
 
         #[test]
         fn test_gte_integers_false() {
             let env = create_test_env();
-            let expr = Expression::GTE(
-                Box::new(Expression::CInt(3)),
-                Box::new(Expression::CInt(9)),
-            );
+            let expr =
+                Expression::GTE(Box::new(Expression::CInt(3)), Box::new(Expression::CInt(9)));
 
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CFalse);
+            assert_eq!(extract_value(result.unwrap()), Expression::CFalse);
         }
 
         #[test]
@@ -2309,35 +2340,31 @@ mod tests {
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CTrue);
+            assert_eq!(extract_value(result.unwrap()), Expression::CTrue);
         }
 
         #[test]
         fn test_lte_integers_less_true() {
             let env = create_test_env();
-            let expr = Expression::LTE(
-                Box::new(Expression::CInt(3)),
-                Box::new(Expression::CInt(8)),
-            );
+            let expr =
+                Expression::LTE(Box::new(Expression::CInt(3)), Box::new(Expression::CInt(8)));
 
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CTrue);
+            assert_eq!(extract_value(result.unwrap()), Expression::CTrue);
         }
 
         #[test]
         fn test_lte_integers_equal_true() {
             let env = create_test_env();
-            let expr = Expression::LTE(
-                Box::new(Expression::CInt(6)),
-                Box::new(Expression::CInt(6)),
-            );
+            let expr =
+                Expression::LTE(Box::new(Expression::CInt(6)), Box::new(Expression::CInt(6)));
 
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CTrue);
+            assert_eq!(extract_value(result.unwrap()), Expression::CTrue);
         }
 
         #[test]
@@ -2351,7 +2378,7 @@ mod tests {
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CFalse);
+            assert_eq!(extract_value(result.unwrap()), Expression::CFalse);
         }
 
         #[test]
@@ -2365,7 +2392,7 @@ mod tests {
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CTrue);
+            assert_eq!(extract_value(result.unwrap()), Expression::CTrue);
         }
 
         #[test]
@@ -2382,7 +2409,7 @@ mod tests {
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CTrue);
+            assert_eq!(extract_value(result.unwrap()), Expression::CTrue);
         }
 
         #[test]
@@ -2403,7 +2430,7 @@ mod tests {
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CTrue);
+            assert_eq!(extract_value(result.unwrap()), Expression::CTrue);
         }
 
         #[test]
@@ -2424,7 +2451,7 @@ mod tests {
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CTrue);
+            assert_eq!(extract_value(result.unwrap()), Expression::CTrue);
         }
 
         #[test]
@@ -2438,7 +2465,7 @@ mod tests {
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CTrue);
+            assert_eq!(extract_value(result.unwrap()), Expression::CTrue);
         }
 
         #[test]
@@ -2452,7 +2479,7 @@ mod tests {
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CTrue);
+            assert_eq!(extract_value(result.unwrap()), Expression::CTrue);
         }
 
         #[test]
@@ -2466,7 +2493,7 @@ mod tests {
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CTrue);
+            assert_eq!(extract_value(result.unwrap()), Expression::CTrue);
         }
 
         #[test]
@@ -2480,22 +2507,22 @@ mod tests {
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CTrue);
+            assert_eq!(extract_value(result.unwrap()), Expression::CTrue);
         }
 
         #[test]
         fn test_relational_operators_error_with_booleans() {
             let env = create_test_env();
-            let expr = Expression::GT(
-                Box::new(Expression::CTrue),
-                Box::new(Expression::CFalse),
-            );
+            let expr = Expression::GT(Box::new(Expression::CTrue), Box::new(Expression::CFalse));
 
             let result = eval(expr, &env);
 
             assert!(result.is_err());
             let error = result.unwrap_err();
-            assert_eq!(error.0, "(>) is only defined for numbers (integers and real).");
+            assert_eq!(
+                error,
+                "greater than '(>)' is only defined for numbers (integers and real)."
+            );
         }
 
         #[test]
@@ -2510,7 +2537,10 @@ mod tests {
 
             assert!(result.is_err());
             let error = result.unwrap_err();
-            assert_eq!(error.0, "(==) is only defined for numbers (integers and real).");
+            assert_eq!(
+                error,
+                "equality '(==)' is only defined for numbers (integers and real)."
+            );
         }
 
         #[test]
@@ -2525,7 +2555,10 @@ mod tests {
 
             assert!(result.is_err());
             let error = result.unwrap_err();
-            assert_eq!(error.0, "(<) is only defined for numbers (integers and real).");
+            assert_eq!(
+                error,
+                "less than '(<)' is only defined for numbers (integers and real)."
+            );
         }
 
         #[test]
@@ -2540,7 +2573,7 @@ mod tests {
 
             assert!(result.is_err());
             let error = result.unwrap_err();
-            assert_eq!(error.0, "Variable 'undefined_var' not found");
+            assert_eq!(error, "Variable 'undefined_var' not found");
         }
 
         #[test]
@@ -2564,7 +2597,7 @@ mod tests {
             let result = eval(expr, &env);
 
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), Expression::CTrue);
+            assert_eq!(extract_value(result.unwrap()), Expression::CTrue);
         }
 
         #[test]
@@ -2584,7 +2617,10 @@ mod tests {
 
             assert!(result.is_err());
             let error = result.unwrap_err();
-            assert_eq!(error.0, "addition '(+)' is only defined for numbers (integers and real).");
+            assert_eq!(
+                error,
+                "addition '(+)' is only defined for numbers (integers and real)."
+            );
         }
     }
 }

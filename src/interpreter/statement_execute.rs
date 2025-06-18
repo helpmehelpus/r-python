@@ -1,14 +1,23 @@
-use super::expression_eval::eval;
+use super::expression_eval::{eval, ExpressionResult};
 use crate::environment::environment::Environment;
 use crate::ir::ast::{Expression, Statement};
 
-type ErrorMessage = (String, Option<Expression>);
+pub enum Computation {
+    Continue(Environment<Expression>),
+    Return(Expression, Environment<Expression>),
+    PropagateError(Expression, Environment<Expression>),
+}
 
 pub fn _execute_with_env_(
     stmt: Statement,
     env: &mut Environment<Expression>,
-) -> Result<Environment<Expression>, ErrorMessage> {
-    execute(stmt, &env.clone())
+) -> Result<Environment<Expression>, String> {
+    match execute(stmt, &env.clone()) {
+        Ok(Computation::Continue(new_env)) => Ok(new_env),
+        Ok(Computation::Return(_, new_env)) => Ok(new_env), // For backward compatibility
+        Ok(Computation::PropagateError(_, new_env)) => Ok(new_env), // For backward compatibility
+        Err(e) => Err(e),
+    }
 }
 
 pub fn run(
@@ -16,38 +25,57 @@ pub fn run(
     env: &Environment<Expression>,
 ) -> Result<Environment<Expression>, String> {
     match execute(stmt, env) {
-        Ok(e) => Ok(e),
-        Err((s, _)) => Err(s),
+        Ok(Computation::Continue(new_env)) => Ok(new_env),
+        Ok(Computation::Return(_, new_env)) => Ok(new_env),
+        Ok(Computation::PropagateError(_, new_env)) => Ok(new_env),
+        Err(e) => Err(e),
     }
 }
 
-pub fn execute(
-    stmt: Statement,
-    env: &Environment<Expression>,
-) -> Result<Environment<Expression>, ErrorMessage> {
+pub fn execute(stmt: Statement, env: &Environment<Expression>) -> Result<Computation, String> {
     let mut new_env = env.clone();
 
     match stmt {
         Statement::VarDeclaration(name, exp) => {
-            let value = eval(*exp, &new_env)?;
+            let value = match eval(*exp, &new_env)? {
+                ExpressionResult::Value(expr) => expr,
+                ExpressionResult::Propagate(expr) => {
+                    return Ok(Computation::PropagateError(expr, new_env))
+                }
+            };
             new_env.map_variable(name, true, value);
-            Ok(new_env)
+            Ok(Computation::Continue(new_env))
         }
 
         Statement::ValDeclaration(name, exp) => {
-            let value = eval(*exp, &new_env)?;
+            let value = match eval(*exp, &new_env)? {
+                ExpressionResult::Value(expr) => expr,
+                ExpressionResult::Propagate(expr) => {
+                    return Ok(Computation::PropagateError(expr, new_env))
+                }
+            };
             new_env.map_variable(name, false, value);
-            Ok(new_env)
+            Ok(Computation::Continue(new_env))
         }
 
         Statement::Assignment(name, exp) => {
-            let value = eval(*exp, &new_env)?;
+            let value = match eval(*exp, &new_env)? {
+                ExpressionResult::Value(expr) => expr,
+                ExpressionResult::Propagate(expr) => {
+                    return Ok(Computation::PropagateError(expr, new_env))
+                }
+            };
             new_env.map_variable(name, true, value);
-            Ok(new_env)
+            Ok(Computation::Continue(new_env))
         }
 
         Statement::IfThenElse(cond, stmt_then, stmt_else) => {
-            let value = eval(*cond, &new_env)?;
+            let value = match eval(*cond, &new_env)? {
+                ExpressionResult::Value(expr) => expr,
+                ExpressionResult::Propagate(expr) => {
+                    return Ok(Computation::PropagateError(expr, new_env))
+                }
+            };
 
             match value {
                 Expression::CTrue => match *stmt_then {
@@ -59,9 +87,9 @@ pub fn execute(
                         Statement::Block(stmts) => execute_block(stmts, &new_env),
                         _ => execute(*else_stmt, &new_env),
                     },
-                    None => Ok(new_env),
+                    None => Ok(Computation::Continue(new_env)),
                 },
-                _ => Err(("Condition must evaluate to a boolean".to_string(), None)),
+                _ => Err("Condition must evaluate to a boolean".to_string()),
             }
         }
 
@@ -73,72 +101,117 @@ pub fn execute(
         }
 
         Statement::While(cond, stmt) => {
-            let mut value = eval(*cond.clone(), &new_env)?;
+            let mut value = match eval(*cond.clone(), &new_env)? {
+                ExpressionResult::Value(expr) => expr,
+                ExpressionResult::Propagate(expr) => {
+                    return Ok(Computation::PropagateError(expr, new_env))
+                }
+            };
 
             loop {
                 match value {
                     Expression::CTrue => {
-                        new_env = execute(*stmt.clone(), &new_env)?;
-                        value = eval(*cond.clone(), &new_env)?;
+                        match execute(*stmt.clone(), &new_env)? {
+                            Computation::Continue(env) => new_env = env,
+                            Computation::Return(expr, env) => {
+                                return Ok(Computation::Return(expr, env))
+                            }
+                            Computation::PropagateError(expr, env) => {
+                                return Ok(Computation::PropagateError(expr, env))
+                            }
+                        }
+                        value = match eval(*cond.clone(), &new_env)? {
+                            ExpressionResult::Value(expr) => expr,
+                            ExpressionResult::Propagate(expr) => {
+                                return Ok(Computation::PropagateError(expr, new_env))
+                            }
+                        };
                     }
-                    Expression::CFalse => return Ok(new_env),
+                    Expression::CFalse => return Ok(Computation::Continue(new_env)),
                     _ => unreachable!(),
                 }
             }
         }
 
         Statement::For(var, list, stmt) => {
-            let values = eval(*list.clone(), &new_env)?;
+            let values = match eval(*list.clone(), &new_env)? {
+                ExpressionResult::Value(expr) => expr,
+                ExpressionResult::Propagate(expr) => {
+                    return Ok(Computation::PropagateError(expr, new_env))
+                }
+            };
 
             match values {
                 Expression::ListValue(expressions) => {
                     for exp in expressions {
                         new_env.map_variable(var.clone(), false, exp);
-                        new_env = execute(*stmt.clone(), &new_env)?;
+                        match execute(*stmt.clone(), &new_env)? {
+                            Computation::Continue(env) => new_env = env,
+                            Computation::Return(expr, env) => {
+                                return Ok(Computation::Return(expr, env))
+                            }
+                            Computation::PropagateError(expr, env) => {
+                                return Ok(Computation::PropagateError(expr, env))
+                            }
+                        }
                     }
-                    return Ok(new_env);
+                    return Ok(Computation::Continue(new_env));
                 }
                 _ => unreachable!(),
             }
         }
 
         Statement::Sequence(s1, s2) => {
-            new_env = execute(*s1, &new_env)?;
+            match execute(*s1, &new_env)? {
+                Computation::Continue(env) => new_env = env,
+                Computation::Return(expr, env) => return Ok(Computation::Return(expr, env)),
+                Computation::PropagateError(expr, env) => {
+                    return Ok(Computation::PropagateError(expr, env))
+                }
+            }
             execute(*s2, &new_env)
         }
 
         Statement::FuncDef(func) => {
             new_env.map_function(func.clone());
-            Ok(new_env)
+            Ok(Computation::Continue(new_env))
         }
 
         Statement::Return(exp) => {
-            let exp_value = eval(*exp, &new_env)?;
-            Err(("Return".to_string(), Some(exp_value)))
+            let exp_value = match eval(*exp, &new_env)? {
+                ExpressionResult::Value(expr) => expr,
+                ExpressionResult::Propagate(expr) => {
+                    return Ok(Computation::PropagateError(expr, new_env))
+                }
+            };
+            Ok(Computation::Return(exp_value, new_env))
         }
 
         Statement::TypeDeclaration(name, constructors) => {
             new_env.map_adt(name, constructors);
-            Ok(new_env)
+            Ok(Computation::Continue(new_env))
         }
 
-        _ => Err((String::from("not implemented yet"), None)),
+        _ => Err(String::from("not implemented yet")),
     }
 }
 
 pub fn execute_block(
     stmts: Vec<Statement>,
     env: &Environment<Expression>,
-) -> Result<Environment<Expression>, ErrorMessage> {
+) -> Result<Computation, String> {
     let mut current_env = env.clone();
 
     for stmt in stmts {
-        match execute(stmt, &current_env) {
-            Ok(new_env) => current_env = new_env,
-            Err(e) => return Err(e),
+        match execute(stmt, &current_env)? {
+            Computation::Continue(new_env) => current_env = new_env,
+            Computation::Return(expr, env) => return Ok(Computation::Return(expr, env)),
+            Computation::PropagateError(expr, env) => {
+                return Ok(Computation::PropagateError(expr, env))
+            }
         }
     }
-    Ok(current_env)
+    Ok(Computation::Continue(current_env))
 }
 
 #[cfg(test)]
@@ -148,6 +221,14 @@ mod tests {
 
     fn create_test_env() -> Environment<Expression> {
         Environment::new()
+    }
+
+    fn extract_env(computation: Computation) -> Environment<Expression> {
+        match computation {
+            Computation::Continue(env) => env,
+            Computation::Return(_, env) => env,
+            Computation::PropagateError(_, env) => env,
+        }
     }
 
     mod assignment_tests {
@@ -161,7 +242,7 @@ mod tests {
             let var_decl =
                 Statement::VarDeclaration("x".to_string(), Box::new(Expression::CInt(42)));
 
-            let env_with_var = execute(var_decl, &env).unwrap();
+            let env_with_var = extract_env(execute(var_decl, &env).unwrap());
 
             // Check that the variable was declared correctly
             let x_value = env_with_var.lookup(&"x".to_string());
@@ -177,7 +258,7 @@ mod tests {
             let result_env = execute(assignment, &env_with_var);
 
             assert!(result_env.is_ok());
-            let final_env = result_env.unwrap();
+            let final_env = extract_env(result_env.unwrap());
 
             let final_x_value = final_env.lookup(&"x".to_string());
             assert!(final_x_value.is_some());
@@ -199,7 +280,7 @@ mod tests {
             let result_env = execute(val_decl, &env);
 
             assert!(result_env.is_ok());
-            let final_env = result_env.unwrap();
+            let final_env = extract_env(result_env.unwrap());
 
             let message_value = final_env.lookup(&"message".to_string());
             assert!(message_value.is_some());
@@ -219,7 +300,7 @@ mod tests {
             let var_decl =
                 Statement::VarDeclaration("flag".to_string(), Box::new(Expression::CTrue));
 
-            let env_with_var = execute(var_decl, &env).unwrap();
+            let env_with_var = extract_env(execute(var_decl, &env).unwrap());
 
             let flag_value = env_with_var.lookup(&"flag".to_string());
             assert!(flag_value.is_some());
@@ -233,7 +314,7 @@ mod tests {
 
             let result_env = execute(assignment_false, &env_with_var);
             assert!(result_env.is_ok());
-            let final_env = result_env.unwrap();
+            let final_env = extract_env(result_env.unwrap());
 
             let flag_value2 = final_env.lookup(&"flag".to_string());
             assert!(flag_value2.is_some());
@@ -252,7 +333,7 @@ mod tests {
             let result_env = execute(val_decl, &env);
 
             assert!(result_env.is_ok());
-            let final_env = result_env.unwrap();
+            let final_env = extract_env(result_env.unwrap());
 
             let pi_value = final_env.lookup(&"pi".to_string());
             assert!(pi_value.is_some());
@@ -276,7 +357,7 @@ mod tests {
             let result_env = execute(var_decl, &env);
 
             assert!(result_env.is_ok());
-            let final_env = result_env.unwrap();
+            let final_env = extract_env(result_env.unwrap());
 
             let result_value = final_env.lookup(&"result".to_string());
             assert!(result_value.is_some());
@@ -307,7 +388,7 @@ mod tests {
             let result_env = execute(val_decl, &env);
 
             assert!(result_env.is_ok());
-            let final_env = result_env.unwrap();
+            let final_env = extract_env(result_env.unwrap());
 
             let result_value = final_env.lookup(&"result".to_string());
             assert!(result_value.is_some());
@@ -324,7 +405,7 @@ mod tests {
             let var_decl =
                 Statement::VarDeclaration("x".to_string(), Box::new(Expression::CInt(10)));
 
-            let env_with_x = execute(var_decl, &env).unwrap();
+            let env_with_x = extract_env(execute(var_decl, &env).unwrap());
 
             // Second declare y using x: var y = x + 5
             let var_decl_y = Statement::VarDeclaration(
@@ -338,7 +419,7 @@ mod tests {
             let result_env = execute(var_decl_y, &env_with_x);
 
             assert!(result_env.is_ok());
-            let final_env = result_env.unwrap();
+            let final_env = extract_env(result_env.unwrap());
 
             let y_value = final_env.lookup(&"y".to_string());
             assert!(y_value.is_some());
@@ -355,7 +436,7 @@ mod tests {
             let var_decl =
                 Statement::VarDeclaration("counter".to_string(), Box::new(Expression::CInt(0)));
 
-            let env_with_counter = execute(var_decl, &env).unwrap();
+            let env_with_counter = extract_env(execute(var_decl, &env).unwrap());
 
             // Verify initial value
             let counter_value = env_with_counter.lookup(&"counter".to_string());
@@ -376,7 +457,7 @@ mod tests {
             let result_env = execute(reassignment, &env_with_counter);
 
             assert!(result_env.is_ok());
-            let final_env = result_env.unwrap();
+            let final_env = extract_env(result_env.unwrap());
 
             let final_counter_value = final_env.lookup(&"counter".to_string());
             assert!(final_counter_value.is_some());
@@ -413,7 +494,7 @@ mod tests {
             let result_env = execute(program, &env);
 
             assert!(result_env.is_ok());
-            let final_env = result_env.unwrap();
+            let final_env = extract_env(result_env.unwrap());
 
             // Check all variables
             let a_value = final_env.lookup(&"a".to_string());
@@ -453,7 +534,7 @@ mod tests {
             let result_env = execute(block, &env);
 
             assert!(result_env.is_ok());
-            let final_env = result_env.unwrap();
+            let final_env = extract_env(result_env.unwrap());
 
             // Both variables should be accessible after the block
             let local_var_value = final_env.lookup(&"local_var".to_string());
@@ -510,7 +591,7 @@ mod tests {
 
             // Check that execution was successful
             assert!(result_env.is_ok());
-            let final_env = result_env.unwrap();
+            let final_env = extract_env(result_env.unwrap());
 
             // Check that sum equals 15 (1+2+3+4+5)
             let sum_value = final_env.lookup(&"sum".to_string());
@@ -550,7 +631,7 @@ mod tests {
 
             // Check that execution was successful
             assert!(result_env.is_ok());
-            let final_env = result_env.unwrap();
+            let final_env = extract_env(result_env.unwrap());
 
             // Check that count is still 0 (loop body never executed)
             let count_value = final_env.lookup(&"count".to_string());
@@ -581,7 +662,7 @@ mod tests {
 
             // Check that execution was successful
             assert!(result_env.is_ok());
-            let final_env = result_env.unwrap();
+            let final_env = extract_env(result_env.unwrap());
 
             // Check that result equals 42
             let result_value = final_env.lookup(&"result".to_string());
@@ -634,7 +715,7 @@ mod tests {
 
             // Check that execution was successful
             assert!(result_env.is_ok());
-            let final_env = result_env.unwrap();
+            let final_env = extract_env(result_env.unwrap());
 
             // Check that product equals 96 (1 * 2 * 6 * 8)
             let product_value = final_env.lookup(&"product".to_string());
@@ -686,7 +767,7 @@ mod tests {
 
             // Check that execution was successful
             assert!(result_env.is_ok());
-            let final_env = result_env.unwrap();
+            let final_env = extract_env(result_env.unwrap());
 
             // Check that sum equals 12 (2 + 4 + 6)
             let sum_value = final_env.lookup(&"sum".to_string());
