@@ -2,8 +2,8 @@ use nom::{
     branch::alt,
     bytes::complete::tag,
     character::complete::{char, multispace0, multispace1},
-    combinator::{map, opt},
-    error::Error,
+    combinator::{map, opt, map_res},
+    error::{Error, ErrorKind},
     multi::separated_list0,
     sequence::{delimited, preceded, tuple},
     IResult,
@@ -17,6 +17,7 @@ use crate::parser::parser_common::{
 };
 use crate::parser::parser_expr::parse_expression;
 use crate::parser::parser_type::parse_type;
+use crate::ir::ast::Type; // TODO: Check if needed
 
 pub fn parse_statement(input: &str) -> IResult<&str, Statement> {
     alt((
@@ -27,6 +28,7 @@ pub fn parse_statement(input: &str) -> IResult<&str, Statement> {
         parse_while_statement,
         parse_for_statement,
         parse_assert_statement,
+        parse_test_function_definition_statement, // FIXME: Being Implemented
         parse_function_definition_statement,
     ))(input)
 }
@@ -150,7 +152,7 @@ fn parse_assert_statement(input: &str) -> IResult<&str, Statement> {
 }
 
 fn parse_function_definition_statement(input: &str) -> IResult<&str, Statement> {
-    map(
+    map_res(
         tuple((
             keyword(DEF_KEYWORD),
             preceded(multispace1, identifier),
@@ -171,12 +173,59 @@ fn parse_function_definition_statement(input: &str) -> IResult<&str, Statement> 
             parse_block,
         )),
         |(_, name, args, _, t, block)| {
-            Statement::FuncDef(Function {
+            if name.starts_with("test") {
+                // Força falha aqui para evitar aceitar funções test_ no parser geral
+                Err(nom::Err::Error(Error::new(name, ErrorKind::Tag)))
+            } else {
+                Ok(Statement::FuncDef(Function {
+                    name: name.to_string(),
+                    kind: t,
+                    params: args,
+                    body: Some(Box::new(block)),
+                }))
+            }
+        },
+    )(input)
+}
+
+
+// TODO: Fazer testes para essa função de parser
+fn parse_test_function_definition_statement(input: &str) -> IResult<&str, Statement> {
+    map_res(
+        tuple((
+            //keyword(DEF_KEYWORD),
+            tag("def"),
+            preceded(multispace1, identifier),
+            //identifier,
+            delimited(
+                char::<&str, Error<&str>>(LEFT_PAREN),
+                multispace0, // Permite `()` com espaços, mas sem argumentos
+                char::<&str, Error<&str>>(RIGHT_PAREN),
+            ),
+            opt(preceded(
+                preceded(multispace0, tag("->")),
+                preceded(multispace0, parse_type),
+            )),
+            parse_block,
+        )),
+        |(_, name, _,opt_ret_type, block)| {
+            if !name.starts_with("test") {
+                return Err(nom::Err::Error(Error::new(name, ErrorKind::Tag)));
+            }
+
+            // Se tiver tipo declarado, só aceita Bool
+            if let Some(ret_type) = opt_ret_type {
+                if ret_type != Type::TBool {
+                    return Err(nom::Err::Error(Error::new(name, ErrorKind::Tag)));
+                }
+            }
+
+            Ok(Statement::TestDef(Function {
                 name: name.to_string(),
-                kind: t,
-                params: args,
+                kind: Type::TBool,    // Sempre bool (mesmo se não declarou)
+                params: Vec::new(),   // Nenhum argumento
                 body: Some(Box::new(block)),
-            })
+            }))
         },
     )(input)
 }
@@ -343,4 +392,79 @@ mod tests {
         let parsed = parse_formal_argument(input).unwrap().1;
         assert_eq!(parsed, expected);
     }
+
+    #[test]
+    fn test_parse_test_function_definition_statement_valid() {
+        let input = "def test_example(): x = 1; end";
+        let expected = Statement::TestDef(Function {
+            name: "test_example".to_string(),
+            kind: Type::TBool,
+            params: vec![],
+            body: Some(Box::new(Statement::Block(vec![
+                Statement::Assignment("x".to_string(), Box::new(Expression::CInt(1))),
+            ]))),
+        });
+        let parsed = parse_test_function_definition_statement(input).unwrap().1;
+        assert_eq!(parsed, expected);
+    }
+
+    #[test]
+    fn test_parse_test_function_definition_statement_with_spaces() {
+        let input = "def test_spaces(   ): x = 2; end";
+        let expected = Statement::TestDef(Function {
+            name: "test_spaces".to_string(),
+            kind: Type::TBool,
+            params: vec![],
+            body: Some(Box::new(Statement::Block(vec![
+                Statement::Assignment("x".to_string(), Box::new(Expression::CInt(2))),
+            ]))),
+        });
+        let parsed = parse_test_function_definition_statement(input).unwrap().1;
+        assert_eq!(parsed, expected);
+    }
+
+    #[test]
+    fn test_parse_test_function_definition_statement_args() {
+        let input = "def test_with_args(x: Int, y: Int): x = y; end";
+        
+        // O parser deve falhar, pois funções de teste não podem ter argumentos.
+        let parsed = parse_test_function_definition_statement(input);
+        
+        assert!(parsed.is_err(), "Funções de teste com argumentos devem ser rejeitadas");
+    }
+    
+    #[test]
+    fn test_parse_test_function_definition_statement_invalid_return_type() {
+        let input = "def test_with_invalid_return() -> Int: x = 2; end";
+        
+        // O parser deve falhar, pois funções de teste não podem ter argumentos.
+        let parsed = parse_test_function_definition_statement(input);
+        
+        assert!(parsed.is_err(), "Funções de teste não devem especificar tipo de retorno");
+    }
+    
+    #[test]
+    fn test_parse_test_function_definition_statement_valid_return_type() {
+        let input = "def test_with_valid_return() -> Boolean: x = 2; end";
+        let expected = Statement::TestDef(Function {
+            name: "test_with_valid_return".to_string(),
+            kind: Type::TBool,
+            params: vec![],
+            body: Some(Box::new(Statement::Block(vec![
+                Statement::Assignment("x".to_string(), Box::new(Expression::CInt(2))),
+            ]))),
+        });
+        let parsed = parse_test_function_definition_statement(input).unwrap().1;
+        assert_eq!(parsed, expected);
+    }
+    #[test]
+    #[ignore]
+    fn test_parse_function_definition_statement_reject_test_function() {
+        let input = "def test_function_rejected() -> Int: x = 2; end";
+        
+        let parsed = parse_function_definition_statement(input);
+        assert!(parsed.is_err(), "Funções comuns não devem iniciar com 'test'");
+    }
+
+
 }
