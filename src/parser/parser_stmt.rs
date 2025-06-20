@@ -175,7 +175,7 @@ fn parse_function_definition_statement(input: &str) -> IResult<&str, Statement> 
         |(_, name, args, _, t, block)| {
             if name.starts_with("test") {
                 // Força falha aqui para evitar aceitar funções test_ no parser geral
-                Err(nom::Err::Error(Error::new(name, ErrorKind::Tag)))
+                Err(nom::Err::Error(Error::new(input, ErrorKind::Tag)))
             } else {
                 Ok(Statement::FuncDef(Function {
                     name: name.to_string(),
@@ -210,13 +210,13 @@ fn parse_test_function_definition_statement(input: &str) -> IResult<&str, Statem
         )),
         |(_, name, _,opt_ret_type, block)| {
             if !name.starts_with("test") {
-                return Err(nom::Err::Error(Error::new(name, ErrorKind::Tag)));
+                return Err(nom::Err::Error(Error::new(input, ErrorKind::Tag)));
             }
 
             // Se tiver tipo declarado, só aceita Bool
             if let Some(ret_type) = opt_ret_type {
                 if ret_type != Type::TBool {
-                    return Err(nom::Err::Error(Error::new(name, ErrorKind::Tag)));
+                    return Err(nom::Err::Error(Error::new(input, ErrorKind::Tag)));
                 }
             }
 
