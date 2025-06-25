@@ -320,6 +320,11 @@ pub fn execute(stmt: Statement, env: &Environment<Expression>) -> Result<Computa
             Ok(Computation::Continue(new_env))
         }
 
+        Statement::TestDef(teste) => {
+            new_env.map_test(teste.clone());
+            Ok(Computation::Continue(new_env))
+        }
+
         Statement::Return(exp) => {
             let exp_value = match eval(*exp, &new_env)? {
                 ExpressionResult::Value(expr) => expr,
@@ -1096,6 +1101,30 @@ mod tests {
                 Err(e) => e.to_string(),
             };
             assert_eq!(computation, "assertfalse fail".to_string());
+        }
+    }
+    mod testdef_statement_tests {
+        use super::*;
+
+        #[test]
+        fn test_execute_testdef() {
+            let env = create_test_env();
+            let test_def = Statement::TestDef(Function {
+                name: "test_example".to_string(),
+                kind: Type::TVoid,
+                params: Vec::new(),
+                body: Some(Box::new(Statement::Block(vec![Statement::Assert(
+                    Box::new(Expression::CTrue),
+                    Box::new(Expression::CString("Test passed".to_string())),
+                )]))),
+            });
+            let programa = Statement::Block(vec![test_def.clone()]);
+            match execute(programa, &env) {
+                Ok(Computation::Continue(new_env)) => {
+                    assert!(new_env.lookup_test(&"test_example".to_string()).is_some());
+                }
+                _ => panic!("Test definition execution failed"),
+            }
         }
     }
 }
