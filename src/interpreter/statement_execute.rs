@@ -47,6 +47,149 @@ pub fn execute(stmt: Statement, env: &Environment<Expression>) -> Result<Computa
             Ok(Computation::Continue(new_env))
         }
 
+        Statement::Assert(exp, msg) => {
+            let value = match eval(*exp, &new_env)? {
+                ExpressionResult::Value(expr) => expr,
+                ExpressionResult::Propagate(expr) => {
+                    return Ok(Computation::PropagateError(expr, new_env))
+                }
+            };
+
+            match value {
+                Expression::CTrue => Ok(Computation::Continue(new_env)),
+                Expression::CFalse => {
+                    // Avalia a mensagem
+                    let error_msg = match eval(*msg, &new_env)? {
+                        ExpressionResult::Value(Expression::CString(s)) => s,
+                        ExpressionResult::Propagate(expr) => {
+                            return Ok(Computation::PropagateError(expr, new_env))
+                        }
+                        _ => "Assertion failed".to_string(),
+                    };
+                    Err(error_msg)
+                }
+                _ => Err("Condition must evaluate to a boolean".to_string()),
+            }
+        }
+
+        Statement::AssertTrue(exp, msg) => {
+            let value = match eval(*exp, &new_env)? {
+                ExpressionResult::Value(expr) => expr,
+                ExpressionResult::Propagate(expr) => {
+                    return Ok(Computation::PropagateError(expr, new_env))
+                }
+            };
+
+            match value {
+                Expression::CTrue => Ok(Computation::Continue(new_env)),
+                Expression::CFalse => {
+                    // Avalia a mensagem
+                    let error_msg = match eval(*msg, &new_env)? {
+                        ExpressionResult::Value(Expression::CString(s)) => s,
+                        ExpressionResult::Propagate(expr) => {
+                            return Ok(Computation::PropagateError(expr, new_env))
+                        }
+                        _ => "Assertion failed".to_string(),
+                    };
+                    Err(error_msg)
+                }
+                _ => Err("Condition must evaluate to a boolean".to_string()),
+            }
+        }
+
+        Statement::AssertFalse(exp, msg) => {
+            let value = match eval(*exp, &new_env)? {
+                ExpressionResult::Value(expr) => expr,
+                ExpressionResult::Propagate(expr) => {
+                    return Ok(Computation::PropagateError(expr, new_env))
+                }
+            };
+
+            match value {
+                Expression::CFalse => Ok(Computation::Continue(new_env)),
+                Expression::CTrue => {
+                    // Avalia a mensagem
+                    let error_msg = match eval(*msg, &new_env)? {
+                        ExpressionResult::Value(Expression::CString(s)) => s,
+                        ExpressionResult::Propagate(expr) => {
+                            return Ok(Computation::PropagateError(expr, new_env))
+                        }
+                        _ => "Assertion failed".to_string(),
+                    };
+                    Err(error_msg)
+                }
+                _ => Err("Condition must evaluate to a boolean".to_string()),
+            }
+        }
+
+        Statement::AssertEQ(exp1, exp2, msg) => {
+            let value1 = match eval(*exp1, &new_env)? {
+                ExpressionResult::Value(expr1) => expr1,
+                ExpressionResult::Propagate(expr1) => {
+                    return Ok(Computation::PropagateError(expr1, new_env))
+                }
+            };
+
+            let value2 = match eval(*exp2, &new_env)? {
+                ExpressionResult::Value(expr2) => expr2,
+                ExpressionResult::Propagate(expr2) => {
+                    return Ok(Computation::PropagateError(expr2, new_env))
+                }
+            };
+
+            let comparator = Expression::EQ(Box::new(value1), Box::new(value2));
+
+            match eval(comparator, &new_env)? {
+                ExpressionResult::Value(Expression::CTrue) => Ok(Computation::Continue(new_env)),
+                ExpressionResult::Value(Expression::CFalse) => {
+                    // Avalia a mensagem
+                    let error_msg = match eval(*msg, &new_env)? {
+                        ExpressionResult::Value(Expression::CString(s)) => s,
+                        ExpressionResult::Propagate(expr) => {
+                            return Ok(Computation::PropagateError(expr, new_env))
+                        }
+                        _ => "Assertion failed".to_string(),
+                    };
+                    Err(error_msg)
+                }
+                _ => Err("Condition must evaluate to a boolean".to_string()),
+            }
+        }
+
+        Statement::AssertNEQ(exp1, exp2, msg) => {
+            let value1 = match eval(*exp1, &new_env)? {
+                ExpressionResult::Value(expr1) => expr1,
+                ExpressionResult::Propagate(expr1) => {
+                    return Ok(Computation::PropagateError(expr1, new_env))
+                }
+            };
+
+            let value2 = match eval(*exp2, &new_env)? {
+                ExpressionResult::Value(expr2) => expr2,
+                ExpressionResult::Propagate(expr2) => {
+                    return Ok(Computation::PropagateError(expr2, new_env))
+                }
+            };
+
+            let comparator = Expression::NEQ(Box::new(value1), Box::new(value2));
+
+            match eval(comparator, &new_env)? {
+                ExpressionResult::Value(Expression::CTrue) => Ok(Computation::Continue(new_env)),
+                ExpressionResult::Value(Expression::CFalse) => {
+                    // Avalia a mensagem
+                    let error_msg = match eval(*msg, &new_env)? {
+                        ExpressionResult::Value(Expression::CString(s)) => s,
+                        ExpressionResult::Propagate(expr) => {
+                            return Ok(Computation::PropagateError(expr, new_env))
+                        }
+                        _ => "Assertion failed".to_string(),
+                    };
+                    Err(error_msg)
+                }
+                _ => Err("Condition must evaluate to a boolean".to_string()),
+            }
+        }
+
         Statement::ValDeclaration(name, exp) => {
             let value = match eval(*exp, &new_env)? {
                 ExpressionResult::Value(expr) => expr,
@@ -774,6 +917,185 @@ mod tests {
             assert!(sum_value.is_some());
             let (_, sum_expr) = sum_value.unwrap();
             assert_eq!(sum_expr, Expression::CInt(12));
+        }
+    }
+
+    mod assert_statement_tests {
+        use super::*;
+
+        #[test]
+        fn test_execute_assert_true() {
+            let env = create_test_env();
+            let stmt = Statement::Assert(
+                Box::new(Expression::CTrue),
+                Box::new(Expression::CString("ok".to_string())),
+            );
+            let result = execute(stmt, &env);
+            assert!(result.is_ok(), "Assert with true condition should succeed");
+        }
+
+        #[test]
+        fn test_execute_assert_false() {
+            let env = create_test_env();
+            let stmt = Statement::Assert(
+                Box::new(Expression::CFalse),
+                Box::new(Expression::CString("fail msg".to_string())),
+            );
+            let result = execute(stmt.clone(), &env);
+            assert!(result.is_err(), "Assert with false condition should fail");
+            //assert_eq!(result.unwrap_err(), "fail msg");
+            let computation = match execute(stmt, &env) {
+                Ok(Computation::Continue(_)) => "error".to_string(),
+                Ok(Computation::Return(_, _)) => "error".to_string(),
+                Ok(Computation::PropagateError(_, _)) => "error".to_string(),
+                Err(e) => e.to_string(),
+            };
+            assert_eq!(computation, "fail msg".to_string());
+        }
+
+        #[test]
+        fn test_execute_asserteq_true() {
+            let env = create_test_env();
+            let stmt = Statement::AssertEQ(
+                Box::new(Expression::CInt(1)),
+                Box::new(Expression::CInt(1)),
+                Box::new(Expression::CString("should not fail".to_string())),
+            );
+            let result = execute(stmt, &env);
+            assert!(result.is_ok(), "AssertEQ with equal values should succeed");
+        }
+
+        #[test]
+        fn test_execute_asserteq_false() {
+            let env = create_test_env();
+            let stmt = Statement::AssertEQ(
+                Box::new(Expression::CInt(1)),
+                Box::new(Expression::CInt(2)),
+                Box::new(Expression::CString("eq fail".to_string())),
+            );
+            let result = execute(stmt.clone(), &env);
+            assert!(
+                result.is_err(),
+                "AssertEQ with different values should fail"
+            );
+            //assert_eq!(result.unwrap_err(), "eq fail");
+
+            let computation = match execute(stmt, &env) {
+                Ok(Computation::Continue(_)) => "error".to_string(),
+                Ok(Computation::Return(_, _)) => "error".to_string(),
+                Ok(Computation::PropagateError(_, _)) => "error".to_string(),
+                Err(e) => e.to_string(),
+            };
+            assert_eq!(computation, "eq fail".to_string());
+        }
+
+        #[test]
+        fn test_execute_assertneq_true() {
+            let env = create_test_env();
+            let stmt = Statement::AssertNEQ(
+                Box::new(Expression::CInt(1)),
+                Box::new(Expression::CInt(2)),
+                Box::new(Expression::CString("should not fail".to_string())),
+            );
+            let result = execute(stmt, &env);
+            assert!(
+                result.is_ok(),
+                "AssertNEQ with different values should succeed"
+            );
+        }
+
+        #[test]
+        fn test_execute_assertneq_false() {
+            let env = create_test_env();
+            let stmt = Statement::AssertNEQ(
+                Box::new(Expression::CInt(3)),
+                Box::new(Expression::CInt(3)),
+                Box::new(Expression::CString("neq fail".to_string())),
+            );
+            let result = execute(stmt.clone(), &env);
+            assert!(result.is_err(), "AssertNEQ with equal values should fail");
+            //assert_eq!(result.unwrap_err(), "neq fail");
+
+            let computation = match execute(stmt, &env) {
+                Ok(Computation::Continue(_)) => "error".to_string(),
+                Ok(Computation::Return(_, _)) => "error".to_string(),
+                Ok(Computation::PropagateError(_, _)) => "error".to_string(),
+                Err(e) => e.to_string(),
+            };
+            assert_eq!(computation, "neq fail".to_string());
+        }
+
+        #[test]
+        fn test_execute_asserttrue_true() {
+            let env = create_test_env();
+            let stmt = Statement::AssertTrue(
+                Box::new(Expression::CTrue),
+                Box::new(Expression::CString("ok".to_string())),
+            );
+            let result = execute(stmt, &env);
+            assert!(
+                result.is_ok(),
+                "AssertTrue with true condition should succeed"
+            );
+        }
+
+        #[test]
+        fn test_execute_asserttrue_false() {
+            let env = create_test_env();
+            let stmt = Statement::AssertTrue(
+                Box::new(Expression::CFalse),
+                Box::new(Expression::CString("asserttrue fail".to_string())),
+            );
+            let result = execute(stmt.clone(), &env);
+            assert!(
+                result.is_err(),
+                "AssertTrue with false condition should fail"
+            );
+            //assert_eq!(result.unwrap_err(), "asserttrue fail");
+
+            let computation = match execute(stmt, &env) {
+                Ok(Computation::Continue(_)) => "error".to_string(),
+                Ok(Computation::Return(_, _)) => "error".to_string(),
+                Ok(Computation::PropagateError(_, _)) => "error".to_string(),
+                Err(e) => e.to_string(),
+            };
+            assert_eq!(computation, "asserttrue fail".to_string());
+        }
+
+        #[test]
+        fn test_execute_assertfalse_false() {
+            let env = create_test_env();
+            let stmt = Statement::AssertFalse(
+                Box::new(Expression::CFalse),
+                Box::new(Expression::CString("ok".to_string())),
+            );
+            let result = execute(stmt, &env);
+            assert!(
+                result.is_ok(),
+                "AssertFalse with false condition should succeed"
+            );
+        }
+
+        #[test]
+        fn test_execute_assertfalse_true() {
+            let env = create_test_env();
+            let stmt = Statement::AssertFalse(
+                Box::new(Expression::CTrue),
+                Box::new(Expression::CString("assertfalse fail".to_string())),
+            );
+            let result = execute(stmt.clone(), &env);
+            assert!(
+                result.is_err(),
+                "AssertFalse with true condition should fail"
+            );
+            //assert_eq!(result.unwrap_err(), "assertfalse fail");
+            let computation = match execute(stmt, &env) {
+                Ok(Computation::Continue(_)) => "error".to_string(),
+                Ok(Computation::Return(_, _)) => "error".to_string(),
+                Ok(Computation::PropagateError(_, _)) => "error".to_string(),
+                Err(e) => e.to_string(),
+            };
+            assert_eq!(computation, "assertfalse fail".to_string());
         }
     }
 }

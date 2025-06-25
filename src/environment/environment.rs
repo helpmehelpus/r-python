@@ -9,6 +9,7 @@ pub struct Scope<A> {
     pub variables: HashMap<Name, (bool, A)>,
     pub functions: HashMap<Name, Function>,
     pub adts: HashMap<Name, Vec<ValueConstructor>>,
+    pub tests: HashMap<Name, Function>,
 }
 
 impl<A: Clone> Scope<A> {
@@ -17,6 +18,7 @@ impl<A: Clone> Scope<A> {
             variables: HashMap::new(),
             functions: HashMap::new(),
             adts: HashMap::new(),
+            tests: HashMap::new(),
         }
     }
 
@@ -27,6 +29,11 @@ impl<A: Clone> Scope<A> {
 
     fn map_function(&mut self, function: Function) -> () {
         self.functions.insert(function.name.clone(), function);
+        return ();
+    }
+
+    fn map_test(&mut self, test: Function) -> () {
+        self.tests.insert(test.name.clone(), test);
         return ();
     }
 
@@ -43,6 +50,10 @@ impl<A: Clone> Scope<A> {
 
     fn lookup_function(&self, name: &Name) -> Option<&Function> {
         self.functions.get(name)
+    }
+
+    fn lookup_test(&self, name: &Name) -> Option<&Function> {
+        self.tests.get(name)
     }
 
     fn lookup_adt(&self, name: &Name) -> Option<&Vec<ValueConstructor>> {
@@ -78,6 +89,13 @@ impl<A: Clone> Environment<A> {
         }
     }
 
+    pub fn map_test(&mut self, test: Function) -> () {
+        match self.stack.front_mut() {
+            None => self.globals.map_test(test),
+            Some(top) => top.map_test(test),
+        }
+    }
+
     pub fn map_adt(&mut self, name: Name, cons: Vec<ValueConstructor>) -> () {
         match self.stack.front_mut() {
             None => self.globals.map_adt(name, cons),
@@ -101,6 +119,15 @@ impl<A: Clone> Environment<A> {
             }
         }
         self.globals.lookup_function(name)
+    }
+
+    pub fn lookup_test(&self, name: &Name) -> Option<&Function> {
+        for scope in self.stack.iter() {
+            if let Some(test) = scope.lookup_test(name) {
+                return Some(test);
+            }
+        }
+        self.globals.lookup_test(name)
     }
 
     pub fn lookup_adt(&self, name: &Name) -> Option<&Vec<ValueConstructor>> {
