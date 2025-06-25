@@ -318,7 +318,7 @@ fn parse_test_function_definition_statement(input: &str) -> IResult<&str, Statem
         |(_, name, _, block)| {
             Statement::TestDef(Function {
                 name: name.to_string(),
-                kind: Type::TBool,  // Sempre bool (mesmo se não declarou)
+                kind: Type::TVoid,  // Sempre void
                 params: Vec::new(), // Nenhum argumento
                 body: Some(Box::new(block)),
             })
@@ -494,7 +494,7 @@ mod tests {
         let input = "test test_example(): x = 1; end";
         let expected = Statement::TestDef(Function {
             name: "test_example".to_string(),
-            kind: Type::TBool,
+            kind: Type::TVoid,
             params: vec![],
             body: Some(Box::new(Statement::Block(vec![Statement::Assignment(
                 "x".to_string(),
@@ -510,7 +510,7 @@ mod tests {
         let input = "test test_spaces(   ): x = 2; end";
         let expected = Statement::TestDef(Function {
             name: "test_spaces".to_string(),
-            kind: Type::TBool,
+            kind: Type::TVoid,
             params: vec![],
             body: Some(Box::new(Statement::Block(vec![Statement::Assignment(
                 "x".to_string(),
@@ -558,4 +558,50 @@ mod tests {
         );
     }
     //TODO: Implementar testes para os ASSERTS
+
+    #[test]
+    fn test_parse_asserteq_statement() {
+        let input = "asserteq(1, 2, \"msg\")";
+        let expected = Statement::AssertEQ(
+            Box::new(Expression::CInt(1)),
+            Box::new(Expression::CInt(2)),
+            Box::new(Expression::CString("msg".to_string())),
+        );
+        let parsed = parse_asserteq_statement(input).unwrap().1;
+        assert_eq!(parsed, expected);
+    }
+
+    #[test]
+    fn test_parse_assertneq_statement() {
+        let input = "assertneq(3, 4, \"fail\")";
+        let expected = Statement::AssertNEQ(
+            Box::new(Expression::CInt(3)),
+            Box::new(Expression::CInt(4)),
+            Box::new(Expression::CString("fail".to_string())),
+        );
+        let parsed = parse_assertneq_statement(input).unwrap().1;
+        assert_eq!(parsed, expected);
+    }
+
+    #[test]
+    fn test_parse_asserttrue_statement() {
+        let input = "asserttrue(True, \"should be true\")";
+        let expected = Statement::AssertTrue(
+            Box::new(Expression::CTrue),
+            Box::new(Expression::CString("should be true".to_string())),
+        );
+        let parsed = parse_asserttrue_statement(input).unwrap().1;
+        assert_eq!(parsed, expected);
+    }
+
+    #[test]
+    fn test_parse_assertfalse_statement() {
+        let input = "assertfalse(False, \"should be false\")";
+        let expected = Statement::AssertFalse(
+            Box::new(Expression::CFalse),
+            Box::new(Expression::CString("should be false".to_string())),
+        );
+        let parsed = parse_assertfalse_statement(input).unwrap().1;
+        assert_eq!(parsed, expected);
+    }
 }
