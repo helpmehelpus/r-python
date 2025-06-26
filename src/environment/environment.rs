@@ -1,6 +1,7 @@
 use crate::ir::ast::Function;
 use crate::ir::ast::Name;
 use crate::ir::ast::ValueConstructor;
+use indexmap::IndexMap;
 use std::collections::HashMap;
 use std::collections::LinkedList;
 
@@ -9,7 +10,7 @@ pub struct Scope<A> {
     pub variables: HashMap<Name, (bool, A)>,
     pub functions: HashMap<Name, Function>,
     pub adts: HashMap<Name, Vec<ValueConstructor>>,
-    pub tests: HashMap<Name, Function>,
+    pub tests: IndexMap<Name, Function>,
 }
 
 impl<A: Clone> Scope<A> {
@@ -18,7 +19,7 @@ impl<A: Clone> Scope<A> {
             variables: HashMap::new(),
             functions: HashMap::new(),
             adts: HashMap::new(),
-            tests: HashMap::new(),
+            tests: IndexMap::new(),
         }
     }
 
@@ -130,6 +131,19 @@ impl<A: Clone> Environment<A> {
         self.globals.lookup_test(name)
     }
 
+    pub fn scrape_tests(&self) -> Vec<Function> {
+        let mut tests = Vec::new();
+        for scope in self.stack.iter() {
+            for test in scope.tests.values() {
+                tests.push(test.clone());
+            }
+        }
+        for test in self.globals.tests.values() {
+            tests.push(test.clone());
+        }
+        tests
+    }
+
     pub fn lookup_adt(&self, name: &Name) -> Option<&Vec<ValueConstructor>> {
         for scope in self.stack.iter() {
             if let Some(cons) = scope.lookup_adt(name) {
@@ -171,6 +185,22 @@ impl<A: Clone> Environment<A> {
         }
 
         vars
+    }
+}
+
+pub struct TestResult {
+    pub name: Name,
+    pub result: bool,
+    pub error: Option<String>,
+}
+
+impl TestResult {
+    pub fn new(name: Name, result: bool, error: Option<String>) -> Self {
+        TestResult {
+            name,
+            result,
+            error,
+        }
     }
 }
 

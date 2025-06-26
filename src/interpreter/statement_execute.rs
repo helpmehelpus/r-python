@@ -1,5 +1,6 @@
 use super::expression_eval::{eval, ExpressionResult};
 use crate::environment::environment::Environment;
+use crate::environment::environment::TestResult;
 use crate::ir::ast::{Expression, Statement};
 
 pub enum Computation {
@@ -30,6 +31,42 @@ pub fn run(
         Ok(Computation::PropagateError(_, new_env)) => Ok(new_env),
         Err(e) => Err(e),
     }
+}
+
+pub fn run_tests(stmt: &Statement) -> Result<Vec<TestResult>, String> {
+    let env = match run(stmt.clone(), &Environment::new()) {
+        Ok(env) => env,
+        Err(e) => return Err(e),
+    };
+
+    let mut results = Vec::new();
+
+    for test in env.scrape_tests() {
+        let test_env = env.clone();
+
+        let stmt = match &test.body {
+            Some(body) => *body.clone(),
+            None => continue,
+        };
+
+        match execute(stmt, &test_env) {
+            Ok(Computation::Continue(_)) | Ok(Computation::Return(_, _)) => {
+                results.push(TestResult::new(test.name.clone(), true, None));
+            }
+            Err(e) => {
+                results.push(TestResult::new(test.name.clone(), false, Some(e)));
+            }
+            Ok(Computation::PropagateError(e, _)) => {
+                results.push(TestResult::new(
+                    test.name.clone(),
+                    false,
+                    Some(format!("Propagated error: {:?}", e)),
+                ));
+            }
+        }
+    }
+
+    Ok(results)
 }
 
 pub fn execute(stmt: Statement, env: &Environment<Expression>) -> Result<Computation, String> {
@@ -1124,6 +1161,175 @@ mod tests {
                     assert!(new_env.lookup_test(&"test_example".to_string()).is_some());
                 }
                 _ => panic!("Test definition execution failed"),
+            }
+        }
+    }
+    mod run_tests_tests {
+
+        use super::*;
+
+        #[test]
+        fn test_run_tests() {
+            let test_def = Statement::TestDef(Function {
+                name: "test_example".to_string(),
+                kind: Type::TVoid,
+                params: Vec::new(),
+                body: Some(Box::new(Statement::Block(vec![Statement::Assert(
+                    Box::new(Expression::CTrue),
+                    Box::new(Expression::CString("Test passed".to_string())),
+                )]))),
+            });
+            let programa = Statement::Block(vec![test_def.clone()]);
+            match run_tests(&programa) {
+                Ok(resultados) => {
+                    assert_eq!(resultados.len(), 1);
+                    assert_eq!(resultados[0].name, "test_example");
+                    assert!(resultados[0].result);
+                    assert!(resultados[0].error.is_none());
+                }
+                _ => panic!("Test execution failed"),
+            }
+        }
+
+        #[test]
+        fn test_run_tests_scope() {
+            let test_def = Statement::TestDef(Function {
+                name: "test_example".to_string(),
+                kind: Type::TVoid,
+                params: Vec::new(),
+                body: Some(Box::new(Statement::Block(vec![Statement::Assert(
+                    Box::new(Expression::CTrue),
+                    Box::new(Expression::CString("Test passed".to_string())),
+                )]))),
+            });
+
+            let teste_def2 = Statement::TestDef(Function {
+                name: "test_example2".to_string(),
+                kind: Type::TVoid,
+                params: Vec::new(),
+                body: Some(Box::new(Statement::Block(vec![Statement::Assert(
+                    Box::new(Expression::CTrue),
+                    Box::new(Expression::CString("Test 2 passed".to_string())),
+                )]))),
+            });
+
+            let assign1 = Statement::Assignment("x".to_string(), Box::new(Expression::CInt(10)));
+            let assign2 = Statement::Assignment("y".to_string(), Box::new(Expression::CInt(20)));
+
+            let ifelse = Statement::IfThenElse(
+                Box::new(Expression::CTrue),
+                Box::new(test_def),
+                Some(Box::new(teste_def2)),
+            );
+
+            let programa = Statement::Block(vec![assign1, assign2, ifelse]);
+
+            let resultado_final = match run_tests(&programa) {
+                Ok(resultados) => resultados,
+                Err(e) => panic!("Test execution failed: {}", e),
+            };
+
+            assert_eq!(resultado_final.len(), 1);
+            assert_eq!(resultado_final[0].name, "test_example");
+            assert_eq!(resultado_final[0].result, true);
+        }
+
+        #[test]
+        fn test_run_tests_with_assert_fail() {
+            let teste1 = Statement::TestDef(Function {
+                name: "test_fail".to_string(),
+                kind: Type::TVoid,
+                params: Vec::new(),
+                body: Some(Box::new(Statement::Block(vec![Statement::Assert(
+                    Box::new(Expression::CFalse),
+                    Box::new(Expression::CString("This test should fail".to_string())),
+                )]))),
+            });
+            let programa = Statement::Block(vec![teste1]);
+            match run_tests(&programa) {
+                Ok(resultados) => {
+                    assert_eq!(resultados.len(), 1);
+                    assert_eq!(resultados[0].name, "test_fail");
+                    assert!(!resultados[0].result);
+                    assert_eq!(
+                        resultados[0].error,
+                        Some("This test should fail".to_string())
+                    );
+                }
+                Err(e) => panic!("Test execution failed: {}", e),
+            }
+        }
+
+        #[test]
+        fn test_run_tests_without_asserts() {
+            let teste = Statement::TestDef(Function {
+                name: "test_no_assert".to_string(),
+                kind: Type::TVoid,
+                params: Vec::new(),
+                body: Some(Box::new(Statement::Block(vec![Statement::VarDeclaration(
+                    "x".to_string(),
+                    Box::new(Expression::CInt(42)),
+                )]))),
+            });
+            let programa = Statement::Block(vec![teste]);
+            match run_tests(&programa) {
+                Ok(resultados) => {
+                    assert_eq!(resultados.len(), 1);
+                    assert_eq!(resultados[0].name, "test_no_assert");
+                    assert!(resultados[0].result);
+                    assert!(resultados[0].error.is_none());
+                }
+                Err(e) => panic!("Test execution failed: {}", e),
+            }
+        }
+
+        #[test]
+        fn test_run_tests_with_multiple_tests() {
+            let teste1 = Statement::TestDef(Function {
+                name: "test_one".to_string(),
+                kind: Type::TVoid,
+                params: Vec::new(),
+                body: Some(Box::new(Statement::Block(vec![Statement::Assert(
+                    Box::new(Expression::CTrue),
+                    Box::new(Expression::CString("Test one passed".to_string())),
+                )]))),
+            });
+            let teste2 = Statement::TestDef(Function {
+                name: "test_two".to_string(),
+                kind: Type::TVoid,
+                params: Vec::new(),
+                body: Some(Box::new(Statement::Block(vec![Statement::Assert(
+                    Box::new(Expression::CFalse),
+                    Box::new(Expression::CString("Test two failed".to_string())),
+                )]))),
+            });
+            let teste3 = Statement::TestDef(Function {
+                name: "test_three".to_string(),
+                kind: Type::TVoid,
+                params: Vec::new(),
+                body: Some(Box::new(Statement::Block(vec![Statement::Assert(
+                    Box::new(Expression::CTrue),
+                    Box::new(Expression::CString("Test three passed".to_string())),
+                )]))),
+            });
+            let programa = Statement::Block(vec![teste1, teste2, teste3]);
+
+            match run_tests(&programa) {
+                Ok(resultados) => {
+                    assert_eq!(resultados.len(), 3);
+                    assert_eq!(resultados[0].name, "test_one");
+                    assert!(resultados[0].result);
+                    assert!(resultados[0].error.is_none());
+
+                    assert_eq!(resultados[1].name, "test_two");
+                    assert!(!resultados[1].result);
+                    assert_eq!(resultados[1].error, Some("Test two failed".to_string()));
+
+                    assert_eq!(resultados[2].name, "test_three");
+                    assert!(resultados[2].result);
+                    assert!(resultados[2].error.is_none());
+                }
+                Err(e) => panic!("Test execution failed: {}", e),
             }
         }
     }
