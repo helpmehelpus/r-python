@@ -21,6 +21,13 @@ pub fn check_stmt(
         Statement::FuncDef(function) => check_func_def_stmt(function, env),
         Statement::TypeDeclaration(name, cons) => check_adt_declarations_stmt(name, cons, env),
         Statement::Return(exp) => check_return_stmt(exp, env),
+
+        Statement::Assert(expr1, expr2) => check_assert(expr1, expr2, env),
+        Statement::AssertTrue(expr, _) => check_assert_true(expr, env),
+        Statement::AssertFalse(expr, _) => check_assert_false(expr, env),
+        Statement::AssertEQ(lhs, rhs, _) => check_assert_eq(lhs, rhs, env),
+        Statement::AssertNEQ(lhs, rhs, _) => check_assert_neq(lhs, rhs, env),
+
         _ => Err("Not implemented yet".to_string()),
     }
 }
@@ -229,6 +236,71 @@ fn check_return_stmt(
         }
     }
 }
+
+
+fn check_assert(
+    expr1: Box<Expression>,
+    expr2: Box<Expression>,
+    env: &Environment<Type>,
+) -> Result<Environment<Type>, ErrorMessage> {
+    let type1 = check_expr(*expr1, env)?;
+    let type2 = check_expr(*expr2, env)?;
+
+    if type1 != Type::TBool {
+        Err("[Type Error] First Assert expression must be of type Boolean.".to_string())
+    } else if type2 != Type::TString {
+        Err("[Type Error] Second Assert expression must be of type CString.".to_string())
+    } else {
+        Ok(env.clone())
+    }
+}
+
+
+fn check_assert_true(expr: Box<Expression>, env: &Environment<Type>) -> Result<Environment<Type>, ErrorMessage> {
+    let expr_type = check_expr(*expr, env)?;
+    if expr_type != Type::TBool {
+        Err("[Type Error] AssertTrue expression must be of type Boolean.".to_string())
+    } else {
+        Ok(env.clone())
+    }
+}
+
+fn check_assert_false(expr: Box<Expression>, env: &Environment<Type>) -> Result<Environment<Type>, ErrorMessage> {
+    let expr_type = check_expr(*expr, env)?;
+    if expr_type != Type::TBool {
+        Err("[Type Error] AssertFalse expression must be of type Boolean.".to_string())
+    } else {
+        Ok(env.clone())
+    }
+}
+
+fn check_assert_eq(lhs: Box<Expression>, rhs: Box<Expression>, env: &Environment<Type>) -> Result<Environment<Type>, ErrorMessage> {
+    let lhs_type = check_expr(*lhs, env)?;
+    let rhs_type = check_expr(*rhs, env)?;
+    if lhs_type != rhs_type {
+        Err(format!(
+            "[Type Error] AssertEQ expressions must have the same type. Found {:?} and {:?}.",
+            lhs_type, rhs_type
+        ))
+    } else {
+        Ok(env.clone())
+    }
+}
+
+fn check_assert_neq(lhs: Box<Expression>, rhs: Box<Expression>, env: &Environment<Type>) -> Result<Environment<Type>, ErrorMessage> {
+    let lhs_type = check_expr(*lhs, env)?;
+    let rhs_type = check_expr(*rhs, env)?;
+    if lhs_type != rhs_type {
+        Err(format!(
+            "[Type Error] AssertNEQ expressions must have the same type. Found {:?} and {:?}.",
+            lhs_type, rhs_type
+        ))
+    } else {
+        Ok(env.clone())
+    }
+}
+
+
 
 fn merge_environments(
     env1: &Environment<Type>,
@@ -658,4 +730,84 @@ mod tests {
         // TODO: Let discuss this case here next class.
         assert!(check_stmt(stmt, &env).is_err());
     }
+
+#[test]
+fn test_assert_bool_ok() {
+    let env: Environment<Type> = Environment::new();
+    let stmt = Statement::Assert(
+        Box::new(Expression::CTrue),
+        Box::new(Expression::CString("msg".to_string())),
+    );
+    assert!(check_stmt(stmt, &env).is_ok());
+}
+
+#[test]
+fn test_assert_bool_error() {
+    let env: Environment<Type> = Environment::new();
+    let stmt = Statement::Assert(
+        Box::new(Expression::CInt(1)),     // não booleano
+        Box::new(Expression::CTrue),       // segundo argumento pode ser qualquer um válido
+    );
+    assert!(check_stmt(stmt, &env).is_err());
+}
+
+#[test]
+fn test_assert_true_ok() {
+    let env = Environment::new();
+    let stmt = Statement::AssertTrue(Box::new(Expression::CTrue), "ok".to_string());
+    assert!(check_stmt(stmt, &env).is_ok());
+}
+
+#[test]
+fn test_assert_false_ok() {
+    let env = Environment::new();
+    let stmt = Statement::AssertFalse(Box::new(Expression::CFalse), "false".to_string());
+    assert!(check_stmt(stmt, &env).is_ok());
+}
+
+#[test]
+fn test_assert_eq_same_type() {
+    let env = Environment::new();
+    let stmt = Statement::AssertEQ(
+        Box::new(Expression::CInt(1)),
+        Box::new(Expression::CInt(2)),
+        "eq".to_string(),
+    );
+    assert!(check_stmt(stmt, &env).is_ok());
+}
+
+#[test]
+fn test_assert_eq_mismatch_type() {
+    let env = Environment::new();
+    let stmt = Statement::AssertEQ(
+        Box::new(Expression::CInt(1)),
+        Box::new(Expression::CString("x".to_string())),
+        "eq".to_string(),
+    );
+    assert!(check_stmt(stmt, &env).is_err());
+}
+
+#[test]
+fn test_assert_neq_same_type() {
+    let env = Environment::new();
+    let stmt = Statement::AssertNEQ(
+        Box::new(Expression::CInt(1)),
+        Box::new(Expression::CInt(2)),
+        "neq".to_string(),
+    );
+    assert!(check_stmt(stmt, &env).is_ok());
+}
+
+#[test]
+fn test_assert_neq_mismatch_type() {
+    let env = Environment::new();
+    let stmt = Statement::AssertNEQ(
+        Box::new(Expression::CTrue),
+        Box::new(Expression::CString("x".to_string())),
+        "neq".to_string(),
+    );
+    assert!(check_stmt(stmt, &env).is_err());
+}
+
+
 }
