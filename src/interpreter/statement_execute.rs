@@ -42,7 +42,8 @@ pub fn run_tests(stmt: &Statement) -> Result<Vec<TestResult>, String> {
     let mut results = Vec::new();
 
     for test in env.scrape_tests() {
-        let test_env = env.clone();
+        let mut test_env = env.clone();
+        test_env.push();
 
         let stmt = match &test.body {
             Some(body) => *body.clone(),
@@ -64,6 +65,7 @@ pub fn run_tests(stmt: &Statement) -> Result<Vec<TestResult>, String> {
                 ));
             }
         }
+        test_env.pop();
     }
 
     Ok(results)
@@ -1261,6 +1263,46 @@ mod tests {
         }
 
         #[test]
+        fn test_run_tests_with_second_assert_fail() {
+            let teste1 = Statement::TestDef(Function {
+                name: "test_fail".to_string(),
+                kind: Type::TVoid,
+                params: Vec::new(),
+                body: Some(Box::new(Statement::Block(vec![
+                    Statement::Assert(
+                        Box::new(Expression::CTrue),
+                        Box::new(Expression::CString("This test should pass".to_string())),
+                    ),
+                    Statement::Assert(
+                        Box::new(Expression::CFalse),
+                        Box::new(Expression::CString(
+                            "This second test should fail".to_string(),
+                        )),
+                    ),
+                    Statement::Assert(
+                        Box::new(Expression::CTrue),
+                        Box::new(Expression::CString(
+                            "This test shouldn't run, but should pass".to_string(),
+                        )),
+                    ),
+                ]))),
+            });
+            let programa = Statement::Block(vec![teste1]);
+            match run_tests(&programa) {
+                Ok(resultados) => {
+                    assert_eq!(resultados.len(), 1);
+                    assert_eq!(resultados[0].name, "test_fail");
+                    assert!(!resultados[0].result);
+                    assert_eq!(
+                        resultados[0].error,
+                        Some("This second test should fail".to_string())
+                    );
+                }
+                Err(e) => panic!("Test execution failed: {}", e),
+            }
+        }
+
+        #[test]
         fn test_run_tests_without_asserts() {
             let teste = Statement::TestDef(Function {
                 name: "test_no_assert".to_string(),
@@ -1331,6 +1373,50 @@ mod tests {
                 }
                 Err(e) => panic!("Test execution failed: {}", e),
             }
+        }
+        #[test]
+        fn test_test_scope_isolation() {
+            // test_one: define x = 1, passa se x == 1
+            let test_one = Statement::TestDef(Function {
+                name: "test_one".to_string(),
+                kind: Type::TBool,
+                params: vec![],
+                body: Some(Box::new(Statement::Block(vec![
+                    Statement::VarDeclaration("x".to_string(), Box::new(Expression::CInt(1))),
+                    Statement::AssertEQ(
+                        Box::new(Expression::Var("x".to_string())),
+                        Box::new(Expression::CInt(1)),
+                        Box::new(Expression::CString("x should be 1".to_string())),
+                    ),
+                ]))),
+            });
+
+            // test_two: espera que x NÃO exista
+            let test_two = Statement::TestDef(Function {
+                name: "test_two".to_string(),
+                kind: Type::TBool,
+                params: vec![],
+                body: Some(Box::new(Statement::Block(vec![Statement::AssertFalse(
+                    Box::new(Expression::Var("x".to_string())),
+                    Box::new(Expression::CString("x should not be visible".to_string())),
+                )]))),
+            });
+
+            let stmt = Statement::Block(vec![test_one, test_two]);
+
+            let results = run_tests(&stmt).unwrap();
+
+            assert_eq!(results.len(), 2);
+
+            let r1 = &results[0];
+            let r2 = &results[1];
+
+            assert_eq!(r1.name, "test_one");
+            assert!(r1.result);
+
+            assert_eq!(r2.name, "test_two");
+            assert!(!r2.result);
+            assert_eq!(r2.error, Some("Variable 'x' not found".to_string())); // Erro é propagado de Expression::Var
         }
     }
 }

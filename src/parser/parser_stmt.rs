@@ -506,6 +506,33 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_test_function_definition_statement_valid_multiple_statements() {
+        let input = r#"test test_example():
+            x = 1;
+            y = 2;
+            assert(x == 1, "x deveria ser 1");
+        end"#;
+        let expected = Statement::TestDef(Function {
+            name: "test_example".to_string(),
+            kind: Type::TVoid,
+            params: vec![],
+            body: Some(Box::new(Statement::Block(vec![
+                Statement::Assignment("x".to_string(), Box::new(Expression::CInt(1))),
+                Statement::Assignment("y".to_string(), Box::new(Expression::CInt(2))),
+                Statement::Assert(
+                    Box::new(Expression::EQ(
+                        Box::new(Expression::Var("x".to_string())),
+                        Box::new(Expression::CInt(1)),
+                    )),
+                    Box::new(Expression::CString("x deveria ser 1".to_string())),
+                ),
+            ]))),
+        });
+        let parsed = parse_test_function_definition_statement(input).unwrap().1;
+        assert_eq!(parsed, expected);
+    }
+
+    #[test]
     fn test_parse_test_function_definition_statement_with_spaces() {
         let input = "test test_spaces(   ): x = 2; end";
         let expected = Statement::TestDef(Function {
