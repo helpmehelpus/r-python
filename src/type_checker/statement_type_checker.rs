@@ -27,6 +27,7 @@ pub fn check_stmt(
         Statement::AssertFalse(expr1, errmsg) => check_assert_false(expr1, errmsg, env),
         Statement::AssertEQ(lhs, rhs, errmsg) => check_assert_eq(lhs, rhs, errmsg, env),
         Statement::AssertNEQ(lhs, rhs, errmsg) => check_assert_neq(lhs, rhs, errmsg, env),
+        Statement::TestDef(function) => check_test_function_stmt(function, env),
 
         _ => Err("Not implemented yet".to_string()),
     }
@@ -328,6 +329,34 @@ fn check_assert_neq(
     }
 }
 
+fn check_test_function_stmt(
+    function: Function,
+    env: &Environment<Type>,
+) -> Result<Environment<Type>, ErrorMessage> {
+    if env.lookup_function(&function.name).is_some() {
+        return Err(format!("[Type Error] Test function '{}' already exists", function.name));
+    }
+    if !function.params.is_empty() {
+        return Err("[Type Error] Test functions must not have parameters".into());
+    }
+    if function.kind != Type::TVoid {
+        return Err("[Type Error] Test functions must return void".into());
+    }
+
+    let mut new_env = env.clone();
+    new_env.push();
+
+    if let Some(body) = function.body.clone() {
+        new_env = check_stmt(*body, &new_env)?;
+    }
+
+    new_env.pop();
+    
+    let mut final_env = env.clone();
+    final_env.map_function(function);
+    Ok(final_env)
+}
+
 fn merge_environments(
     env1: &Environment<Type>,
     env2: &Environment<Type>,
@@ -365,7 +394,7 @@ fn merge_environments(
             }
         }
     }
-
+   
     //TODO: should we merge ADTs and functions?
 
     Ok(merged)
@@ -944,4 +973,66 @@ mod tests {
         );
         assert!(check_stmt(stmt, &env).is_ok());
     }
+
+    #[test]
+    fn test_check_valid_test_function() {
+        let env: Environment<Type> = Environment::new();
+        let stmt = TestDef(Function {
+            name: "valid_function".to_string(),
+            kind: Type::TVoid,
+            params: vec![],
+            body: None,
+        });
+    
+        assert!(check_stmt(stmt, &env).is_ok());
+    }
+    
+    #[test]
+    fn test_check_test_function_with_params() {
+        let env: Environment<Type> = Environment::new();
+        let stmt = TestDef(Function {
+            name: "invalid_function".to_string(),
+            kind: Type::TVoid,
+            params: vec![FormalArgument::new("param".to_string(), Type::TString)], // Must have no parameters
+            body: None,
+        });
+        
+        assert!(check_stmt(stmt, &env).is_err());
+    }
+
+    #[test]
+    fn test_check_test_function_with_non_void_return() {
+        let env: Environment<Type> = Environment::new();
+        let stmt = TestDef(Function {
+            name: "invalid_function".to_string(),
+            kind: Type::TInteger,  // Must be TVoid!
+            params: vec![],
+            body: None,
+        });
+        
+        assert!(check_stmt(stmt, &env).is_err());
+    }
+
+    #[test]
+    fn test_check_duplicate_test_function() {
+        let mut env: Environment<Type> = Environment::new();
+        let first_func = TestDef(Function {
+            name: "duplicate".to_string(),
+            kind: Type::TVoid,
+            params: vec![],
+            body: None,
+        });
+        
+        env = check_stmt(first_func, &env).unwrap();
+        
+        let stmt = TestDef(Function {
+            name: "duplicate".to_string(),
+            kind: Type::TVoid,
+            params: vec![],
+            body: None,
+        });
+        
+        assert!(check_stmt(stmt, &env).is_err());
+    }
+
 }
