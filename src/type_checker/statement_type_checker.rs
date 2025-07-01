@@ -333,27 +333,24 @@ fn check_test_function_stmt(
     function: Function,
     env: &Environment<Type>,
 ) -> Result<Environment<Type>, ErrorMessage> {
-    if env.lookup_function(&function.name).is_some() {
-        return Err(format!("[Type Error] Test function '{}' already exists", function.name));
+    if env.lookup_test(&function.name).is_some() { 
+        return Err(format!("[Type Error] Test function '{}' already exists.", function.name));
     }
     if !function.params.is_empty() {
-        return Err("[Type Error] Test functions must not have parameters".into());
+        return Err("[Type Error] Test functions must not have parameters.".into());
     }
     if function.kind != Type::TVoid {
-        return Err("[Type Error] Test functions must return void".into());
+        return Err("[Type Error] Test functions must return void.".into());
     }
-
-    let mut new_env = env.clone();
-    new_env.push();
 
     if let Some(body) = function.body.clone() {
-        new_env = check_stmt(*body, &new_env)?;
+        let mut scoped_env = env.clone();
+        scoped_env.push();
+        check_stmt(*body, &scoped_env)?; 
     }
 
-    new_env.pop();
-    
     let mut final_env = env.clone();
-    final_env.map_function(function);
+    final_env.map_test(function);
     Ok(final_env)
 }
 
@@ -981,9 +978,26 @@ mod tests {
             name: "valid_function".to_string(),
             kind: Type::TVoid,
             params: vec![],
-            body: None,
+            body: Some(Box::new(Block(vec![
+                // 1. Declaramos as variáveis localmente
+                Statement::VarDeclaration("a".to_string(), Box::new(Expression::CInt(10))),
+                Statement::VarDeclaration("b".to_string(), Box::new(Expression::CInt(5))),
+                
+                // 2. Usamos AssertEQ para verificar o resultado
+                Statement::AssertEQ(
+                    // Expressão: a + b
+                    Box::new(Expression::Add(
+                        Box::new(Expression::Var("a".to_string())),
+                        Box::new(Expression::Var("b".to_string()))
+                    )),
+                    // Valor esperado: 15
+                    Box::new(Expression::CInt(15)),
+                    // Mensagem de erro
+                    Box::new(Expression::CString("A soma de 10 + 5 deveria ser 15".to_string()))
+                )
+            ]))),
         });
-    
+        
         assert!(check_stmt(stmt, &env).is_ok());
     }
     
