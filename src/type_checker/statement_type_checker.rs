@@ -33,6 +33,25 @@ pub fn check_stmt(
     }
 }
 
+pub fn check_block(
+    stmt: Statement,
+    env: &Environment<Type>,
+) -> Result<Environment<Type>, ErrorMessage> {
+    match stmt {
+        Statement::Block(stmts) => {
+            let mut block_env = env.clone();
+            block_env.push();
+            
+            for s in stmts {
+                block_env = check_stmt(s, &block_env)?;
+            }    
+            block_env.pop();           
+            Ok(block_env)
+        }       
+        _ => Err("Expected a block statement".to_string()),
+    }
+}
+
 fn check_squence_stmt(
     stmt1: Box<Statement>,
     stmt2: Box<Statement>,
@@ -333,7 +352,7 @@ fn check_test_function_stmt(
     function: Function,
     env: &Environment<Type>,
 ) -> Result<Environment<Type>, ErrorMessage> {
-    if env.lookup_test(&function.name).is_some() { 
+    if env.lookup_test(&function.name).is_some() {
         return Err(format!("[Type Error] Test function '{}' already exists.", function.name));
     }
     if !function.params.is_empty() {
@@ -342,11 +361,8 @@ fn check_test_function_stmt(
     if function.kind != Type::TVoid {
         return Err("[Type Error] Test functions must return void.".into());
     }
-
-    if let Some(body) = function.body.clone() {
-        let mut scoped_env = env.clone();
-        scoped_env.push();
-        check_stmt(*body, &scoped_env)?; 
+    if let Some(ref body) = function.body {
+        check_block((**body).clone(), env)?;
     }
 
     let mut final_env = env.clone();
@@ -979,25 +995,18 @@ mod tests {
             kind: Type::TVoid,
             params: vec![],
             body: Some(Box::new(Block(vec![
-                // 1. Declaramos as variáveis localmente
                 Statement::VarDeclaration("a".to_string(), Box::new(Expression::CInt(10))),
                 Statement::VarDeclaration("b".to_string(), Box::new(Expression::CInt(5))),
-                
-                // 2. Usamos AssertEQ para verificar o resultado
                 Statement::AssertEQ(
-                    // Expressão: a + b
                     Box::new(Expression::Add(
                         Box::new(Expression::Var("a".to_string())),
                         Box::new(Expression::Var("b".to_string()))
                     )),
-                    // Valor esperado: 15
                     Box::new(Expression::CInt(15)),
-                    // Mensagem de erro
-                    Box::new(Expression::CString("A soma de 10 + 5 deveria ser 15".to_string()))
+                    Box::new(Expression::CString("A soma deveria ser 15".to_string()))
                 )
             ]))),
         });
-        
         assert!(check_stmt(stmt, &env).is_ok());
     }
     
@@ -1021,7 +1030,18 @@ mod tests {
             name: "invalid_function".to_string(),
             kind: Type::TInteger,  // Must be TVoid!
             params: vec![],
-            body: None,
+            body: Some(Box::new(Block(vec![
+                Statement::VarDeclaration("a".to_string(), Box::new(Expression::CInt(10))),
+                Statement::VarDeclaration("b".to_string(), Box::new(Expression::CInt(5))),
+                Statement::AssertEQ(
+                    Box::new(Expression::Add(
+                        Box::new(Expression::Var("a".to_string())),
+                        Box::new(Expression::Var("b".to_string()))
+                    )),
+                    Box::new(Expression::CInt(15)),
+                    Box::new(Expression::CString("A soma deveria ser 15".to_string()))
+                )
+            ]))),
         });
         
         assert!(check_stmt(stmt, &env).is_err());
@@ -1034,7 +1054,18 @@ mod tests {
             name: "duplicate".to_string(),
             kind: Type::TVoid,
             params: vec![],
-            body: None,
+            body: Some(Box::new(Block(vec![
+                Statement::VarDeclaration("a".to_string(), Box::new(Expression::CInt(10))),
+                Statement::VarDeclaration("b".to_string(), Box::new(Expression::CInt(5))),
+                Statement::AssertEQ(
+                    Box::new(Expression::Add(
+                        Box::new(Expression::Var("a".to_string())),
+                        Box::new(Expression::Var("b".to_string()))
+                    )),
+                    Box::new(Expression::CInt(15)),
+                    Box::new(Expression::CString("A soma deveria ser 15".to_string()))
+                )
+            ]))),
         });
         
         env = check_stmt(first_func, &env).unwrap();
@@ -1043,7 +1074,18 @@ mod tests {
             name: "duplicate".to_string(),
             kind: Type::TVoid,
             params: vec![],
-            body: None,
+            body: Some(Box::new(Block(vec![
+                Statement::VarDeclaration("a".to_string(), Box::new(Expression::CInt(10))),
+                Statement::VarDeclaration("b".to_string(), Box::new(Expression::CInt(5))),
+                Statement::AssertEQ(
+                    Box::new(Expression::Add(
+                        Box::new(Expression::Var("a".to_string())),
+                        Box::new(Expression::Var("b".to_string()))
+                    )),
+                    Box::new(Expression::CInt(15)),
+                    Box::new(Expression::CString("A soma deveria ser 15".to_string()))
+                )
+            ]))),
         });
         
         assert!(check_stmt(stmt, &env).is_err());
