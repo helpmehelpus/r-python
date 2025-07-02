@@ -964,6 +964,7 @@ mod tests {
         }
     }
 
+    //TODO: Apresentar Interpretador Asserts (Tests)
     mod assert_statement_tests {
         use super::*;
 
@@ -1142,6 +1143,8 @@ mod tests {
             assert_eq!(computation, "assertfalse fail".to_string());
         }
     }
+    
+    //TODO: Apresentar Interpretador TestDef (Tests)
     mod testdef_statement_tests {
         use super::*;
 
@@ -1166,6 +1169,8 @@ mod tests {
             }
         }
     }
+
+    //TODO: Apresentar Interpretador RunTests (Tests)
     mod run_tests_tests {
 
         use super::*;

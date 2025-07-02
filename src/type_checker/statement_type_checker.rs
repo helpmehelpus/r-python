@@ -809,286 +809,316 @@ mod tests {
         assert!(check_stmt(stmt, &env).is_ok());
     }
 
-    #[test]
-    fn test_assert_bool_error() {
-        let env: Environment<Type> = Environment::new();
-        let stmt = Statement::Assert(
-            Box::new(Expression::CInt(1)),                    // não booleano
-            Box::new(Expression::CString("msg".to_string())), // segundo argumento pode ser qualquer um válido
-        );
-        assert!(check_stmt(stmt, &env).is_err());
+    //TODO: Apresentar TypeChecker de Asserts (Testes)
+    mod assignment_tests {
+        use super::*;
+
+        #[test]
+        fn test_assert_bool_error() {
+            let env: Environment<Type> = Environment::new();
+            let stmt = Statement::Assert(
+                Box::new(Expression::CInt(1)),                    // não booleano
+                Box::new(Expression::CString("msg".to_string())), // segundo argumento pode ser qualquer um válido
+            );
+            assert!(check_stmt(stmt, &env).is_err());
+        }
+
+        #[test]
+        fn test_assert_true_ok() {
+            let env = Environment::new();
+            let stmt = Statement::AssertTrue(
+                Box::new(Expression::CTrue),
+                Box::new(Expression::CString("ok".to_string())),
+            );
+            assert!(check_stmt(stmt, &env).is_ok());
+        }
+
+        #[test]
+        fn test_assert_false_ok() {
+            let env = Environment::new();
+            let stmt = Statement::AssertFalse(
+                Box::new(Expression::CFalse),
+                Box::new(Expression::CString("false".to_string())),
+            );
+            assert!(check_stmt(stmt, &env).is_ok());
+        }
+
+        #[test]
+        fn test_assert_eq_same_type() {
+            let env = Environment::new();
+            let stmt = Statement::AssertEQ(
+                Box::new(Expression::CInt(1)),
+                Box::new(Expression::CInt(2)),
+                Box::new(Expression::CString("eq".to_string())),
+            );
+            assert!(check_stmt(stmt, &env).is_ok());
+        }
+
+        #[test]
+        fn test_assert_eq_mismatch_type() {
+            let env = Environment::new();
+            let stmt = Statement::AssertEQ(
+                Box::new(Expression::CInt(1)),
+                Box::new(Expression::CString("x".to_string())),
+                Box::new(Expression::CString("eq".to_string())),
+            );
+            assert!(check_stmt(stmt, &env).is_err());
+        }
+
+        #[test]
+        fn test_assert_neq_same_type() {
+            let env = Environment::new();
+            let stmt = Statement::AssertNEQ(
+                Box::new(Expression::CInt(1)),
+                Box::new(Expression::CInt(2)),
+                Box::new(Expression::CString("neq".to_string())),
+            );
+            assert!(check_stmt(stmt, &env).is_ok());
+        }
+
+        #[test]
+        fn test_assert_neq_mismatch_type() {
+            let env = Environment::new();
+            let stmt = Statement::AssertNEQ(
+                Box::new(Expression::CTrue),
+                Box::new(Expression::CString("x".to_string())),
+                Box::new(Expression::CString("neq".to_string())),
+            );
+            assert!(check_stmt(stmt, &env).is_err());
+        }
+
+        #[test]
+        fn test_assert_error_msg_not_string() {
+            let env = Environment::new();
+            let stmt = Statement::Assert(
+                Box::new(Expression::CTrue),
+                Box::new(Expression::CTrue), // Error message must be a string
+            );
+            assert!(check_stmt(stmt, &env).is_err());
+        }
+
+        #[test]
+        fn test_assert_true_error_msg_not_string() {
+            let env = Environment::new();
+            let stmt = Statement::AssertTrue(
+                Box::new(Expression::CTrue),
+                Box::new(Expression::CTrue), // Error message must be a string
+            );
+            assert!(check_stmt(stmt, &env).is_err());
+        }
+
+        #[test]
+        fn test_assert_false_error_msg_not_string() {
+            let env = Environment::new();
+            let stmt = Statement::AssertFalse(
+                Box::new(Expression::CFalse),
+                Box::new(Expression::CTrue), // Error message must be a string
+            );
+            assert!(check_stmt(stmt, &env).is_err());
+        }
+
+        #[test]
+        fn test_assert_eq_error_msg_not_string() {
+            let env = Environment::new();
+            let stmt = Statement::AssertEQ(
+                Box::new(Expression::CTrue),
+                Box::new(Expression::CTrue),
+                Box::new(Expression::CTrue), // Error message must be a string
+            );
+            assert!(check_stmt(stmt, &env).is_err());
+        }
+
+        #[test]
+        fn test_assert_neq_error_msg_not_string() {
+            let env = Environment::new();
+            let stmt = Statement::AssertNEQ(
+                Box::new(Expression::CTrue),
+                Box::new(Expression::CFalse),
+                Box::new(Expression::CTrue), // Error message must be a string
+            );
+            assert!(check_stmt(stmt, &env).is_err());
+        }
+
+        #[test]
+        fn test_assert_error_msg_string() {
+            let env = Environment::new();
+            let stmt = Statement::Assert(
+                Box::new(Expression::CTrue),
+                Box::new(Expression::CString("assert".to_string())), // Error message must be a string
+            );
+            assert!(check_stmt(stmt, &env).is_ok());
+        }
+
+        #[test]
+        fn test_assert_true_error_msg_string() {
+            let env = Environment::new();
+            let stmt = Statement::AssertTrue(
+                Box::new(Expression::CTrue),
+                Box::new(Expression::CString("asserttrue".to_string())), // Error message must be a string
+            );
+            assert!(check_stmt(stmt, &env).is_ok());
+        }
+
+        #[test]
+        fn test_assert_false_error_msg_string() {
+            let env = Environment::new();
+            let stmt = Statement::AssertFalse(
+                Box::new(Expression::CFalse),
+                Box::new(Expression::CString("assertfalse".to_string())), // Error message must be a string
+            );
+            assert!(check_stmt(stmt, &env).is_ok());
+        }
+
+        #[test]
+        fn test_assert_eq_error_msg_string() {
+            let env = Environment::new();
+            let stmt = Statement::AssertEQ(
+                Box::new(Expression::CTrue),
+                Box::new(Expression::CTrue),
+                Box::new(Expression::CString("eq".to_string())), // Error message must be a string
+            );
+            assert!(check_stmt(stmt, &env).is_ok());
+        }
+
+        #[test]
+        fn test_assert_neq_error_msg_string() {
+            let env = Environment::new();
+            let stmt = Statement::AssertNEQ(
+                Box::new(Expression::CTrue),
+                Box::new(Expression::CFalse),
+                Box::new(Expression::CString("neq".to_string())), // Error message must be a string
+            );
+            assert!(check_stmt(stmt, &env).is_ok());
+        }
     }
 
-    #[test]
-    fn test_assert_true_ok() {
-        let env = Environment::new();
-        let stmt = Statement::AssertTrue(
-            Box::new(Expression::CTrue),
-            Box::new(Expression::CString("ok".to_string())),
-        );
-        assert!(check_stmt(stmt, &env).is_ok());
-    }
-
-    #[test]
-    fn test_assert_false_ok() {
-        let env = Environment::new();
-        let stmt = Statement::AssertFalse(
-            Box::new(Expression::CFalse),
-            Box::new(Expression::CString("false".to_string())),
-        );
-        assert!(check_stmt(stmt, &env).is_ok());
-    }
-
-    #[test]
-    fn test_assert_eq_same_type() {
-        let env = Environment::new();
-        let stmt = Statement::AssertEQ(
-            Box::new(Expression::CInt(1)),
-            Box::new(Expression::CInt(2)),
-            Box::new(Expression::CString("eq".to_string())),
-        );
-        assert!(check_stmt(stmt, &env).is_ok());
-    }
-
-    #[test]
-    fn test_assert_eq_mismatch_type() {
-        let env = Environment::new();
-        let stmt = Statement::AssertEQ(
-            Box::new(Expression::CInt(1)),
-            Box::new(Expression::CString("x".to_string())),
-            Box::new(Expression::CString("eq".to_string())),
-        );
-        assert!(check_stmt(stmt, &env).is_err());
-    }
-
-    #[test]
-    fn test_assert_neq_same_type() {
-        let env = Environment::new();
-        let stmt = Statement::AssertNEQ(
-            Box::new(Expression::CInt(1)),
-            Box::new(Expression::CInt(2)),
-            Box::new(Expression::CString("neq".to_string())),
-        );
-        assert!(check_stmt(stmt, &env).is_ok());
-    }
-
-    #[test]
-    fn test_assert_neq_mismatch_type() {
-        let env = Environment::new();
-        let stmt = Statement::AssertNEQ(
-            Box::new(Expression::CTrue),
-            Box::new(Expression::CString("x".to_string())),
-            Box::new(Expression::CString("neq".to_string())),
-        );
-        assert!(check_stmt(stmt, &env).is_err());
-    }
-
-    #[test]
-    fn test_assert_error_msg_not_string() {
-        let env = Environment::new();
-        let stmt = Statement::Assert(
-            Box::new(Expression::CTrue),
-            Box::new(Expression::CTrue), // Error message must be a string
-        );
-        assert!(check_stmt(stmt, &env).is_err());
-    }
-
-    #[test]
-    fn test_assert_true_error_msg_not_string() {
-        let env = Environment::new();
-        let stmt = Statement::AssertTrue(
-            Box::new(Expression::CTrue),
-            Box::new(Expression::CTrue), // Error message must be a string
-        );
-        assert!(check_stmt(stmt, &env).is_err());
-    }
-
-    #[test]
-    fn test_assert_false_error_msg_not_string() {
-        let env = Environment::new();
-        let stmt = Statement::AssertFalse(
-            Box::new(Expression::CFalse),
-            Box::new(Expression::CTrue), // Error message must be a string
-        );
-        assert!(check_stmt(stmt, &env).is_err());
-    }
-
-    #[test]
-    fn test_assert_eq_error_msg_not_string() {
-        let env = Environment::new();
-        let stmt = Statement::AssertEQ(
-            Box::new(Expression::CTrue),
-            Box::new(Expression::CTrue),
-            Box::new(Expression::CTrue), // Error message must be a string
-        );
-        assert!(check_stmt(stmt, &env).is_err());
-    }
-
-    #[test]
-    fn test_assert_neq_error_msg_not_string() {
-        let env = Environment::new();
-        let stmt = Statement::AssertNEQ(
-            Box::new(Expression::CTrue),
-            Box::new(Expression::CFalse),
-            Box::new(Expression::CTrue), // Error message must be a string
-        );
-        assert!(check_stmt(stmt, &env).is_err());
-    }
-
-    #[test]
-    fn test_assert_error_msg_string() {
-        let env = Environment::new();
-        let stmt = Statement::Assert(
-            Box::new(Expression::CTrue),
-            Box::new(Expression::CString("assert".to_string())), // Error message must be a string
-        );
-        assert!(check_stmt(stmt, &env).is_ok());
-    }
-
-    #[test]
-    fn test_assert_true_error_msg_string() {
-        let env = Environment::new();
-        let stmt = Statement::AssertTrue(
-            Box::new(Expression::CTrue),
-            Box::new(Expression::CString("asserttrue".to_string())), // Error message must be a string
-        );
-        assert!(check_stmt(stmt, &env).is_ok());
-    }
-
-    #[test]
-    fn test_assert_false_error_msg_string() {
-        let env = Environment::new();
-        let stmt = Statement::AssertFalse(
-            Box::new(Expression::CFalse),
-            Box::new(Expression::CString("assertfalse".to_string())), // Error message must be a string
-        );
-        assert!(check_stmt(stmt, &env).is_ok());
-    }
-
-    #[test]
-    fn test_assert_eq_error_msg_string() {
-        let env = Environment::new();
-        let stmt = Statement::AssertEQ(
-            Box::new(Expression::CTrue),
-            Box::new(Expression::CTrue),
-            Box::new(Expression::CString("eq".to_string())), // Error message must be a string
-        );
-        assert!(check_stmt(stmt, &env).is_ok());
-    }
-
-    #[test]
-    fn test_assert_neq_error_msg_string() {
-        let env = Environment::new();
-        let stmt = Statement::AssertNEQ(
-            Box::new(Expression::CTrue),
-            Box::new(Expression::CFalse),
-            Box::new(Expression::CString("neq".to_string())), // Error message must be a string
-        );
-        assert!(check_stmt(stmt, &env).is_ok());
-    }
-
-    #[test]
-    fn test_check_valid_test_function() {
-        let env: Environment<Type> = Environment::new();
-        let stmt = TestDef(Function {
-            name: "valid_function".to_string(),
-            kind: Type::TVoid,
-            params: vec![],
-            body: Some(Box::new(Block(vec![
-                Statement::VarDeclaration("a".to_string(), Box::new(Expression::CInt(10))),
-                Statement::VarDeclaration("b".to_string(), Box::new(Expression::CInt(5))),
-                Statement::AssertEQ(
-                    Box::new(Expression::Add(
-                        Box::new(Expression::Var("a".to_string())),
-                        Box::new(Expression::Var("b".to_string()))
-                    )),
-                    Box::new(Expression::CInt(15)),
-                    Box::new(Expression::CString("A soma deveria ser 15".to_string()))
-                )
-            ]))),
-        });
-        assert!(check_stmt(stmt, &env).is_ok());
-    }
+    //TODO: Apresentar TypeChecker de TestDef (Testes)
+    mod testdef_tests {
+        use super::*;
     
-    #[test]
-    fn test_check_test_function_with_params() {
-        let env: Environment<Type> = Environment::new();
-        let stmt = TestDef(Function {
-            name: "invalid_function".to_string(),
-            kind: Type::TVoid,
-            params: vec![FormalArgument::new("param".to_string(), Type::TString)], // Must have no parameters
-            body: None,
-        });
+        #[test]
+        fn test_check_valid_test_function() {
+            let env: Environment<Type> = Environment::new();
+            let stmt = TestDef(Function {
+                name: "valid_function".to_string(),
+                kind: Type::TVoid,
+                params: vec![],
+                body: Some(Box::new(Block(vec![
+                    Statement::VarDeclaration("a".to_string(), Box::new(Expression::CInt(10))),
+                    Statement::VarDeclaration("b".to_string(), Box::new(Expression::CInt(5))),
+                    Statement::AssertEQ(
+                        Box::new(Expression::Add(
+                            Box::new(Expression::Var("a".to_string())),
+                            Box::new(Expression::Var("b".to_string()))
+                        )),
+                        Box::new(Expression::CInt(15)),
+                        Box::new(Expression::CString("A soma deveria ser 15".to_string()))
+                    )
+                ]))),
+            });
+            assert!(check_stmt(stmt, &env).is_ok());
+        }
         
-        assert!(check_stmt(stmt, &env).is_err());
-    }
+        #[test]
+        fn test_check_test_function_with_params() {
+            let env: Environment<Type> = Environment::new();
+            let stmt = TestDef(Function {
+                name: "invalid_function".to_string(),
+                kind: Type::TVoid,
+                params: vec![FormalArgument::new("param".to_string(), Type::TString)], // Must have no parameters
+                body: None,
+            });
 
-    #[test]
-    fn test_check_test_function_with_non_void_return() {
-        let env: Environment<Type> = Environment::new();
-        let stmt = TestDef(Function {
-            name: "invalid_function".to_string(),
-            kind: Type::TInteger,  // Must be TVoid!
-            params: vec![],
-            body: Some(Box::new(Block(vec![
-                Statement::VarDeclaration("a".to_string(), Box::new(Expression::CInt(10))),
-                Statement::VarDeclaration("b".to_string(), Box::new(Expression::CInt(5))),
-                Statement::AssertEQ(
-                    Box::new(Expression::Add(
-                        Box::new(Expression::Var("a".to_string())),
-                        Box::new(Expression::Var("b".to_string()))
-                    )),
-                    Box::new(Expression::CInt(15)),
-                    Box::new(Expression::CString("A soma deveria ser 15".to_string()))
-                )
-            ]))),
-        });
-        
-        assert!(check_stmt(stmt, &env).is_err());
-    }
+            assert!(check_stmt(stmt.clone(), &env).is_err());
 
-    #[test]
-    fn test_check_duplicate_test_function() {
-        let mut env: Environment<Type> = Environment::new();
-        let first_func = TestDef(Function {
-            name: "duplicate".to_string(),
-            kind: Type::TVoid,
-            params: vec![],
-            body: Some(Box::new(Block(vec![
-                Statement::VarDeclaration("a".to_string(), Box::new(Expression::CInt(10))),
-                Statement::VarDeclaration("b".to_string(), Box::new(Expression::CInt(5))),
-                Statement::AssertEQ(
-                    Box::new(Expression::Add(
-                        Box::new(Expression::Var("a".to_string())),
-                        Box::new(Expression::Var("b".to_string()))
-                    )),
-                    Box::new(Expression::CInt(15)),
-                    Box::new(Expression::CString("A soma deveria ser 15".to_string()))
-                )
-            ]))),
-        });
-        
-        env = check_stmt(first_func, &env).unwrap();
-        
-        let stmt = TestDef(Function {
-            name: "duplicate".to_string(),
-            kind: Type::TVoid,
-            params: vec![],
-            body: Some(Box::new(Block(vec![
-                Statement::VarDeclaration("a".to_string(), Box::new(Expression::CInt(10))),
-                Statement::VarDeclaration("b".to_string(), Box::new(Expression::CInt(5))),
-                Statement::AssertEQ(
-                    Box::new(Expression::Add(
-                        Box::new(Expression::Var("a".to_string())),
-                        Box::new(Expression::Var("b".to_string()))
-                    )),
-                    Box::new(Expression::CInt(15)),
-                    Box::new(Expression::CString("A soma deveria ser 15".to_string()))
-                )
-            ]))),
-        });
-        
-        assert!(check_stmt(stmt, &env).is_err());
-    }
+            let error = match check_stmt(stmt, &env){
+                Ok(_) => "Expected an error, but got Ok".to_string(),
+                Err(error) => error,
+            };
 
+            assert_eq!(error,"[Type Error] Test functions must not have parameters.".to_string());
+        }
+
+        #[test]
+        fn test_check_test_function_with_non_void_return() {
+            let env: Environment<Type> = Environment::new();
+            let stmt = TestDef(Function {
+                name: "invalid_function".to_string(),
+                kind: Type::TInteger,  // Must be TVoid!
+                params: vec![],
+                body: Some(Box::new(Block(vec![
+                    Statement::VarDeclaration("a".to_string(), Box::new(Expression::CInt(10))),
+                    Statement::VarDeclaration("b".to_string(), Box::new(Expression::CInt(5))),
+                    Statement::AssertEQ(
+                        Box::new(Expression::Add(
+                            Box::new(Expression::Var("a".to_string())),
+                            Box::new(Expression::Var("b".to_string()))
+                        )),
+                        Box::new(Expression::CInt(15)),
+                        Box::new(Expression::CString("A soma deveria ser 15".to_string()))
+                    )
+                ]))),
+            });
+            
+            assert!(check_stmt(stmt.clone(), &env).is_err());
+
+            let error = match check_stmt(stmt, &env){
+                Ok(_) => "Expected an error, but got Ok".to_string(),
+                Err(error) => error,
+            };
+
+            assert_eq!(error,"[Type Error] Test functions must return void.".to_string());
+        }
+
+        #[test]
+        fn test_check_duplicate_test_function() {
+            let mut env: Environment<Type> = Environment::new();
+            let first_func = TestDef(Function {
+                name: "duplicate".to_string(),
+                kind: Type::TVoid,
+                params: vec![],
+                body: Some(Box::new(Block(vec![
+                    Statement::VarDeclaration("a".to_string(), Box::new(Expression::CInt(10))),
+                    Statement::VarDeclaration("b".to_string(), Box::new(Expression::CInt(5))),
+                    Statement::AssertEQ(
+                        Box::new(Expression::Add(
+                            Box::new(Expression::Var("a".to_string())),
+                            Box::new(Expression::Var("b".to_string()))
+                        )),
+                        Box::new(Expression::CInt(15)),
+                        Box::new(Expression::CString("A soma deveria ser 15".to_string()))
+                    )
+                ]))),
+            });
+            
+            env = check_stmt(first_func, &env).unwrap();
+            
+            let stmt = TestDef(Function {
+                name: "duplicate".to_string(),
+                kind: Type::TVoid,
+                params: vec![],
+                body: Some(Box::new(Block(vec![
+                    Statement::VarDeclaration("a".to_string(), Box::new(Expression::CInt(10))),
+                    Statement::VarDeclaration("b".to_string(), Box::new(Expression::CInt(5))),
+                    Statement::AssertEQ(
+                        Box::new(Expression::Add(
+                            Box::new(Expression::Var("a".to_string())),
+                            Box::new(Expression::Var("b".to_string()))
+                        )),
+                        Box::new(Expression::CInt(15)),
+                        Box::new(Expression::CString("A soma deveria ser 15".to_string()))
+                    )
+                ]))),
+            });
+            
+            assert!(check_stmt(stmt.clone(), &env).is_err());
+
+            let error = match check_stmt(stmt, &env){
+                Ok(_) => "Expected an error, but got Ok".to_string(),
+                Err(error) => error,
+            };
+
+            assert_eq!(error,"[Type Error] Test function 'duplicate' already exists.".to_string());
+        }
+    }
 }

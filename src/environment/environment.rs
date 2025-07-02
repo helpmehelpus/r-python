@@ -19,7 +19,7 @@ impl<A: Clone> Scope<A> {
             variables: HashMap::new(),
             functions: HashMap::new(),
             adts: HashMap::new(),
-            tests: IndexMap::new(),
+            tests: IndexMap::new(), //TODO: Apresentar Mudança no Environment
         }
     }
 

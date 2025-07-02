@@ -18,7 +18,7 @@ use crate::parser::parser_common::{
     RIGHT_PAREN, SEMICOLON_CHAR, VAL_KEYWORD, VAR_KEYWORD, WHILE_KEYWORD,
 };
 use crate::parser::parser_expr::parse_expression;
-use crate::parser::parser_type::parse_type; // TODO: Check if needed
+use crate::parser::parser_type::parse_type;
 
 pub fn parse_statement(input: &str) -> IResult<&str, Statement> {
     alt((
@@ -489,146 +489,155 @@ mod tests {
         assert_eq!(parsed, expected);
     }
 
-    #[test]
-    fn test_parse_test_function_definition_statement_valid() {
-        let input = "test test_example(): x = 1; end";
-        let expected = Statement::TestDef(Function {
-            name: "test_example".to_string(),
-            kind: Type::TVoid,
-            params: vec![],
-            body: Some(Box::new(Statement::Block(vec![Statement::Assignment(
-                "x".to_string(),
+    //TODO: Apresentar Parser de TestDef (Testes)
+    mod testdef_tests {
+        use super::*;
+        
+        #[test]
+        fn test_parse_test_function_definition_statement_valid() {
+            let input = "test test_example(): x = 1; end";
+            let expected = Statement::TestDef(Function {
+                name: "test_example".to_string(),
+                kind: Type::TVoid,
+                params: vec![],
+                body: Some(Box::new(Statement::Block(vec![Statement::Assignment(
+                    "x".to_string(),
+                    Box::new(Expression::CInt(1)),
+                )]))),
+            });
+            let parsed = parse_test_function_definition_statement(input).unwrap().1;
+            assert_eq!(parsed, expected);
+        }
+
+        #[test]
+        fn test_parse_test_function_definition_statement_valid_multiple_statements() {
+            let input = r#"test test_example():
+                x = 1;
+                y = 2;
+                assert(x == 1, "x deveria ser 1");
+            end"#;
+            let expected = Statement::TestDef(Function {
+                name: "test_example".to_string(),
+                kind: Type::TVoid,
+                params: vec![],
+                body: Some(Box::new(Statement::Block(vec![
+                    Statement::Assignment("x".to_string(), Box::new(Expression::CInt(1))),
+                    Statement::Assignment("y".to_string(), Box::new(Expression::CInt(2))),
+                    Statement::Assert(
+                        Box::new(Expression::EQ(
+                            Box::new(Expression::Var("x".to_string())),
+                            Box::new(Expression::CInt(1)),
+                        )),
+                        Box::new(Expression::CString("x deveria ser 1".to_string())),
+                    ),
+                ]))),
+            });
+            let parsed = parse_test_function_definition_statement(input).unwrap().1;
+            assert_eq!(parsed, expected);
+        }
+
+        #[test]
+        fn test_parse_test_function_definition_statement_with_spaces() {
+            let input = "test test_spaces(   ): x = 2; end";
+            let expected = Statement::TestDef(Function {
+                name: "test_spaces".to_string(),
+                kind: Type::TVoid,
+                params: vec![],
+                body: Some(Box::new(Statement::Block(vec![Statement::Assignment(
+                    "x".to_string(),
+                    Box::new(Expression::CInt(2)),
+                )]))),
+            });
+            let parsed = parse_test_function_definition_statement(input).unwrap().1;
+            assert_eq!(parsed, expected);
+        }
+
+        #[test]
+        fn test_parse_test_function_definition_statement_args() {
+            let input = "test test_with_args(x: Int, y: Int): x = y; end";
+
+            // O parser deve falhar, pois funções de teste não podem ter argumentos.
+            let parsed = parse_test_function_definition_statement(input);
+
+            assert!(
+                parsed.is_err(),
+                "Funções de teste com argumentos devem ser rejeitadas"
+            );
+        }
+
+        #[test]
+        fn test_parse_test_function_definition_statement_invalid_return() {
+            let input = "test test_with_invalid_return() -> Int: x = 2; end";
+
+            // O parser deve falhar, pois funções de teste não podem ter argumentos.
+            let parsed = parse_test_function_definition_statement(input);
+
+            assert!(
+                parsed.is_err(),
+                "Funções de teste não devem especificar tipo de retorno"
+            );
+        }
+
+        #[test]
+        fn test_parse_test_function_definition_statement_valid_return_type() {
+            let input = "test test_with_valid_return() -> Boolean: x = 2; end";
+
+            let parsed = parse_test_function_definition_statement(input);
+            assert!(
+                parsed.is_err(),
+                "Funções de teste não devem especificar tipo de retorno"
+            );
+        }
+    }
+    
+    //TODO: Apresentar Parser de Asserts (Testes)
+    mod assignment_tests {
+        use super::*;
+
+        #[test]
+        fn test_parse_asserteq_statement() {
+            let input = "asserteq(1, 2, \"msg\")";
+            let expected = Statement::AssertEQ(
                 Box::new(Expression::CInt(1)),
-            )]))),
-        });
-        let parsed = parse_test_function_definition_statement(input).unwrap().1;
-        assert_eq!(parsed, expected);
-    }
-
-    #[test]
-    fn test_parse_test_function_definition_statement_valid_multiple_statements() {
-        let input = r#"test test_example():
-            x = 1;
-            y = 2;
-            assert(x == 1, "x deveria ser 1");
-        end"#;
-        let expected = Statement::TestDef(Function {
-            name: "test_example".to_string(),
-            kind: Type::TVoid,
-            params: vec![],
-            body: Some(Box::new(Statement::Block(vec![
-                Statement::Assignment("x".to_string(), Box::new(Expression::CInt(1))),
-                Statement::Assignment("y".to_string(), Box::new(Expression::CInt(2))),
-                Statement::Assert(
-                    Box::new(Expression::EQ(
-                        Box::new(Expression::Var("x".to_string())),
-                        Box::new(Expression::CInt(1)),
-                    )),
-                    Box::new(Expression::CString("x deveria ser 1".to_string())),
-                ),
-            ]))),
-        });
-        let parsed = parse_test_function_definition_statement(input).unwrap().1;
-        assert_eq!(parsed, expected);
-    }
-
-    #[test]
-    fn test_parse_test_function_definition_statement_with_spaces() {
-        let input = "test test_spaces(   ): x = 2; end";
-        let expected = Statement::TestDef(Function {
-            name: "test_spaces".to_string(),
-            kind: Type::TVoid,
-            params: vec![],
-            body: Some(Box::new(Statement::Block(vec![Statement::Assignment(
-                "x".to_string(),
                 Box::new(Expression::CInt(2)),
-            )]))),
-        });
-        let parsed = parse_test_function_definition_statement(input).unwrap().1;
-        assert_eq!(parsed, expected);
-    }
+                Box::new(Expression::CString("msg".to_string())),
+            );
+            let parsed = parse_asserteq_statement(input).unwrap().1;
+            assert_eq!(parsed, expected);
+        }
 
-    #[test]
-    fn test_parse_test_function_definition_statement_args() {
-        let input = "test test_with_args(x: Int, y: Int): x = y; end";
+        #[test]
+        fn test_parse_assertneq_statement() {
+            let input = "assertneq(3, 4, \"fail\")";
+            let expected = Statement::AssertNEQ(
+                Box::new(Expression::CInt(3)),
+                Box::new(Expression::CInt(4)),
+                Box::new(Expression::CString("fail".to_string())),
+            );
+            let parsed = parse_assertneq_statement(input).unwrap().1;
+            assert_eq!(parsed, expected);
+        }
 
-        // O parser deve falhar, pois funções de teste não podem ter argumentos.
-        let parsed = parse_test_function_definition_statement(input);
+        #[test]
+        fn test_parse_asserttrue_statement() {
+            let input = "asserttrue(True, \"should be true\")";
+            let expected = Statement::AssertTrue(
+                Box::new(Expression::CTrue),
+                Box::new(Expression::CString("should be true".to_string())),
+            );
+            let parsed = parse_asserttrue_statement(input).unwrap().1;
+            assert_eq!(parsed, expected);
+        }
 
-        assert!(
-            parsed.is_err(),
-            "Funções de teste com argumentos devem ser rejeitadas"
-        );
-    }
-
-    #[test]
-    fn test_parse_test_function_definition_statement_invalid_return() {
-        let input = "test test_with_invalid_return() -> Int: x = 2; end";
-
-        // O parser deve falhar, pois funções de teste não podem ter argumentos.
-        let parsed = parse_test_function_definition_statement(input);
-
-        assert!(
-            parsed.is_err(),
-            "Funções de teste não devem especificar tipo de retorno"
-        );
-    }
-
-    #[test]
-    fn test_parse_test_function_definition_statement_valid_return_type() {
-        let input = "test test_with_valid_return() -> Boolean: x = 2; end";
-
-        let parsed = parse_test_function_definition_statement(input);
-        assert!(
-            parsed.is_err(),
-            "Funções de teste não devem especificar tipo de retorno"
-        );
-    }
-    //TODO: Implementar testes para os ASSERTS
-
-    #[test]
-    fn test_parse_asserteq_statement() {
-        let input = "asserteq(1, 2, \"msg\")";
-        let expected = Statement::AssertEQ(
-            Box::new(Expression::CInt(1)),
-            Box::new(Expression::CInt(2)),
-            Box::new(Expression::CString("msg".to_string())),
-        );
-        let parsed = parse_asserteq_statement(input).unwrap().1;
-        assert_eq!(parsed, expected);
-    }
-
-    #[test]
-    fn test_parse_assertneq_statement() {
-        let input = "assertneq(3, 4, \"fail\")";
-        let expected = Statement::AssertNEQ(
-            Box::new(Expression::CInt(3)),
-            Box::new(Expression::CInt(4)),
-            Box::new(Expression::CString("fail".to_string())),
-        );
-        let parsed = parse_assertneq_statement(input).unwrap().1;
-        assert_eq!(parsed, expected);
-    }
-
-    #[test]
-    fn test_parse_asserttrue_statement() {
-        let input = "asserttrue(True, \"should be true\")";
-        let expected = Statement::AssertTrue(
-            Box::new(Expression::CTrue),
-            Box::new(Expression::CString("should be true".to_string())),
-        );
-        let parsed = parse_asserttrue_statement(input).unwrap().1;
-        assert_eq!(parsed, expected);
-    }
-
-    #[test]
-    fn test_parse_assertfalse_statement() {
-        let input = "assertfalse(False, \"should be false\")";
-        let expected = Statement::AssertFalse(
-            Box::new(Expression::CFalse),
-            Box::new(Expression::CString("should be false".to_string())),
-        );
-        let parsed = parse_assertfalse_statement(input).unwrap().1;
-        assert_eq!(parsed, expected);
+        #[test]
+        fn test_parse_assertfalse_statement() {
+            let input = "assertfalse(False, \"should be false\")";
+            let expected = Statement::AssertFalse(
+                Box::new(Expression::CFalse),
+                Box::new(Expression::CString("should be false".to_string())),
+            );
+            let parsed = parse_assertfalse_statement(input).unwrap().1;
+            assert_eq!(parsed, expected);
+        }
     }
 }
