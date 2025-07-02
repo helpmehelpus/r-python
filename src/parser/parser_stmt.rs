@@ -13,7 +13,7 @@ use crate::ir::ast::{FormalArgument, Function, Statement};
 use crate::parser::parser_common::{
     identifier, keyword, ASSERT_KEYWORD, COLON_CHAR, COMMA_CHAR, DEF_KEYWORD, ELSE_KEYWORD,
     END_KEYWORD, EQUALS_CHAR, FOR_KEYWORD, FUNCTION_ARROW, IF_KEYWORD, IN_KEYWORD, LEFT_PAREN,
-    RIGHT_PAREN, SEMICOLON_CHAR, VAL_KEYWORD, VAR_KEYWORD, WHILE_KEYWORD,
+    RIGHT_PAREN, SEMICOLON_CHAR, VAL_KEYWORD, VAR_KEYWORD, WHILE_KEYWORD, ELIF_KEYWORD
 };
 use crate::parser::parser_expr::parse_expression;
 use crate::parser::parser_type::parse_type;
@@ -100,34 +100,25 @@ fn parse_if_else_statement(input: &str) -> IResult<&str, Statement> {
 }
 
 pub fn parse_if_chain_statement(input: &str) -> IResult<&str, Statement> {
-    let (input, _) = keyword(IF_KEYWORD)(input)?;
-    let (input, cond_if) = preceded(multispace1, parse_expression)(input)?;
-    let (input, block_if) = parse_block(input)?;
-
+    
+    let (input_after_if, _) = keyword(IF_KEYWORD)(input)?;
+    let (input_after_expr, cond_if) = parse_expression(input_after_if)?;
+    let (input_after_block, block_if) = parse_block(input_after_expr)?;
+    
     let mut branches = vec![(Box::new(cond_if), Box::new(block_if))];
-    let mut current_input = input;
+    let mut current_input = input_after_block;
 
     loop {
-        let result = tuple((
-            multispace0,
-            keyword(ELIF_KEYWORD),
-            preceded(multispace1, parse_expression),
-            parse_block,
-        ))(current_input);
-
+        let result = tuple((keyword(ELIF_KEYWORD), parse_expression, parse_block))(current_input);
         match result {
-            Ok((next_input, (_, _, cond_elif, block_elif))) => {
+            Ok((next_input, (_, cond_elif, block_elif))) => {
                 branches.push((Box::new(cond_elif), Box::new(block_elif)));
                 current_input = next_input;
             }
             Err(_) => break,
         }
     }
-    let (input, else_branch) = opt(preceded(
-        tuple((multispace0, keyword(ELSE_KEYWORD))),
-        parse_block,
-    ))(current_input)?;
-
+    let (input, else_branch) = opt(preceded(keyword(ELSE_KEYWORD), parse_block))(current_input)?;
     Ok((
         input,
         Statement::IfChain {
@@ -193,7 +184,8 @@ fn parse_function_definition_statement(input: &str) -> IResult<&str, Statement> 
             keyword(DEF_KEYWORD),
             preceded(multispace1, identifier),
             delimited(
-                char:// Tenta parsear um else opcional:<&str, Error<&str>>(LEFT_PAREN),
+                // Corrigido: Removido o comentário que quebrava a sintaxe
+                char::<&str, Error<&str>>(LEFT_PAREN),
                 separated_list0(
                     tuple((
                         multispace0,
@@ -208,7 +200,8 @@ fn parse_function_definition_statement(input: &str) -> IResult<&str, Statement> 
             preceded(multispace0, parse_type),
             parse_block,
         )),
-        |(_, name, ar// Tenta parsear um else opcionalgs, _, t, block)| {
+        // Corrigido: O nome da variável 'args' agora está correto
+        |(_, name, args, _, t, block)| {
             Statement::FuncDef(Function {
                 name: name.to_string(),
                 kind: t,
@@ -381,4 +374,92 @@ mod tests {
         let parsed = parse_formal_argument(input).unwrap().1;
         assert_eq!(parsed, expected);
     }
+
+    #[test]
+    fn test_parse_if_chain_statement() {
+
+        // Cenário 1: Apenas um "if", sem "elif" ou "else".
+        let input_if_only = "if True: x = 1; end";
+        let expected_if_only = Statement::IfChain {
+            branches: vec![(
+                Box::new(Expression::CTrue),
+                Box::new(Statement::Block(vec![Statement::Assignment(
+                    "x".to_string(),
+                    Box::new(Expression::CInt(1)),
+                )])),
+            )],
+            else_branch: None,
+        };
+        let (_, parsed_if_only) = parse_if_chain_statement(input_if_only).unwrap();
+        assert_eq!(parsed_if_only, expected_if_only);
+
+        // Cenário 2: Um "if" com "else", mas sem "elif".
+        let input_if_else = "if False: x = 1; end else: y = 2; end";
+        let expected_if_else = Statement::IfChain {
+            branches: vec![(
+                Box::new(Expression::CFalse),
+                Box::new(Statement::Block(vec![Statement::Assignment(
+                    "x".to_string(),
+                    Box::new(Expression::CInt(1)),
+                )])),
+            )],
+            else_branch: Some(Box::new(Statement::Block(vec![Statement::Assignment(
+                "y".to_string(),
+                Box::new(Expression::CInt(2)),
+            )]))),
+        };
+        let (_, parsed_if_else) = parse_if_chain_statement(input_if_else).unwrap();
+        assert_eq!(parsed_if_else, expected_if_else);
+
+        // Cenário 3: "if", um "elif", e um "else".
+        let input_if_elif_else = "if a: x = 1; end elif b: y = 2; end else: z = 3; end";
+        let expected_if_elif_else = Statement::IfChain {
+            branches: vec![
+                (
+                    Box::new(Expression::Var("a".to_string())),
+                    Box::new(Statement::Block(vec![Statement::Assignment(
+                        "x".to_string(),
+                        Box::new(Expression::CInt(1)),
+                    )])),
+                ),
+                (
+                    Box::new(Expression::Var("b".to_string())),
+                    Box::new(Statement::Block(vec![Statement::Assignment(
+                        "y".to_string(),
+                        Box::new(Expression::CInt(2)),
+                    )])),
+                ),
+            ],
+            else_branch: Some(Box::new(Statement::Block(vec![Statement::Assignment(
+                "z".to_string(),
+                Box::new(Expression::CInt(3)),
+            )]))),
+        };
+        let (_, parsed_if_elif_else) = parse_if_chain_statement(input_if_elif_else).unwrap();
+        assert_eq!(parsed_if_elif_else, expected_if_elif_else);
+        
+        // Cenário 4: "if" com múltiplos "elif" e sem "else".
+        let input_multi_elif = "if a: x=1; end elif b: y=2; end elif c: z=3; end";
+        let expected_multi_elif = Statement::IfChain {
+            branches: vec![
+                (
+                    Box::new(Expression::Var("a".to_string())),
+                    Box::new(Statement::Block(vec![Statement::Assignment("x".to_string(), Box::new(Expression::CInt(1)))])),
+                ),
+                (
+                    Box::new(Expression::Var("b".to_string())),
+                    Box::new(Statement::Block(vec![Statement::Assignment("y".to_string(), Box::new(Expression::CInt(2)))])),
+                ),
+                (
+                    Box::new(Expression::Var("c".to_string())),
+                    Box::new(Statement::Block(vec![Statement::Assignment("z".to_string(), Box::new(Expression::CInt(3)))])),
+                ),
+            ],
+            else_branch: None,
+        };
+        let (_, parsed_multi_elif) = parse_if_chain_statement(input_multi_elif).unwrap();
+        assert_eq!(parsed_multi_elif, expected_multi_elif);
+    }
 }
+
+

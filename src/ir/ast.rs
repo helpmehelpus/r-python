@@ -120,8 +120,8 @@ pub enum Statement {
     Assignment(Name, Box<Expression>),
     IfThenElse(Box<Expression>, Box<Statement>, Option<Box<Statement>>),
     IfChain {
-        branches: Vec<(Box<Expr>, Box<Block>)>,
-        else_branch: Option<Box<Block>>,
+        branches: Vec<(Box<Expression>, Box<Statement>)>,
+        else_branch: Option<Box<Statement>>,
     },
     While(Box<Expression>, Box<Statement>),
     For(Name, Box<Expression>, Box<Statement>),
