@@ -130,6 +130,7 @@ fn parse_for_statement(input: &str) -> IResult<&str, Statement> {
     )(input)
 }
 
+//TODO: Apresentar Asserts
 fn parse_assert_statement(input: &str) -> IResult<&str, Statement> {
     map(
         tuple((
@@ -300,7 +301,7 @@ fn parse_function_definition_statement(input: &str) -> IResult<&str, Statement> 
     )(input)
 }
 
-
+//TODO: Apresentar TestDef
 fn parse_test_function_definition_statement(input: &str) -> IResult<&str, Statement> {
     map(
         tuple((

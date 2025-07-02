@@ -256,7 +256,7 @@ fn check_return_stmt(
         }
     }
 }
-
+//TODO: Apresentar Asserts
 fn check_assert(
     expr1: Box<Expression>,
     expr2: Box<Expression>,
@@ -348,6 +348,7 @@ fn check_assert_neq(
     }
 }
 
+//TODO: Apresentar TestDef
 fn check_test_function_stmt(
     function: Function,
     env: &Environment<Type>,

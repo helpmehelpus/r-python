@@ -33,6 +33,7 @@ pub fn run(
     }
 }
 
+//TODO: Apresentar RunTests
 pub fn run_tests(stmt: &Statement) -> Result<Vec<TestResult>, String> {
     let env = match run(stmt.clone(), &Environment::new()) {
         Ok(env) => env,
@@ -85,7 +86,7 @@ pub fn execute(stmt: Statement, env: &Environment<Expression>) -> Result<Computa
             new_env.map_variable(name, true, value);
             Ok(Computation::Continue(new_env))
         }
-
+        //TODO: Apresentar Asserts
         Statement::Assert(exp, msg) => {
             let value = match eval(*exp, &new_env)? {
                 ExpressionResult::Value(expr) => expr,
@@ -359,6 +360,7 @@ pub fn execute(stmt: Statement, env: &Environment<Expression>) -> Result<Computa
             Ok(Computation::Continue(new_env))
         }
 
+        //TODO: Apresentar TesteDef
         Statement::TestDef(teste) => {
             new_env.map_test(teste.clone());
             Ok(Computation::Continue(new_env))
