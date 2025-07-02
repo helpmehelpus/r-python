@@ -99,6 +99,44 @@ fn parse_if_else_statement(input: &str) -> IResult<&str, Statement> {
     )(input)
 }
 
+pub fn parse_if_chain_statement(input: &str) -> IResult<&str, Statement> {
+    let (input, _) = keyword(IF_KEYWORD)(input)?;
+    let (input, cond_if) = preceded(multispace1, parse_expression)(input)?;
+    let (input, block_if) = parse_block(input)?;
+
+    let mut branches = vec![(Box::new(cond_if), Box::new(block_if))];
+    let mut current_input = input;
+
+    loop {
+        let result = tuple((
+            multispace0,
+            keyword(ELIF_KEYWORD),
+            preceded(multispace1, parse_expression),
+            parse_block,
+        ))(current_input);
+
+        match result {
+            Ok((next_input, (_, _, cond_elif, block_elif))) => {
+                branches.push((Box::new(cond_elif), Box::new(block_elif)));
+                current_input = next_input;
+            }
+            Err(_) => break,
+        }
+    }
+    let (input, else_branch) = opt(preceded(
+        tuple((multispace0, keyword(ELSE_KEYWORD))),
+        parse_block,
+    ))(current_input)?;
+
+    Ok((
+        input,
+        Statement::IfChain {
+            branches,
+            else_branch: else_branch.map(Box::new),
+        },
+    ))
+}
+
 fn parse_while_statement(input: &str) -> IResult<&str, Statement> {
     map(
         tuple((
@@ -155,7 +193,7 @@ fn parse_function_definition_statement(input: &str) -> IResult<&str, Statement> 
             keyword(DEF_KEYWORD),
             preceded(multispace1, identifier),
             delimited(
-                char::<&str, Error<&str>>(LEFT_PAREN),
+                char:// Tenta parsear um else opcional:<&str, Error<&str>>(LEFT_PAREN),
                 separated_list0(
                     tuple((
                         multispace0,
@@ -170,7 +208,7 @@ fn parse_function_definition_statement(input: &str) -> IResult<&str, Statement> 
             preceded(multispace0, parse_type),
             parse_block,
         )),
-        |(_, name, args, _, t, block)| {
+        |(_, name, ar// Tenta parsear um else opcionalgs, _, t, block)| {
             Statement::FuncDef(Function {
                 name: name.to_string(),
                 kind: t,

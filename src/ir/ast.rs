@@ -119,6 +119,10 @@ pub enum Statement {
     ValDeclaration(Name, Box<Expression>),
     Assignment(Name, Box<Expression>),
     IfThenElse(Box<Expression>, Box<Statement>, Option<Box<Statement>>),
+    IfChain {
+        branches: Vec<(Box<Expr>, Box<Block>)>,
+        else_branch: Option<Box<Block>>,
+    },
     While(Box<Expression>, Box<Statement>),
     For(Name, Box<Expression>, Box<Statement>),
     Block(Vec<Statement>),
