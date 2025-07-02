@@ -810,7 +810,7 @@ mod tests {
     }
 
     //TODO: Apresentar TypeChecker de Asserts (Testes)
-    mod assignment_tests {
+    mod assert_tests {
         use super::*;
 
         #[test]

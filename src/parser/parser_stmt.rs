@@ -33,7 +33,7 @@ pub fn parse_statement(input: &str) -> IResult<&str, Statement> {
         parse_assertneq_statement,
         parse_assertfalse_statement,
         parse_asserttrue_statement,
-        parse_test_function_definition_statement, // FIXME: Being Implemented
+        parse_test_function_definition_statement, 
         parse_function_definition_statement,
     ))(input)
 }
@@ -300,17 +300,16 @@ fn parse_function_definition_statement(input: &str) -> IResult<&str, Statement> 
     )(input)
 }
 
-// TODO: alterar, não há mais necessidade de checar se o nome é test, usaremos uma keyword "test"
+
 fn parse_test_function_definition_statement(input: &str) -> IResult<&str, Statement> {
     map(
         tuple((
-            //keyword(DEF_KEYWORD),
+            //keyword(TEST_KEYWORD),
             tag("test"),
             preceded(multispace1, identifier),
-            //identifier,
             delimited(
                 char::<&str, Error<&str>>(LEFT_PAREN),
-                multispace0, // Permite `()` com espaços, mas sem argumentos
+                multispace0, 
                 char::<&str, Error<&str>>(RIGHT_PAREN),
             ),
             parse_block,
@@ -420,19 +419,7 @@ mod tests {
         assert_eq!(parsed, expected);
     }
 
-    #[test]
-    fn test_parse_assert_statement() {
-        let input = "assert(1 == 2, \"expecting an error\")";
-        let expected = Statement::Assert(
-            Box::new(Expression::EQ(
-                Box::new(Expression::CInt(1)),
-                Box::new(Expression::CInt(2)),
-            )),
-            Box::new(Expression::CString("expecting an error".to_string())),
-        );
-        let parsed = parse_assert_statement(input).unwrap().1;
-        assert_eq!(parsed, expected);
-    }
+    
 
     #[test]
     #[ignore]
@@ -591,8 +578,22 @@ mod tests {
     }
     
     //TODO: Apresentar Parser de Asserts (Testes)
-    mod assignment_tests {
+    mod assert_tests {
         use super::*;
+
+        #[test]
+        fn test_parse_assert_statement() {
+            let input = "assert(1 == 2, \"expecting an error\")";
+            let expected = Statement::Assert(
+                Box::new(Expression::EQ(
+                    Box::new(Expression::CInt(1)),
+                    Box::new(Expression::CInt(2)),
+                )),
+                Box::new(Expression::CString("expecting an error".to_string())),
+            );
+            let parsed = parse_assert_statement(input).unwrap().1;
+            assert_eq!(parsed, expected);
+        }
 
         #[test]
         fn test_parse_asserteq_statement() {
@@ -639,5 +640,110 @@ mod tests {
             let parsed = parse_assertfalse_statement(input).unwrap().1;
             assert_eq!(parsed, expected);
         }
+
+        #[test]
+        fn test_parse_assert_statement_invalid_argnumber() {
+            let input = "assert(False, False, \"should be false\")";
+            
+            let result = std::panic::catch_unwind(|| {
+                parse_assert_statement(input)
+            });
+
+            assert!(result.is_err(), "Expected panic for invalid number of arguments");
+
+            if let Err(err) = result {
+                if let Some(s) = err.downcast_ref::<&str>() {
+                    assert_eq!(*s, "Assert statement requires exactly 2 arguments");
+                } else if let Some(s) = err.downcast_ref::<String>() {
+                    assert_eq!(s, "Assert statement requires exactly 2 arguments");
+                } else {
+                    panic!("Panic occurred, but message is not a string");
+                }
+            }
+        }
+
+        #[test]
+        fn test_parse_asserteq_statement_invalid_argnumber() {
+            let input = "asserteq(1, 2, 3, \"msg\")";
+            
+            let result = std::panic::catch_unwind(|| {
+                parse_asserteq_statement(input)
+            });
+
+            assert!(result.is_err(), "Expected panic for invalid number of arguments");
+
+            if let Err(err) = result {
+                if let Some(s) = err.downcast_ref::<&str>() {
+                    assert_eq!(*s, "AssertEQ statement requires exactly 3 arguments");
+                } else if let Some(s) = err.downcast_ref::<String>() {
+                    assert_eq!(s, "AssertEQ statement requires exactly 3 arguments");
+                } else {
+                    panic!("Panic occurred, but message is not a string");
+                }
+            }
+        }
+
+        #[test]
+        fn test_parse_assertneq_statement_invalid_argnumber() {
+            let input = "assertneq(3, 4, 5, \"fail\")";
+            
+            let result = std::panic::catch_unwind(|| {
+                parse_assertneq_statement(input)
+            });
+
+            assert!(result.is_err(), "Expected panic for invalid number of arguments");
+
+            if let Err(err) = result {
+                if let Some(s) = err.downcast_ref::<&str>() {
+                    assert_eq!(*s, "AssertNEQ statement requires exactly 3 arguments");
+                } else if let Some(s) = err.downcast_ref::<String>() {
+                    assert_eq!(s, "AssertNEQ statement requires exactly 3 arguments");
+                } else {
+                    panic!("Panic occurred, but message is not a string");
+                }
+            }
+        }
+
+        #[test]
+        fn test_parse_asserttrue_statement_invalid_argnumber() {
+            let input = "asserttrue(True, True, \"should be true\")";
+            
+            let result = std::panic::catch_unwind(|| {
+                parse_asserttrue_statement(input)
+            });
+
+            assert!(result.is_err(), "Expected panic for invalid number of arguments");
+
+            if let Err(err) = result {
+                if let Some(s) = err.downcast_ref::<&str>() {
+                    assert_eq!(*s, "AssertTrue statement requires exactly 2 arguments");
+                } else if let Some(s) = err.downcast_ref::<String>() {
+                    assert_eq!(s, "AssertTrue statement requires exactly 2 arguments");
+                } else {
+                    panic!("Panic occurred, but message is not a string");
+                }
+            }
+        }
+
+        #[test]
+        fn test_parse_assertfalse_statement_invalid_argnumber() {
+            let input = "assertfalse(False, False, \"should be false\")";
+            
+            let result = std::panic::catch_unwind(|| {
+                parse_assertfalse_statement(input)
+            });
+
+            assert!(result.is_err(), "Expected panic for invalid number of arguments");
+            if let Err(err) = result {
+                if let Some(s) = err.downcast_ref::<&str>() {
+                    assert_eq!(*s, "AssertFalse statement requires exactly 2 arguments");
+                } else if let Some(s) = err.downcast_ref::<String>() {
+                    assert_eq!(s, "AssertFalse statement requires exactly 2 arguments");
+                } else {
+                    panic!("Panic occurred, but message is not a string");
+                }
+            }
+        }
+
     }
 }

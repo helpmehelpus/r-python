@@ -40,6 +40,7 @@ pub const ASSERTFALSE_KEYWORD: &str = "assertfalse";
 pub const VAR_KEYWORD: &str = "var";
 pub const VAL_KEYWORD: &str = "val";
 pub const DEF_KEYWORD: &str = "def";
+pub const TEST_KEYWORD: &str = "test";
 
 // Operator and symbol constants
 pub const FUNCTION_ARROW: &str = "->";
