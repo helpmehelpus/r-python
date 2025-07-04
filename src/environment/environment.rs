@@ -131,7 +131,7 @@ impl<A: Clone> Environment<A> {
         self.globals.lookup_test(name)
     }
 
-    pub fn scrape_tests(&self) -> Vec<Function> {
+    pub fn get_all_tests(&self) -> Vec<Function> {
         let mut tests = Vec::new();
         for scope in self.stack.iter() {
             for test in scope.tests.values() {

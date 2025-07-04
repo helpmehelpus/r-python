@@ -42,7 +42,7 @@ pub fn run_tests(stmt: &Statement) -> Result<Vec<TestResult>, String> {
 
     let mut results = Vec::new();
 
-    for test in env.scrape_tests() {
+    for test in env.get_all_tests() {
         let mut test_env = env.clone();
         test_env.push();
 
