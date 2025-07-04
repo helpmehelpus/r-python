@@ -1,8 +1,21 @@
 use crate::environment::environment::Environment;
 use crate::ir::ast::{Statement, Expression};
 use std::collections::HashMap;
+use std::sync::OnceLock;
 
 pub type MetaBuiltinStmt = fn(&mut Environment<Expression>) -> Statement;
+
+// Tabela estática global de metabuiltins
+static METABUILTINS_TABLE: OnceLock<HashMap<String, MetaBuiltinStmt>> = OnceLock::new();
+
+pub fn get_metabuiltins_table() -> &'static HashMap<String, MetaBuiltinStmt> {
+    METABUILTINS_TABLE.get_or_init(|| {
+        let mut table = HashMap::new();
+        table.insert("input".to_string(), input_builtin as MetaBuiltinStmt);
+        table.insert("print".to_string(), print_builtin as MetaBuiltinStmt);
+        table
+    })
+}
 
 pub fn input_builtin(env: &mut Environment<Expression>) -> Statement {
     let prompt = match env.lookup(&"prompt".to_string()) {
@@ -31,20 +44,13 @@ pub fn print_builtin(env: &mut Environment<Expression>) -> Statement {
     Statement::Return(Box::new(Expression::CVoid))
 }
 
-pub fn meta_stmt_table() -> HashMap<String, MetaBuiltinStmt> {
-    let mut table: HashMap<String, MetaBuiltinStmt> = HashMap::new();
-    table.insert("input".to_string(), input_builtin);
-    table.insert("print".to_string(), print_builtin);
-    table
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn test_meta_stmt_table_contains_input_function() {
-        let table = meta_stmt_table();
+        let table = get_metabuiltins_table();
         assert!(table.contains_key("input"), "The table must contain the 'input' function");
         
         // Check if the function in the table is callable
@@ -58,7 +64,7 @@ mod tests {
 
     #[test]
     fn test_meta_stmt_table_contains_print_function() {
-        let table = meta_stmt_table();
+        let table = get_metabuiltins_table();
         assert!(table.contains_key("print"), "The table must contain the 'print' function");
         
         // Check if the function in the table is callable
@@ -73,13 +79,13 @@ mod tests {
 
     #[test]
     fn test_meta_stmt_table_has_correct_size() {
-        let table = meta_stmt_table();
+        let table = get_metabuiltins_table();
         assert_eq!(table.len(), 2, "The table must contain exactly 2 functions");
     }
 
     #[test]
     fn test_meta_stmt_table_contains_only_expected_keys() {
-        let table = meta_stmt_table();
+        let table = get_metabuiltins_table();
         let keys: Vec<&String> = table.keys().collect();
         
         assert!(keys.contains(&&"input".to_string()), "The table must contain the key 'input'");
@@ -110,7 +116,7 @@ mod tests {
 
     #[test]
     fn test_meta_stmt_table_functions_are_callable() {
-        let table = meta_stmt_table();
+        let table = get_metabuiltins_table();
         
         // Check if the 'input' function exists in the table (without executing it)
         assert!(table.contains_key("input"), "The 'input' function must be in the table");

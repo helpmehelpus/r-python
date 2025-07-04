@@ -1,7 +1,7 @@
 use super::expression_eval::{eval, ExpressionResult};
 use crate::environment::environment::Environment;
 use crate::ir::ast::{Expression, Statement};
-use crate::stdlib::standard_library::meta_stmt_table;
+use crate::stdlib::standard_library::get_metabuiltins_table;
 
 pub enum Computation {
     Continue(Environment<Expression>),
@@ -194,7 +194,7 @@ pub fn execute(stmt: Statement, env: &Environment<Expression>) -> Result<Computa
         }
 
         Statement::MetaStmt(ref name) => {
-            let table = meta_stmt_table();
+            let table = get_metabuiltins_table();
             if let Some(f) = table.get(name) {
                 let next_stmt = f(&mut new_env);
                 execute(next_stmt, &new_env)
