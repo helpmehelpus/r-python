@@ -25,6 +25,7 @@ pub fn run(
     stmt: Statement,
     env: &Environment<Expression>,
 ) -> Result<Environment<Expression>, String> {
+    get_metabuiltins_table();
     match execute(stmt, env) {
         Ok(Computation::Continue(new_env)) => Ok(new_env),
         Ok(Computation::Return(_, new_env)) => Ok(new_env),
