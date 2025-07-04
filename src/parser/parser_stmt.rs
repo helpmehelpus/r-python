@@ -33,7 +33,7 @@ pub fn parse_statement(input: &str) -> IResult<&str, Statement> {
         parse_assertneq_statement,
         parse_assertfalse_statement,
         parse_asserttrue_statement,
-        parse_test_function_definition_statement, 
+        parse_test_function_definition_statement,
         parse_function_definition_statement,
     ))(input)
 }
@@ -310,7 +310,7 @@ fn parse_test_function_definition_statement(input: &str) -> IResult<&str, Statem
             preceded(multispace1, identifier),
             delimited(
                 char::<&str, Error<&str>>(LEFT_PAREN),
-                multispace0, 
+                multispace0,
                 char::<&str, Error<&str>>(RIGHT_PAREN),
             ),
             parse_block,
@@ -420,8 +420,6 @@ mod tests {
         assert_eq!(parsed, expected);
     }
 
-    
-
     #[test]
     #[ignore]
     fn test_parse_function_definition_statement() {
@@ -480,7 +478,7 @@ mod tests {
     //TODO: Apresentar Parser de TestDef (Testes)
     mod testdef_tests {
         use super::*;
-        
+
         #[test]
         fn test_parse_test_function_definition_statement_valid() {
             let input = "test test_example(): x = 1; end";
@@ -577,7 +575,7 @@ mod tests {
             );
         }
     }
-    
+
     //TODO: Apresentar Parser de Asserts (Testes)
     mod assert_tests {
         use super::*;
@@ -645,12 +643,13 @@ mod tests {
         #[test]
         fn test_parse_assert_statement_invalid_argnumber() {
             let input = "assert(False, False, \"should be false\")";
-            
-            let result = std::panic::catch_unwind(|| {
-                parse_assert_statement(input)
-            });
 
-            assert!(result.is_err(), "Expected panic for invalid number of arguments");
+            let result = std::panic::catch_unwind(|| parse_assert_statement(input));
+
+            assert!(
+                result.is_err(),
+                "Expected panic for invalid number of arguments"
+            );
 
             if let Err(err) = result {
                 if let Some(s) = err.downcast_ref::<&str>() {
@@ -666,12 +665,13 @@ mod tests {
         #[test]
         fn test_parse_asserteq_statement_invalid_argnumber() {
             let input = "asserteq(1, 2, 3, \"msg\")";
-            
-            let result = std::panic::catch_unwind(|| {
-                parse_asserteq_statement(input)
-            });
 
-            assert!(result.is_err(), "Expected panic for invalid number of arguments");
+            let result = std::panic::catch_unwind(|| parse_asserteq_statement(input));
+
+            assert!(
+                result.is_err(),
+                "Expected panic for invalid number of arguments"
+            );
 
             if let Err(err) = result {
                 if let Some(s) = err.downcast_ref::<&str>() {
@@ -687,12 +687,13 @@ mod tests {
         #[test]
         fn test_parse_assertneq_statement_invalid_argnumber() {
             let input = "assertneq(3, 4, 5, \"fail\")";
-            
-            let result = std::panic::catch_unwind(|| {
-                parse_assertneq_statement(input)
-            });
 
-            assert!(result.is_err(), "Expected panic for invalid number of arguments");
+            let result = std::panic::catch_unwind(|| parse_assertneq_statement(input));
+
+            assert!(
+                result.is_err(),
+                "Expected panic for invalid number of arguments"
+            );
 
             if let Err(err) = result {
                 if let Some(s) = err.downcast_ref::<&str>() {
@@ -708,12 +709,13 @@ mod tests {
         #[test]
         fn test_parse_asserttrue_statement_invalid_argnumber() {
             let input = "asserttrue(True, True, \"should be true\")";
-            
-            let result = std::panic::catch_unwind(|| {
-                parse_asserttrue_statement(input)
-            });
 
-            assert!(result.is_err(), "Expected panic for invalid number of arguments");
+            let result = std::panic::catch_unwind(|| parse_asserttrue_statement(input));
+
+            assert!(
+                result.is_err(),
+                "Expected panic for invalid number of arguments"
+            );
 
             if let Err(err) = result {
                 if let Some(s) = err.downcast_ref::<&str>() {
@@ -729,12 +731,13 @@ mod tests {
         #[test]
         fn test_parse_assertfalse_statement_invalid_argnumber() {
             let input = "assertfalse(False, False, \"should be false\")";
-            
-            let result = std::panic::catch_unwind(|| {
-                parse_assertfalse_statement(input)
-            });
 
-            assert!(result.is_err(), "Expected panic for invalid number of arguments");
+            let result = std::panic::catch_unwind(|| parse_assertfalse_statement(input));
+
+            assert!(
+                result.is_err(),
+                "Expected panic for invalid number of arguments"
+            );
             if let Err(err) = result {
                 if let Some(s) = err.downcast_ref::<&str>() {
                     assert_eq!(*s, "AssertFalse statement requires exactly 2 arguments");
@@ -745,6 +748,5 @@ mod tests {
                 }
             }
         }
-
     }
 }

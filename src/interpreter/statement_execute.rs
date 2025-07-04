@@ -1145,7 +1145,7 @@ mod tests {
             assert_eq!(computation, "assertfalse fail".to_string());
         }
     }
-    
+
     //TODO: Apresentar Interpretador TestDef (Tests)
     mod testdef_statement_tests {
         use super::*;

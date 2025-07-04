@@ -41,13 +41,13 @@ pub fn check_block(
         Statement::Block(stmts) => {
             let mut block_env = env.clone();
             block_env.push();
-            
+
             for s in stmts {
                 block_env = check_stmt(s, &block_env)?;
-            }    
-            block_env.pop();           
+            }
+            block_env.pop();
             Ok(block_env)
-        }       
+        }
         _ => Err("Expected a block statement".to_string()),
     }
 }
@@ -354,7 +354,10 @@ fn check_test_function_stmt(
     env: &Environment<Type>,
 ) -> Result<Environment<Type>, ErrorMessage> {
     if env.lookup_test(&function.name).is_some() {
-        return Err(format!("[Type Error] Test function '{}' already exists.", function.name));
+        return Err(format!(
+            "[Type Error] Test function '{}' already exists.",
+            function.name
+        ));
     }
     if !function.params.is_empty() {
         return Err("[Type Error] Test functions must not have parameters.".into());
@@ -408,7 +411,7 @@ fn merge_environments(
             }
         }
     }
-   
+
     //TODO: should we merge ADTs and functions?
 
     Ok(merged)
@@ -996,7 +999,7 @@ mod tests {
     //TODO: Apresentar TypeChecker de TestDef (Testes)
     mod testdef_tests {
         use super::*;
-    
+
         #[test]
         fn test_check_valid_test_function() {
             let env: Environment<Type> = Environment::new();
@@ -1010,16 +1013,16 @@ mod tests {
                     Statement::AssertEQ(
                         Box::new(Expression::Add(
                             Box::new(Expression::Var("a".to_string())),
-                            Box::new(Expression::Var("b".to_string()))
+                            Box::new(Expression::Var("b".to_string())),
                         )),
                         Box::new(Expression::CInt(15)),
-                        Box::new(Expression::CString("A soma deveria ser 15".to_string()))
-                    )
+                        Box::new(Expression::CString("A soma deveria ser 15".to_string())),
+                    ),
                 ]))),
             });
             assert!(check_stmt(stmt, &env).is_ok());
         }
-        
+
         #[test]
         fn test_check_test_function_with_params() {
             let env: Environment<Type> = Environment::new();
@@ -1032,12 +1035,15 @@ mod tests {
 
             assert!(check_stmt(stmt.clone(), &env).is_err());
 
-            let error = match check_stmt(stmt, &env){
+            let error = match check_stmt(stmt, &env) {
                 Ok(_) => "Expected an error, but got Ok".to_string(),
                 Err(error) => error,
             };
 
-            assert_eq!(error,"[Type Error] Test functions must not have parameters.".to_string());
+            assert_eq!(
+                error,
+                "[Type Error] Test functions must not have parameters.".to_string()
+            );
         }
 
         #[test]
@@ -1045,7 +1051,7 @@ mod tests {
             let env: Environment<Type> = Environment::new();
             let stmt = TestDef(Function {
                 name: "invalid_function".to_string(),
-                kind: Type::TInteger,  // Must be TVoid!
+                kind: Type::TInteger, // Must be TVoid!
                 params: vec![],
                 body: Some(Box::new(Block(vec![
                     Statement::VarDeclaration("a".to_string(), Box::new(Expression::CInt(10))),
@@ -1053,22 +1059,25 @@ mod tests {
                     Statement::AssertEQ(
                         Box::new(Expression::Add(
                             Box::new(Expression::Var("a".to_string())),
-                            Box::new(Expression::Var("b".to_string()))
+                            Box::new(Expression::Var("b".to_string())),
                         )),
                         Box::new(Expression::CInt(15)),
-                        Box::new(Expression::CString("A soma deveria ser 15".to_string()))
-                    )
+                        Box::new(Expression::CString("A soma deveria ser 15".to_string())),
+                    ),
                 ]))),
             });
-            
+
             assert!(check_stmt(stmt.clone(), &env).is_err());
 
-            let error = match check_stmt(stmt, &env){
+            let error = match check_stmt(stmt, &env) {
                 Ok(_) => "Expected an error, but got Ok".to_string(),
                 Err(error) => error,
             };
 
-            assert_eq!(error,"[Type Error] Test functions must return void.".to_string());
+            assert_eq!(
+                error,
+                "[Type Error] Test functions must return void.".to_string()
+            );
         }
 
         #[test]
@@ -1084,16 +1093,16 @@ mod tests {
                     Statement::AssertEQ(
                         Box::new(Expression::Add(
                             Box::new(Expression::Var("a".to_string())),
-                            Box::new(Expression::Var("b".to_string()))
+                            Box::new(Expression::Var("b".to_string())),
                         )),
                         Box::new(Expression::CInt(15)),
-                        Box::new(Expression::CString("A soma deveria ser 15".to_string()))
-                    )
+                        Box::new(Expression::CString("A soma deveria ser 15".to_string())),
+                    ),
                 ]))),
             });
-            
+
             env = check_stmt(first_func, &env).unwrap();
-            
+
             let stmt = TestDef(Function {
                 name: "duplicate".to_string(),
                 kind: Type::TVoid,
@@ -1104,22 +1113,25 @@ mod tests {
                     Statement::AssertEQ(
                         Box::new(Expression::Add(
                             Box::new(Expression::Var("a".to_string())),
-                            Box::new(Expression::Var("b".to_string()))
+                            Box::new(Expression::Var("b".to_string())),
                         )),
                         Box::new(Expression::CInt(15)),
-                        Box::new(Expression::CString("A soma deveria ser 15".to_string()))
-                    )
+                        Box::new(Expression::CString("A soma deveria ser 15".to_string())),
+                    ),
                 ]))),
             });
-            
+
             assert!(check_stmt(stmt.clone(), &env).is_err());
 
-            let error = match check_stmt(stmt, &env){
+            let error = match check_stmt(stmt, &env) {
                 Ok(_) => "Expected an error, but got Ok".to_string(),
                 Err(error) => error,
             };
 
-            assert_eq!(error,"[Type Error] Test function 'duplicate' already exists.".to_string());
+            assert_eq!(
+                error,
+                "[Type Error] Test function 'duplicate' already exists.".to_string()
+            );
         }
     }
 }
