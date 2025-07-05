@@ -75,6 +75,60 @@ pub fn execute(
             }
         }
 
+        Statement::For(var, expr, stmt) => {
+            let coll = eval(*expr, &new_env)?;
+            
+            match coll {
+                // Lista de valores
+                Expression::ListValue(items) => {
+                    new_env.push();
+                    for item in items {
+                        new_env.map_variable(var.clone(), true, item);
+                        new_env = execute(*stmt.clone(), &new_env)?;
+                    }
+                    new_env.pop();
+                    Ok(new_env)
+                }
+                
+                // String - itera sobre caracteres
+                Expression::CString(s) => {
+                    new_env.push();
+                    for ch in s.chars() {
+                        let char_value = Expression::CString(ch.to_string());
+                        new_env.map_variable(var.clone(), true, char_value);
+                        new_env = execute(*stmt.clone(), &new_env)?;
+                    }
+                    new_env.pop();
+                    Ok(new_env)
+                }
+                
+                // Tupla (assumindo que você tem Expression::Tuple)
+                Expression::Tuple(items) => {
+                    new_env.push();
+                    for item in items {
+                        new_env.map_variable(var.clone(), true, item);
+                        new_env = execute(*stmt.clone(), &new_env)?;
+                    }
+                    new_env.pop();
+                    Ok(new_env)
+                }
+                
+                // Constructor (já existia)
+                Expression::Constructor(_, items) => {
+                    new_env.push();
+                    for item_expr in items {
+                        let item_value = *item_expr.clone();
+                        new_env.map_variable(var.clone(), true, item_value);
+                        new_env = execute(*stmt.clone(), &new_env)?;
+                    }
+                    new_env.pop();
+                    Ok(new_env)
+                }
+                
+                _ => Err((format!("Cannot iterate over {:?}", coll), None)),
+            }
+        }
+
         Statement::Sequence(s1, s2) => {
             new_env = execute(*s1, &new_env)?;
             execute(*s2, &new_env)

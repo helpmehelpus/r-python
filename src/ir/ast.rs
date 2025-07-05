@@ -134,4 +134,5 @@ pub enum Statement {
     FuncDef(Function),
     Return(Box<Expression>),
     TypeDeclaration(Name, Vec<ValueConstructor>),
+    Tuple(Vec<Expression>)
 }
