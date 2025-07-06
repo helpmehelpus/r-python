@@ -35,9 +35,52 @@ pub fn check_expr(exp: Expression, env: &Environment<Type>) -> Result<Type, Erro
         Expression::Propagate(e) => check_propagate_type(*e, env),
         Expression::ListValue(elements) => check_list_value(&elements, env),
         Expression::Constructor(name, args) => check_adt_constructor(name, args, env),
-
+        Expression::FuncCall(func_name, exp_vec) => check_func_call(func_name.clone(), exp_vec.clone(), env),
+        
         _ => Err("not implemented yet.".to_string()),
     }
+}
+
+
+fn check_func_call(
+    func_name: Name,
+    exp_vector: Vec<Expression>,
+    env: &Environment<Type>,
+) -> Result<Type, ErrorMessage> {
+    let func = env.lookup_function(&func_name);
+    if func.is_none() {
+        return Err(format!(
+            "Function {} was called but never declared",
+            func_name
+        ));
+    }
+    let func = func.unwrap();
+    if func.params.len() != exp_vector.len() {
+        return Err(format!(
+            "Function {} receives {} arguments, but {} were given",
+            func_name,
+            func.params.len(),
+            exp_vector.len()
+        ));
+    }
+    let mut formal_arg_types = Vec::new();
+    let mut actual_arg_types = Vec::new();
+    for (param, arg) in func.params.iter().zip(exp_vector.iter()) {
+        formal_arg_types.push(param.argument_type.clone());
+        let arg_type = check_expr(arg.clone(), env)?;
+        actual_arg_types.push(arg_type);
+    }
+    for (formal_type, actual_type) in formal_arg_types.iter().zip(actual_arg_types.iter()) {
+        if formal_type != actual_type {
+            return Err(format!(
+                "Mismatched types in function {} call \n
+            Expected:{:?}\n
+            Received: {:?}",
+                func_name, formal_arg_types, actual_arg_types
+            ));
+        }
+    }
+    return Ok(func.kind.clone());
 }
 
 fn check_var_name(name: Name, env: &Environment<Type>) -> Result<Type, ErrorMessage> {
