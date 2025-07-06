@@ -79,12 +79,12 @@ pub fn execute(stmt: Statement, env: &Environment<Expression>) -> Result<Computa
 
             match value {
                 Expression::CTrue => match *stmt_then {
-                    Statement::Block(stmts) => execute_block(stmts, &new_env),
+                    Statement::Block(stmts) => execute_if_block(stmts, &new_env),
                     _ => execute(*stmt_then, &new_env),
                 },
                 Expression::CFalse => match stmt_else {
                     Some(else_stmt) => match *else_stmt {
-                        Statement::Block(stmts) => execute_block(stmts, &new_env),
+                        Statement::Block(stmts) => execute_if_block(stmts, &new_env),
                         _ => execute(*else_stmt, &new_env),
                     },
                     None => Ok(Computation::Continue(new_env)),
@@ -94,9 +94,14 @@ pub fn execute(stmt: Statement, env: &Environment<Expression>) -> Result<Computa
         }
 
         Statement::Block(stmts) => {
-            new_env.push();
+            // new_env.push(); <- removing push()
             let result = execute_block(stmts, &new_env);
-            new_env.pop();
+            // new_env.pop(); <- removing pop()
+            // `result` already encapsulates the updated environment,
+            // So popping would have no effect on the final outcome
+            // Therefore, push and pop operations will be handled in function 'execute_block'
+            // A new function `execute_if_block` will be created specifically for executing blocks
+            // without performing push/pop operations
             result
         }
 
@@ -201,13 +206,40 @@ pub fn execute_block(
     env: &Environment<Expression>,
 ) -> Result<Computation, String> {
     let mut current_env = env.clone();
+    current_env.push();
 
     for stmt in stmts {
         match execute(stmt, &current_env)? {
             Computation::Continue(new_env) => current_env = new_env,
-            Computation::Return(expr, env) => return Ok(Computation::Return(expr, env)),
-            Computation::PropagateError(expr, env) => {
-                return Ok(Computation::PropagateError(expr, env))
+            Computation::Return(expr, mut new_env) => 
+            {
+                new_env.pop(); //expr has already been evaluated, so it is safe to pop here
+                return Ok(Computation::Return(expr, new_env));
+            }
+            Computation::PropagateError(expr, new_env) => {
+                return Ok(Computation::PropagateError(expr, new_env))
+            }
+        }
+    }
+    current_env.pop();
+    Ok(Computation::Continue(current_env))
+}
+
+pub fn execute_if_block(
+    stmts: Vec<Statement>,
+    env: &Environment<Expression>,
+) -> Result<Computation, String> {
+    let mut current_env = env.clone();
+
+    for stmt in stmts {
+        match execute(stmt, &current_env)? {
+            Computation::Continue(new_env) => current_env = new_env,
+            Computation::Return(expr, new_env) => 
+            {
+                return Ok(Computation::Return(expr, new_env));
+            }
+            Computation::PropagateError(expr, new_env) => {
+                return Ok(Computation::PropagateError(expr, new_env))
             }
         }
     }
