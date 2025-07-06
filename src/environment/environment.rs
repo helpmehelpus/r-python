@@ -52,6 +52,7 @@ impl<A: Clone> Scope<A> {
 
 #[derive(Clone)]
 pub struct Environment<A> {
+    pub current_func: String,
     pub globals: Scope<A>,
     pub stack: LinkedList<Scope<A>>,
 }
@@ -59,10 +60,24 @@ pub struct Environment<A> {
 impl<A: Clone> Environment<A> {
     pub fn new() -> Environment<A> {
         Environment {
+            current_func: String::new(),
             globals: Scope::new(),
             stack: LinkedList::new(),
         }
     }
+
+    pub fn get_current_func(&self) -> String {
+        return self.current_func.clone();
+    }
+
+    pub fn set_current_func(&mut self, func_name: &str) {
+        self.current_func = func_name.to_string();
+    }
+
+    pub fn set_global_functions(&mut self, global_functions: HashMap<Name, Function>) {
+        self.globals.functions = global_functions;
+    }
+    
 
     pub fn map_variable(&mut self, var: Name, mutable: bool, value: A) -> () {
         match self.stack.front_mut() {
@@ -142,8 +157,21 @@ impl<A: Clone> Environment<A> {
                 vars.push((name.clone(), value.clone()));
             }
         }
-
         vars
+    }
+
+    // The type checker ensures that each function is defined only once
+    pub fn get_all_functions(&self) -> HashMap<Name,Function> {
+        let mut all_functions = HashMap::new();
+        for (name, func) in &self.globals.functions {
+            all_functions.insert(name.clone(), func.clone());
+        }
+        for scope in self.stack.iter() {
+            for (name, func) in &scope.functions {
+                all_functions.insert(name.clone(), func.clone());
+            }
+        }
+        all_functions
     }
 }
 
