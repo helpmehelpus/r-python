@@ -19,6 +19,7 @@ pub fn check_expr(exp: Expression, env: &Environment<Type>) -> Result<Type, Erro
         Expression::Or(l, r) => check_bin_boolean_expression(*l, *r, env),
         Expression::Not(e) => check_not_expression(*e, env),
         Expression::EQ(l, r) => check_bin_relational_expression(*l, *r, env),
+        Expression::NEQ(l, r) => check_bin_relational_expression(*l, *r, env),
         Expression::GT(l, r) => check_bin_relational_expression(*l, *r, env),
         Expression::LT(l, r) => check_bin_relational_expression(*l, *r, env),
         Expression::GTE(l, r) => check_bin_relational_expression(*l, *r, env),
