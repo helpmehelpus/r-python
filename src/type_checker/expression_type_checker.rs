@@ -35,12 +35,13 @@ pub fn check_expr(exp: Expression, env: &Environment<Type>) -> Result<Type, Erro
         Expression::Propagate(e) => check_propagate_type(*e, env),
         Expression::ListValue(elements) => check_list_value(&elements, env),
         Expression::Constructor(name, args) => check_adt_constructor(name, args, env),
-        Expression::FuncCall(func_name, exp_vec) => check_func_call(func_name.clone(), exp_vec.clone(), env),
-        
+        Expression::FuncCall(func_name, exp_vec) => {
+            check_func_call(func_name.clone(), exp_vec.clone(), env)
+        }
+
         _ => Err("not implemented yet.".to_string()),
     }
 }
-
 
 fn check_func_call(
     func_name: Name,

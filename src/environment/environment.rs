@@ -77,7 +77,6 @@ impl<A: Clone> Environment<A> {
     pub fn set_global_functions(&mut self, global_functions: HashMap<Name, Function>) {
         self.globals.functions = global_functions;
     }
-    
 
     pub fn map_variable(&mut self, var: Name, mutable: bool, value: A) -> () {
         match self.stack.front_mut() {
@@ -161,7 +160,7 @@ impl<A: Clone> Environment<A> {
     }
 
     // The type checker ensures that each function is defined only once
-    pub fn get_all_functions(&self) -> HashMap<Name,Function> {
+    pub fn get_all_functions(&self) -> HashMap<Name, Function> {
         let mut all_functions = HashMap::new();
         for (name, func) in &self.globals.functions {
             all_functions.insert(name.clone(), func.clone());

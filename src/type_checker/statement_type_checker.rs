@@ -1,3 +1,6 @@
+use std::collections::HashSet;
+use std::fmt::format;
+
 use crate::environment::environment::Environment;
 use crate::ir::ast::{Expression, Function, Name, Statement, Type, ValueConstructor};
 use crate::type_checker::expression_type_checker::check_expr;
@@ -20,6 +23,7 @@ pub fn check_stmt(
         Statement::For(var, expr, stmt) => check_for_stmt(var, expr, stmt, env),
         Statement::FuncDef(function) => check_func_def_stmt(function, env),
         Statement::TypeDeclaration(name, cons) => check_adt_declarations_stmt(name, cons, env),
+        Statement::Block(statements_vector) => check_block_statement(statements_vector, env),
         Statement::Return(exp) => check_return_stmt(exp, env),
         _ => Err("Not implemented yet".to_string()),
     }
@@ -32,6 +36,19 @@ fn check_squence_stmt(
 ) -> Result<Environment<Type>, ErrorMessage> {
     let new_env = check_stmt(*stmt1, &env)?;
     check_stmt(*stmt2, &new_env)
+}
+
+fn check_block_statement(
+    statements_vector: Vec<Statement>,
+    env: &Environment<Type>,
+) -> Result<Environment<Type>, ErrorMessage> {
+    let mut new_env = env.clone();
+    new_env.push();
+    for statement in &statements_vector {
+        new_env = check_stmt(statement.clone(), &new_env)?;
+    }
+    new_env.pop();
+    return Ok(new_env);
 }
 
 fn check_assignment_stmt(
@@ -181,8 +198,30 @@ fn check_func_def_stmt(
     function: Function,
     env: &Environment<Type>,
 ) -> Result<Environment<Type>, ErrorMessage> {
-    let mut new_env = env.clone();
-    new_env.push();
+    let mut new_env = Environment::new();
+    //new_env.push(); -> Push and pop will happen in check_block_statement
+    new_env.set_current_func(&function.name);
+    // Previous environment functions and the formal parameters are regarded as global
+    new_env.set_global_functions(env.get_all_functions());
+
+    // Ensure that each function is defined only once
+    if new_env.globals.functions.contains_key(&function.name) {
+        return Err(format!(
+            "Function {} is defined multiple times",
+            function.name
+        ));
+    }
+
+    // Ensure that no parameter names are repeated in the function's argument list
+    let mut seen_names = HashSet::new();
+    for arg in &function.params {
+        if !seen_names.insert(arg.argument_name.clone()) {
+            return Err(format!(
+                "Duplicate parameter name '{}' found in function '{}'",
+                arg.argument_name, function.name
+            ));
+        }
+    }
 
     for formal_arg in function.params.iter() {
         new_env.map_variable(
@@ -192,13 +231,15 @@ fn check_func_def_stmt(
         );
     }
 
+    new_env.map_function(function.clone());
     if let Some(body) = function.body.clone() {
-        new_env = check_stmt(*body, &new_env)?;
+        check_stmt(*body, &new_env)?; //new_env is only used to check function body 
     }
-    new_env.pop();
-    new_env.map_function(function);
+    //new_env.pop();
 
-    Ok(new_env)
+    let mut final_env = env.clone();
+    final_env.map_function(function.clone());
+    Ok(final_env) // if function body is ok, return original env with new function
 }
 
 fn check_adt_declarations_stmt(
@@ -215,19 +256,30 @@ fn check_return_stmt(
     exp: Box<Expression>,
     env: &Environment<Type>,
 ) -> Result<Environment<Type>, ErrorMessage> {
-    let mut new_env = env.clone();
+    let new_env = env.clone();
 
     assert!(new_env.scoped_function());
 
     let ret_type = check_expr(*exp, &new_env)?;
 
-    match new_env.lookup(&"return".to_string()) {
-        Some(_) => Ok(new_env),
-        None => {
-            new_env.map_variable("return".to_string(), false, ret_type);
-            Ok(new_env)
-        }
+    let current_func = env.lookup_function(&env.current_func);
+
+    if current_func.is_none() {
+        return Err(format!("Type checker: No function to return from"));
     }
+
+    let current_func = current_func.unwrap();
+
+    if ret_type != current_func.kind {
+        return Err(format!(
+            "Error in function {}:
+        Actual return type cannot be different from formal return type \n 
+        Actual return type: {:?} \n
+        Formal return type: {:?}",
+            env.current_func, ret_type, current_func.kind
+        ));
+    }
+    return Ok(new_env);
 }
 
 fn merge_environments(

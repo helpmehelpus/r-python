@@ -211,8 +211,7 @@ pub fn execute_block(
     for stmt in stmts {
         match execute(stmt, &current_env)? {
             Computation::Continue(new_env) => current_env = new_env,
-            Computation::Return(expr, mut new_env) => 
-            {
+            Computation::Return(expr, mut new_env) => {
                 new_env.pop(); //expr has already been evaluated, so it is safe to pop here
                 return Ok(Computation::Return(expr, new_env));
             }
@@ -234,8 +233,7 @@ pub fn execute_if_block(
     for stmt in stmts {
         match execute(stmt, &current_env)? {
             Computation::Continue(new_env) => current_env = new_env,
-            Computation::Return(expr, new_env) => 
-            {
+            Computation::Return(expr, new_env) => {
                 return Ok(Computation::Return(expr, new_env));
             }
             Computation::PropagateError(expr, new_env) => {
