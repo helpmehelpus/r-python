@@ -23,6 +23,7 @@ pub fn parse_statement(input: &str) -> IResult<&str, Statement> {
         parse_var_declaration_statement,
         parse_val_declaration_statement,
         parse_assignment_statement,
+        parse_if_chain_statement,
         parse_if_else_statement,
         parse_while_statement,
         parse_for_statement,
