@@ -1,7 +1,7 @@
 use nom::{
     branch::alt,
     bytes::complete::{tag, take_while},
-    character::complete::{char, digit1, multispace0},
+    character::complete::{char, digit1, multispace0, multispace1},
     combinator::{map, map_res, opt, value, verify},
     error::Error,
     multi::{fold_many0, separated_list0},
@@ -11,19 +11,26 @@ use nom::{
 
 use std::str::FromStr;
 
-use crate::ir::ast::Expression;
+use crate::{ir::ast::Expression, parser::{parser_common::END_KEYWORD}};
 use crate::parser::parser_common::{
     identifier,
     is_string_char,
     keyword,
     // Other character constants
     COMMA_CHAR,
+    COLON_CHAR,
     // Bracket and parentheses constants
     LEFT_BRACKET,
     LEFT_PAREN,
     RIGHT_BRACKET,
     RIGHT_PAREN,
+    FUNCTION_ARROW,
+    LAMBDA_KEYWORD,
 };
+use crate::parser::parser_stmt::{parse_formal_argument, parse_return_statement};
+use crate::parser::parser_type::parse_type;
+use crate::ir::ast::Function;
+use crate::ir::ast::Statement;
 
 pub fn parse_expression(input: &str) -> IResult<&str, Expression> {
     parse_or(input)
@@ -117,12 +124,46 @@ fn parse_factor(input: &str) -> IResult<&str, Expression> {
         parse_list,
         parse_function_call,
         parse_var,
+        parse_lambda,
         delimited(
             char::<&str, Error<&str>>(LEFT_PAREN),
             parse_expression,
             char::<&str, Error<&str>>(RIGHT_PAREN),
         ),
     ))(input)
+}
+
+fn parse_lambda(input: &str) -> IResult<&str, Expression> {
+    map(
+        tuple((
+            keyword(LAMBDA_KEYWORD),
+            preceded(multispace1, identifier),
+            delimited(
+                char::<&str, Error<&str>>(LEFT_PAREN),
+                separated_list0(
+                    tuple((
+                        multispace0,
+                        char::<&str, Error<&str>>(COMMA_CHAR),
+                        multispace0,
+                    )),
+                    parse_formal_argument,
+                ),
+                char::<&str, Error<&str>>(RIGHT_PAREN),
+            ),
+            preceded(multispace0, tag(FUNCTION_ARROW)),
+            delimited(multispace0, parse_type, char::<&str, Error<&str>>(COLON_CHAR)),
+            parse_return_statement, 
+            keyword(END_KEYWORD)
+        )),
+        |(_, name, args, _, t, return_stmt, _)| {
+            Expression::Lambda(Function {
+                name: name.to_string(),
+                kind: t,
+                params: args,
+                body: Some(Box::new(Statement::Block(vec![return_stmt]))),
+            })
+        },
+    )(input)
 }
 
 fn parse_bool(input: &str) -> IResult<&str, Expression> {

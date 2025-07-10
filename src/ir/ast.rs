@@ -116,6 +116,9 @@ pub enum Expression {
     IsNothing(Box<Expression>),
     Propagate(Box<Expression>),
 
+    //Lambda expression
+    Lambda(Function),
+
     // List value
     ListValue(Vec<Expression>),
 
