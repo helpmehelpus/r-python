@@ -1,5 +1,5 @@
 use super::statement_execute::Computation;
-use crate::environment::environment::Environment;
+use crate::environment::environment::{Environment, Scope};
 use crate::ir::ast::{Expression, Name};
 
 #[derive(Debug, PartialEq, Clone)]
@@ -398,7 +398,13 @@ pub fn eval_function_call(
                 ));
             }
 
-            new_env.push();
+            // new_env.push(); <- Removed the push; parameters are now mapped directly to the global scope
+            //In this new environment, external functions and actual parameters are regarded as globally accessible
+            //This is justified, since their visibility extends across the entire function body
+            new_env.set_current_func(&name);
+            // Functions from the outer environment must be propagated to new_env to ensure access to external functions within the function body.
+            // This also allows the function to reference itself, which enables recursion
+            new_env.set_global_functions(env.get_all_functions());
 
             for (formal, actual) in function_definition.params.iter().zip(args.iter()) {
                 let value = match eval(actual.clone(), env)? {
@@ -412,7 +418,7 @@ pub fn eval_function_call(
 
             // Execute the body of the function.
             match super::statement_execute::execute(
-                *function_definition.body.as_ref().unwrap().clone(),
+                *function_definition.body.as_ref().unwrap().clone(), //Push occurs here, because function body is a Statement::Block
                 &new_env,
             ) {
                 Ok(Computation::Continue(_)) => Err("Function did not return a value".to_string()),
