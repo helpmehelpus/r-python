@@ -11,6 +11,7 @@ pub type MetaBuiltinStmt = fn(&mut Environment<Expression>) -> Statement;
 // Tabela estática global de metabuiltins
 static METABUILTINS_TABLE: OnceLock<HashMap<String, MetaBuiltinStmt>> = OnceLock::new();
 
+
 pub fn get_metabuiltins_table() -> &'static HashMap<String, MetaBuiltinStmt> {
     METABUILTINS_TABLE.get_or_init(|| {
         let mut table = HashMap::new();
@@ -246,5 +247,212 @@ mod tests {
         }
 
         fs::remove_file(test_file_path).unwrap();
+    }
+
+    #[test]
+    fn test_open_builtin_write_mode_success() {
+        use std::fs;
+        let test_file_path = "test_write_file.txt";
+        let test_content = "This is a test write.";
+
+        let mut env: Environment<Expression> = Environment::new();
+        env.map_variable("path".to_string(), false, Expression::CString(test_file_path.to_string()));
+        env.map_variable("mode".to_string(), false, Expression::CString("w".to_string()));
+        env.map_variable("content".to_string(), false, Expression::CString(test_content.to_string()));
+
+        let result = open_builtin(&mut env);
+        
+        match result {
+            Statement::Return(expr) => {
+                if let Expression::CVoid = *expr {
+                    let content = fs::read_to_string(test_file_path).unwrap();
+                    assert_eq!(content, test_content, "File content should match");
+                } else {
+                    panic!("Expected CVoid after writing to file");
+                }
+            }
+            _ => panic!("Expected Statement::Return"),
+        }
+
+        fs::remove_file(test_file_path).unwrap();
+    }
+
+    #[test]
+    fn test_open_builtin_append_mode_success() {
+        use std::fs;
+        let test_file_path = "test_append_file.txt";
+        let initial_content = "Initial content.\n";
+        let append_content = "This is appended content.\n";
+        fs::write(test_file_path, initial_content).unwrap();
+
+        let mut env: Environment<Expression> = Environment::new();
+        env.map_variable("path".to_string(), false, Expression::CString(test_file_path.to_string()));
+        env.map_variable("mode".to_string(), false, Expression::CString("a".to_string()));
+        env.map_variable("content".to_string(), false, Expression::CString(append_content.to_string()));
+
+        let result = open_builtin(&mut env);
+        match result {
+            Statement::Return(expr) => {
+                if let Expression::CVoid = *expr {
+                    let content = fs::read_to_string(test_file_path).unwrap();
+                    assert!(content.contains(initial_content), "File should contain initial content");
+                    assert!(content.contains(append_content), "File should contain appended content");
+                } else {
+                    panic!("Expected CVoid after appending to file");
+                }
+            }
+            _ => panic!("Expected Statement::Return"),
+        }
+        fs::remove_file(test_file_path).unwrap();
+
+    }
+
+    #[test]
+    fn test_open_builtin_unsupported_mode() {
+
+        let mut env: Environment<Expression> = Environment::new();
+        env.map_variable("path".to_string(), false, Expression::CString("dummy.txt".to_string()));
+        env.map_variable("mode".to_string(), false, Expression::CString("x".to_string())); // Unsupported mode
+
+        let result = open_builtin(&mut env);
+        
+        match result {
+            Statement::Return(expr) => {
+                if let Expression::CString(msg) = *expr {
+                    assert_eq!(msg, "open: unsupported mode 'x'.", "Error message should match");
+                } else {
+                    panic!("Expected CString with error message");
+                }
+            }
+            _ => panic!("Expected Statement::Return"),
+        }
+    }
+
+    #[test]
+    fn test_open_builtin_read_invalid_path() {
+        let mut env: Environment<Expression> = Environment::new();
+        env.map_variable("path".to_string(), false, Expression::CString("invalid_path.txt".to_string()));
+        env.map_variable("mode".to_string(), false, Expression::CString("r".to_string()));
+
+        let result = open_builtin(&mut env);
+
+        match result {
+            Statement::Return(expr) => {
+                if let Expression::CString(msg) = *expr {
+                    assert!(msg.contains("open: could not open 'invalid_path.txt' for reading"), "Error message should indicate invalid path");
+                } else {
+                    panic!("Expected CString with error message");
+                }
+            }
+            _ => panic!("Expected Statement::Return"),
+        }
+
+    }
+
+    #[test]
+    fn test_open_builtin_read_nonexistent_file() {
+        let mut env: Environment<Expression> = Environment::new();
+        env.map_variable("path".to_string(), false, Expression::CString("nonexistent.txt".to_string()));
+        env.map_variable("mode".to_string(), false, Expression::CString("r".to_string()));
+
+        let result = open_builtin(&mut env);
+        
+        match result {
+            Statement::Return(expr) => {
+                if let Expression::CString(msg) = *expr {
+                    assert!(msg.contains("open: could not open 'nonexistent.txt' for reading"), "Error message should indicate file not found");
+                } else {
+                    panic!("Expected CString with error message");
+                }
+            }
+            _ => panic!("Expected Statement::Return"),
+        }
+    }
+
+    #[test]
+    fn test_open_builtin_write_empty_content() {
+        use std::fs;
+        let test_file_path = "test_empty_write_file.txt";
+
+        let mut env: Environment<Expression> = Environment::new();
+        env.map_variable("path".to_string(), false, Expression::CString(test_file_path.to_string()));
+        env.map_variable("mode".to_string(), false, Expression::CString("w".to_string()));
+        env.map_variable("content".to_string(), false, Expression::CString("".to_string()));
+
+        let result = open_builtin(&mut env);
+        
+        match result {
+            Statement::Return(expr) => {
+                if let Expression::CVoid = *expr {
+                    let content = fs::read_to_string(test_file_path).unwrap();
+                    assert_eq!(content, "", "File content should be empty");
+                } else {
+                    panic!("Expected CVoid after writing empty content to file");
+                }
+            }
+            _ => panic!("Expected Statement::Return"),
+        }
+
+        fs::remove_file(test_file_path).unwrap();
+    }
+
+    #[test]
+    fn test_open_builtin_write_missing_content_argument() {
+        let mut env: Environment<Expression> = Environment::new();
+        env.map_variable("path".to_string(), false, Expression::CString("dummy.txt".to_string()));
+        env.map_variable("mode".to_string(), false, Expression::CString("w".to_string()));
+
+        let result = open_builtin(&mut env);
+        
+        match result {
+            Statement::Return(expr) => {
+                if let Expression::CString(msg) = *expr {
+                    assert_eq!(msg, "open: when using mode 'w', a third argument with the content to write is required", "Error message should indicate missing content argument");
+                } else {
+                    panic!("Expected CString with error message");
+                }
+            }
+            _ => panic!("Expected Statement::Return"),
+        }
+    }
+
+    #[test]
+    fn test_open_builtin_first_argument_not_string() {
+        let mut env: Environment<Expression> = Environment::new();
+        env.map_variable("path".to_string(), false, Expression::CInt(42));
+        env.map_variable("mode".to_string(), false, Expression::CString("r".to_string()));
+
+        let result = open_builtin(&mut env);
+        
+        match result {
+            Statement::Return(expr) => {
+                if let Expression::CString(msg) = *expr {
+                    assert_eq!(msg, "open: first argument must be a string with the file path", "Error message should indicate invalid first argument");
+                } else {
+                    panic!("Expected CString with error message");
+                }
+            }
+            _ => panic!("Expected Statement::Return"),
+        }
+    }
+
+    #[test]
+    fn test_open_builtin_append_missing_content_argument() {
+        let mut env: Environment<Expression> = Environment::new();
+        env.map_variable("path".to_string(), false, Expression::CString("dummy.txt".to_string()));
+        env.map_variable("mode".to_string(), false, Expression::CString("a".to_string()));
+
+        let result = open_builtin(&mut env);
+        match result {
+            Statement::Return(expr) => {
+                if let Expression::CString(msg) = *expr {
+                    assert_eq!(msg, "open: when using mode 'a', a third argument with the content to append is required", "Error message should indicate missing content argument");
+                } else {
+                    panic!("Expected CString with error message");
+                }
+            }
+            _ => panic!("Expected Statement::Return"),
+        }
+
     }
 } 
