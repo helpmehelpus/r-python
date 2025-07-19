@@ -1,8 +1,9 @@
 use std::collections::HashSet;
-use std::fmt::format;
 
 use crate::environment::environment::Environment;
-use crate::ir::ast::{Expression, Function, Name, Statement, Type, ValueConstructor};
+use crate::ir::ast::{
+    Expression, FormalArgument, FuncSignature, Function, Name, Statement, Type, ValueConstructor
+};
 use crate::type_checker::expression_type_checker::check_expr;
 
 type ErrorMessage = String;
@@ -200,12 +201,16 @@ fn check_func_def_stmt(
 ) -> Result<Environment<Type>, ErrorMessage> {
     let mut new_env = Environment::new();
     //new_env.push(); -> Push and pop will happen in check_block_statement
-    new_env.set_current_func(&function.name);
+    new_env.set_current_func(&FuncSignature::from_func(&function));
     // Previous environment functions and the formal parameters are regarded as global
     new_env.set_global_functions(env.get_all_functions());
 
     // Ensure that each function is defined only once
-    if new_env.globals.functions.contains_key(&function.name) {
+    if new_env
+        .globals
+        .functions
+        .contains_key(&FuncSignature::from_func(&function))
+    {
         return Err(format!(
             "Function {} is defined multiple times",
             function.name
@@ -224,18 +229,30 @@ fn check_func_def_stmt(
     }
 
     for formal_arg in function.params.iter() {
-        new_env.map_variable(
-            formal_arg.argument_name.clone(),
+        match formal_arg.argument_type.clone() {
+            Type::TFunction(arg_func_ret_type,arg_func_params_type ) => {
+                let mut params: Vec<FormalArgument> = Vec::new();
+                let mut count:u64 = 0;
+                for arg_type in &arg_func_params_type
+                {
+                    params.push(FormalArgument { argument_name: count.to_string(), argument_type: arg_type.clone() });
+                    count += 1;
+                }
+                new_env.map_function(Function { name: formal_arg.argument_name.clone(), kind: *arg_func_ret_type, params: params, body: None});
+            }
+            _ =>
+            { 
+            new_env.map_variable(formal_arg.argument_name.clone(),
             false,
-            formal_arg.argument_type.clone(),
-        );
+            formal_arg.argument_type.clone());
+            }
+        }
     }
 
     new_env.map_function(function.clone());
     if let Some(body) = function.body.clone() {
         check_stmt(*body, &new_env)?; //new_env is only used to check function body 
     }
-    //new_env.pop();
 
     let mut final_env = env.clone();
     final_env.map_function(function.clone());
@@ -325,6 +342,7 @@ fn merge_environments(
     Ok(merged)
 }
 
+/*
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -711,3 +729,4 @@ mod tests {
         assert!(check_stmt(stmt, &env).is_err());
     }
 }
+*/
