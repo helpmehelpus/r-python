@@ -1,143 +1,125 @@
-# Pretty Printing para AST (Abstract Syntax Tree) - Projeto Rust
+# Pretty-Printer para r-python
 
-Este projeto implementa **pretty printing** para a AST de uma linguagem, facilitando a visualização, depuração e validação da estrutura dos programas em memória. O pretty print exibe cada nó da árvore (tipos, expressões, comandos, funções, argumentos, etc.) em formato legível e indentado.
+Este projeto implementa um pretty-printer robusto para a Árvore de Sintaxe Abstrata (AST) da linguagem `r-python`. O objetivo é converter a estrutura da AST em memória de volta para código-fonte legível, com formatação consistente, indentação correta e quebras de linha inteligentes que se adaptam ao espaço disponível. 📜
 
-## Estrutura dos Arquivos
+## Conceitos Fundamentais: O Algoritmo de Wadler/Oppen
 
-### 1. **Módulos de Pretty Print**
-O projeto agora está organizado em arquivos separados por responsabilidade, cada um contendo a trait de pretty print e sua implementação:
+A implementação é baseada nos algoritmos formalizados nos artigos de **Derek C. Oppen** e, principalmente, na abordagem funcional e elegante de **Philip Wadler**.
 
-- **pretty_type.rs**: Trait e implementação para tipos (`Type`).
-- **pretty_expressions.rs**: Trait e implementação para expressões (`Expression`).
-- **pretty_statements.rs**: Trait e implementação para comandos/statements (`Statement`).
-- **pretty_functions.rs**: Trait e implementação para funções (`Function`) e argumentos formais (`FormalArgument`).
-- **pretty_print.rs**: Módulo centralizador que reexporta todas as traits de pretty print, facilitando o uso.
+A lógica opera em duas fases principais:
 
-**Importante:**  
-Para usar as funções de pretty print, **importe sempre pelo módulo central**:
-```rust
-use crate::pretty_print::PrettyPrintType;
-use crate::pretty_print::PrettyPrintExpression;
-use crate::pretty_print::PrettyPrintStatement;
-use crate::pretty_print::PrettyPrintFunction;
-use crate::pretty_print::PrettyPrintFormalArgument;
-```
+1. **Construção do Documento (`AST` -> `Doc`)**: A AST é convertida para uma representação de layout intermediária e abstrata, chamada `Doc`. Esta estrutura descreve o documento em termos de `text`, `line` (possíveis quebras de linha), e `nest` (indentação), sem se comprometer com uma formatação final.
 
-Cada trait define uma função, normalmente chamada `pretty_print_xxx`, que recebe o nível de indentação e retorna uma `String` formatada.
+2. **Renderização do Documento (`Doc` -> `String`)**: Um motor de renderização processa a estrutura `Doc` e a transforma na `String` final. É aqui que a "mágica" acontece: o motor decide qual o melhor layout para uma dada largura de linha. A primitiva `group` é a chave, pois permite definir layouts alternativos (por exemplo, "tente manter em uma linha, mas se não couber, quebre a linha e indente aqui").
+
+Essa arquitetura torna o pretty-printer extremamente flexível e poderoso.
+
+---
+
+## Estrutura do Projeto
+
+A estrutura atual reflete a separação de responsabilidades:
+
+-   `pretty_print.rs`: Contém o **coração do pretty-printer**. Define a estrutura `Doc`, o trait `ToDoc`, e o motor de renderização (`pretty`, `best`, `fits`) que implementa o algoritmo.
+-   `pretty_type.rs`: Implementa `ToDoc` para os nós de tipo da AST (`Type`, `ValueConstructor`).
+-   `pretty_expressions.rs`: Implementa `ToDoc` para os nós de expressão da AST (`Expression`).
+-   `pretty_statements.rs`: Implementa `ToDoc` para os nós de comando da AST (`Statement`, `Function`, `FormalArgument`).
+-   `mod.rs`: O ponto de entrada do módulo, que declara os submódulos.
+
+---
+
+## Como Usar
+
+O uso do pretty-printer é centralizado e simples. O fluxo de trabalho é sempre:
+1.  Ter uma instância de um nó da AST (uma expressão, um statement, etc.).
+2.  Importar o trait `ToDoc` e a função `pretty`.
+3.  Chamar o método `.to_doc()` no seu nó da AST para obter a representação `Doc`.
+4.  Passar o `Doc` e a largura de linha desejada para a função `pretty()`.
 
 #### Exemplo de Uso
 
 ```rust
-let expr = Expression::Add(
-    Box::new(Expression::CInt(1)),
-    Box::new(Expression::Mul(
-        Box::new(Expression::CInt(2)),
-        Box::new(Expression::CInt(3)),
+use crate::ir::ast::{Expression, Statement};
+use crate::pretty_print::pretty_print::{pretty, ToDoc}; // Importações principais
+
+// 1. Crie um nó da AST.
+let stmt = Statement::VarDeclaration(
+    "resultado".to_string(),
+    Box::new(Expression::Add(
+        Box::new(Expression::CInt(10)),
+        Box::new(Expression::CInt(20)),
     )),
 );
-println!("{}", expr.pretty_print_expr(0));
+
+// 2. Converta a AST para um Doc.
+let document = stmt.to_doc();
+
+// 3. Renderize o Doc para uma String com a largura desejada.
+let formatted_code = pretty(80, &document); // Largura de 80 colunas
+
+// 4. Imprima o resultado.
+println!("{}", formatted_code);
+// Saída esperada: var resultado = 10 + 20;
+
+
+-----
+
+## Layout Flexível: A Magia do `group` 🚀
+
+A principal vantagem desta implementação é sua capacidade de adaptar o layout. Veja o mesmo nó da AST (`FuncCall`) renderizado com larguras diferentes:
+
+#### Exemplo 1: Com Espaço Suficiente (width = 120)
+
+```rust
+// AST para: minha_funcao(arg1_longo, arg2_longo, arg3_longo)
+let doc = ...;
+println!("{}", pretty(120, &doc));
 ```
 
-### 2. **Testes**
-Os testes automatizados agora estão **dentro de cada arquivo de pretty print** (por exemplo, em `pretty_type.rs`, `pretty_expressions.rs`, etc.)  
-Utilizam o framework de testes do Rust (`#[cfg(test)] mod tests`) para comparar resultados esperados com o retorno das funções de pretty print.
-
-#### Como rodar os testes
-
-No terminal, execute:
+**Saída:**
 
 ```
+minha_funcao(arg1_longo, arg2_longo, arg3_longo)
+```
+
+#### Exemplo 2: Com Espaço Limitado (width = 40)
+
+```rust
+let doc = ...; // O mesmo doc de antes
+println!("{}", pretty(40, &doc));
+```
+
+**Saída:**
+
+```
+minha_funcao(
+  arg1_longo,
+  arg2_longo,
+  arg3_longo
+)
+```
+
+-----
+
+## Executando os Testes
+
+Os testes unitários estão localizados dentro de cada módulo e validam tanto a conversão para `Doc` quanto o resultado final da renderização com diferentes larguras.
+
+Para rodar todos os testes do projeto, execute no terminal:
+
+```bash
 cargo test
 ```
 
-Todos os testes devem passar. Se um teste falhar, reveja o resultado da função de pretty printing correspondente.
+-----
 
----
+## Como Estender o Pretty-Printer
 
-## Como testar e validar
+Adicionar suporte para novos nós da AST é um processo direto:
 
-- Crie exemplos de cada enum/struct (`Type`, `Expression`, `Statement`, `Function`, `FormalArgument`).
-- Use as funções de pretty print com indentação zero ou customizada.
-- Compare o resultado visualmente ou crie testes automatizados.
-- Para garantir que mudanças futuras não quebrem a saída, mantenha e atualize os testes unitários.
+1.  **Crie o tipo** no `ir/ast.rs`.
+2.  Abra o arquivo `pretty_*.rs` correspondente (ex: `pretty_expressions.rs` se for uma nova `Expression`).
+3.  **Implemente o trait `ToDoc`** para seu novo tipo. Use os construtores (`text`, `line`, `nest`, `group`, etc.) para descrever o layout desejado.
+4.  Adicione testes unitários no mesmo arquivo para validar a formatação em diferentes larguras.
 
----
-
-## Como dar manutenção
-
-### Para adicionar novos tipos/enums/structs na AST
-
-1. **Adicione o novo tipo/enum/struct em `ir/ast.rs`.**
-2. Implemente uma nova trait de pretty printing para ele em um arquivo específico (ex: `pretty_newtype.rs`).
-3. Adapte os enums/structs existentes para usar o novo tipo, se necessário.
-4. Adicione testes no próprio arquivo, criando exemplos que usem o novo tipo/enum/struct.
-
-### Para modificar o formato da saída
-
-- Altere o corpo das funções de pretty print nas traits correspondentes.
-- Adapte a indentação, nomes, espaçamento, etc.
-- Rode os testes automatizados para garantir que a saída continua correta (ou atualize os testes, se a saída esperada mudou).
-
-### Para depurar
-
-- Imprima exemplos de ASTs usando as funções de pretty print.
-- Adicione logs temporários ou prints adicionais, se necessário.
-- Se a saída não estiver como esperado, revise o match/casos das funções de pretty print.
-
----
-
-## Recomendações de boas práticas
-
-- **Mantenha os testes unitários sempre atualizados.** Eles garantem que mudanças não quebram o pretty print.
-- **Separe as funções de pretty print em traits e arquivos por responsabilidade** para facilitar extensão e manutenção.
-- **Documente novos tipos/enums/structs** e explique seu papel na AST.
-- **Evite hardcoding de strings**; use constantes para nomes padrão se necessário.
-- **Utilize a indentação dinâmica** para facilitar a leitura de árvores aninhadas.
-
----
-
-## Exemplos rápidos
-
-### Pretty print de um Type
-
-```rust
-let typ = Type::TList(Box::new(Type::TInteger));
-println!("{}", typ.pretty_print_type(0));
-// Saída:
-// List(
-//   Int
-// )
-```
-
-### Pretty print de uma função
-
-```rust
-let func = Function {
-    name: "f".to_string(),
-    args: vec![
-        FormalArgument { name: "a".to_string(), typ: Type::TInteger },
-    ],
-    return_type: Some(Type::TBool),
-    body: Statement::Return(Box::new(Expression::CTrue)),
-};
-println!("{}", func.pretty_print_func(0));
-// Saída (indentada):
-// Function(
-//   Name: f
-//   Args: [
-//     FormalArg(a,   Int)
-//   ]
-//   Return:   Bool
-//   Body:
-//     Return(
-//       True
-//     )
-// )
-```
-
----
-
-## Dúvidas ou sugestões
-
-Abra issues no repositório ou entre em contato com os mantenedores.  
-Sinta-se livre para contribuir com novos tipos, melhorias na visualização ou novos testes!
+É isso\! O motor de renderização cuidará do resto. ✨

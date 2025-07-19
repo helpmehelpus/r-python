@@ -1,150 +1,159 @@
-// Trait e implementação de pretty printing para Type
+// src/pretty_print/pretty_type.rs
 
+use std::rc::Rc;
 use crate::ir::ast::{Type, ValueConstructor};
 
-pub trait PrettyPrintType {
-    fn pretty_print_type(&self, indent: usize) -> String;
+// CORREÇÃO: As importações agora incluem `concat` e `hardline` e não usam lifetimes.
+use super::pretty_print::{
+    group, line, nest, text, ToDoc, Doc, nil, concat, hardline
+};
+
+// CORREÇÃO: A função `join` agora opera com `Rc<Doc>` sem lifetimes e usa `concat`.
+fn join(sep: Rc<Doc>, docs: Vec<Rc<Doc>>) -> Rc<Doc> {
+    docs.into_iter().reduce(|acc, doc| concat(acc, concat(sep.clone(), doc))).unwrap_or_else(nil)
 }
 
-impl PrettyPrintType for Type {
-    fn pretty_print_type(&self, indent: usize) -> String {
-        let pad = "  ".repeat(indent);
+// CORREÇÃO: `impl ToDoc` sem lifetime.
+impl ToDoc for Type {
+    // CORREÇÃO: Retorna `Rc<Doc>`.
+    fn to_doc(&self) -> Rc<Doc> {
         match self {
-            Type::TInteger => format!("{}Int", pad),
-            Type::TBool => format!("{}Bool", pad),
-            Type::TString => format!("{}String", pad),
-            Type::TList(t) => format!(
-                "{}List(\n{}\n{})",
-                pad,
-                t.pretty_print_type(indent + 1),
-                pad
-            ),
+            Type::TInteger => text("Int"),
+            Type::TBool => text("Boolean"),
+            Type::TReal => text("Real"),
+            Type::TString => text("String"),
+            Type::TVoid => text("Unit"),
+            Type::TAny => text("Any"),
+
+            // CORREÇÃO: Todas as concatenações usam a função `concat()`.
+            Type::TList(t) => concat(text("["), concat(t.to_doc(), text("]"))),
+
+            Type::TTuple(types) => {
+                let inner_docs = types.iter().map(|t| t.to_doc()).collect();
+                concat(text("("), concat(join(text(", "), inner_docs), text(")")))
+            },
+
+            Type::TMaybe(t) => concat(text("Maybe["), concat(t.to_doc(), text("]"))),
+
+            Type::TResult(ok, err) => {
+                concat(text("Result["), concat(ok.to_doc(), concat(text(", "), concat(err.to_doc(), text("]")))))
+            }
+
             Type::TFunction(ret, params) => {
-                let params_str = params
-                    .iter()
-                    .map(|p| format!("{}", p.pretty_print_type(indent + 2)))
-                    .collect::<Vec<_>>()
-                    .join(",\n");
-                let ret_str = if let Some(rt) = ret.as_ref() {
-                    rt.pretty_print_type(indent + 2)
-                } else {
-                    format!("{}None", pad)
+                let params_docs = params.iter().map(|p| p.to_doc()).collect();
+                let separator = concat(text(","), line());
+                let params_doc = group(
+                    concat(text("("), concat(nest(2, concat(line(), join(separator, params_docs))), concat(line(), text(")"))))
+                );
+                
+                let ret_doc = match ret.as_ref() {
+                    Some(rt) => rt.to_doc(),
+                    None => text("Unit"),
                 };
-                format!(
-                    "{}Function(\n{}Return:   {}\n{}Params: [\n{}\n{}]\n{})",
-                    pad,
-                    "  ".repeat(indent + 1),
-                    ret_str,
-                    "  ".repeat(indent + 1),
-                    params_str,
-                    "  ".repeat(indent + 1),
-                    pad
-                )
+
+                concat(params_doc, concat(text(" -> "), ret_doc))
             }
+
             Type::TAlgebraicData(name, constructors) => {
-                let ctors_str = constructors
-                    .iter()
-                    .map(|c| format!("{}", c.pretty_print_value_constructor(indent + 1)))
-                    .collect::<Vec<_>>()
-                    .join(",\n");
-                format!(
-                    "{}AlgebraicData({}, [\n{}\n{}])",
-                    pad, name, ctors_str, pad
+                let ctors_docs = constructors.iter().map(|c| c.to_doc()).collect();
+                concat(
+                    text("data "),
+                    concat(
+                        text(name.clone()),
+                        concat(
+                            text(":"),
+                            concat(
+                                nest(2, concat(hardline(), join(hardline(), ctors_docs))),
+                                concat(hardline(), text("end"))
+                            )
+                        )
+                    )
                 )
             }
-            Type::TCustom(name) => format!("{}Custom({})", pad, name),
-            Type::TNone => format!("{}None", pad),
         }
     }
 }
 
-pub trait PrettyPrintValueConstructor {
-    fn pretty_print_value_constructor(&self, indent: usize) -> String;
-}
+// CORREÇÃO: `impl ToDoc` sem lifetime.
+impl ToDoc for ValueConstructor {
+    fn to_doc(&self) -> Rc<Doc> {
+        let name_doc = concat(text("| "), text(self.name.clone()));
+        if self.types.is_empty() {
+            return name_doc;
+        }
 
-impl PrettyPrintValueConstructor for ValueConstructor {
-    fn pretty_print_value_constructor(&self, indent: usize) -> String {
-        let pad = "  ".repeat(indent);
-        let types_str = self
-            .types
-            .iter()
-            .map(|t| t.pretty_print_type(indent + 2))
-            .collect::<Vec<_>>()
-            .join(", ");
-        format!(
-            "{}Constructor({}, [{}])",
-            pad, self.name, types_str
-        )
+        let types_docs: Vec<Rc<Doc>> = self.types.iter().map(|t| t.to_doc()).collect();
+        concat(name_doc, concat(text(" "), join(text(" "), types_docs)))
     }
 }
+
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ir::ast::Type;
-    use crate::ir::ast::ValueConstructor;
+    use crate::ir::ast::{Type, ValueConstructor};
+    use crate::pretty_print::pretty;
+    
+    // Stub para Expression, necessário para compilar os testes de forma isolada
+    use crate::ir::ast::Expression;
+    impl ToDoc for Expression { fn to_doc(&self) -> Rc<Doc> { text(format!("[expr:{:?}]", self)) } }
+
 
     #[test]
-    fn test_pretty_print_integer() {
-        let typ = Type::TInteger;
-        assert_eq!(typ.pretty_print_type(0), "Int");
+    fn test_basic_type_doc() {
+        assert_eq!(pretty(80, &Type::TInteger.to_doc()), "Int");
+        assert_eq!(pretty(80, &Type::TBool.to_doc()), "Boolean");
     }
 
     #[test]
-    fn test_pretty_print_function_type() {
-        let typ = Type::TFunction(
-            Box::new(Some(Type::TInteger)),
-            vec![Type::TBool, Type::TList(Box::new(Type::TString))],
-        );
-        let expected = "\
-Function(
-  Return:   Int
-  Params: [
-    Bool,
-    List(
-      String
-    )
-  ]
-)";
-        assert_eq!(typ.pretty_print_type(0), expected);
-    }
+    fn test_list_and_tuple_doc() {
+        let list_type = Type::TList(Box::new(Type::TList(Box::new(Type::TString))));
+        assert_eq!(pretty(80, &list_type.to_doc()), "[[String]]");
 
+        let tuple_type = Type::TTuple(vec![Type::TInteger, Type::TReal]);
+        assert_eq!(pretty(80, &tuple_type.to_doc()), "(Int, Real)");
+    }
+    
     #[test]
-    fn test_pretty_print_adt_type() {
-        let typ = Type::TAlgebraicData(
-            "Option".to_string(),
+    fn test_function_type_layout() {
+        let func_type = Type::TFunction(
+            Box::new(Some(Type::TString)),
             vec![
-                ValueConstructor { name: "Some".to_string(), types: vec![Type::TInteger] },
-                ValueConstructor { name: "None".to_string(), types: vec![] },
-            ]
+                Type::TInteger,
+                Type::TList(Box::new(Type::TBool)),
+                Type::TReal
+            ],
         );
+        let doc = func_type.to_doc();
+
+        let expected_wide = "(Int, [Boolean], Real) -> String";
+        assert_eq!(pretty(80, &doc), expected_wide);
+        
+        let expected_narrow = "\
+(
+  Int,
+  [Boolean],
+  Real
+) -> String";
+        assert_eq!(pretty(20, &doc), expected_narrow);
+    }
+
+    #[test]
+    fn test_adt_layout() {
+        let adt = Type::TAlgebraicData(
+            "MyList".to_string(),
+            vec![
+                ValueConstructor::new("Cons".to_string(), vec![Type::TInteger, Type::TList(Box::new(Type::TInteger))]),
+                ValueConstructor::new("Nil".to_string(), vec![]),
+            ],
+        );
+        let doc = adt.to_doc();
+
         let expected = "\
-AlgebraicData(Option, [
-  Constructor(Some, [    Int]),
-  Constructor(None, [])
-])";
-        assert_eq!(typ.pretty_print_type(0), expected);
-    }
-
-    #[test]
-    fn test_pretty_print_custom_type() {
-        let typ = Type::TCustom("MyType".to_string());
-        assert_eq!(typ.pretty_print_type(0), "Custom(MyType)");
-    }
-
-    #[test]
-    fn test_pretty_print_none_type() {
-        let typ = Type::TNone;
-        assert_eq!(typ.pretty_print_type(0), "None");
-    }
-
-    #[test]
-    fn test_pretty_print_value_constructor() {
-        let vc = ValueConstructor {
-            name: "Node".to_string(),
-            types: vec![Type::TInteger, Type::TList(Box::new(Type::TInteger))],
-        };
-        let expected = "  Constructor(Node, [    Int, List(\n      Int\n    )])";
-        assert_eq!(vc.pretty_print_value_constructor(1), expected);
+data MyList:
+  | Cons Int [Int]
+  | Nil
+end";
+        assert_eq!(pretty(80, &doc), expected);
     }
 }
