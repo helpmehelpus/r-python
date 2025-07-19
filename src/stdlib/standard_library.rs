@@ -182,6 +182,26 @@ mod tests {
     }
 
     #[test]
+    fn test_meta_stmt_table_functions_are_callable() {
+        let table = get_metabuiltins_table();
+        
+        // Check if the 'input' function exists in the table (without executing it)
+        assert!(table.contains_key("input"), "The 'input' function must be in the table");
+        
+        // Check if the 'print' function can be called
+        if let Some(print_func) = table.get("print") {
+            let mut env: Environment<Expression> = Environment::new();
+            let result = print_func(&mut env);
+            match result {
+                Statement::Return(_) => (), // Expected
+                _ => panic!("The 'print' function in the table must return Statement::Return"),
+            }
+        } else {
+            panic!("The 'print' function must be in the table");
+        }
+    }
+
+    #[test]
     fn test_input_builtin_function_signature() {
         // Checks if the input_builtin function can be referenced with an Environment
         // Note: We do not execute the function because it requires stdin
@@ -202,24 +222,325 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_meta_stmt_table_functions_are_callable() {
-        let table = get_metabuiltins_table();
+        // Helper function to run print_builtin tests with custom main function
+    fn run_print_builtin_test(main_body: &str, expected_outputs: &[&str], test_name: &str) {
+        use assert_cmd::Command;
+        use std::fs;
         
-        // Check if the 'input' function exists in the table (without executing it)
-        assert!(table.contains_key("input"), "The 'input' function must be in the table");
+        let test_code = format!(r#"
+use r_python::environment::environment::Environment;
+use r_python::ir::ast::Expression;
+use r_python::stdlib::standard_library::print_builtin;
+
+fn main() {{
+{}
+}}
+"#, main_body);
         
-        // Check if the 'print' function can be called
-        if let Some(print_func) = table.get("print") {
-            let mut env: Environment<Expression> = Environment::new();
-            let result = print_func(&mut env);
-            match result {
-                Statement::Return(_) => (), // Expected
-                _ => panic!("The 'print' function in the table must return Statement::Return"),
+        let filename = format!("test_print_{}.rs", test_name);
+        let binary_name = format!("test_print_{}", test_name);
+        
+        fs::write(&filename, test_code).unwrap();
+        
+        let build_result = Command::new("cargo").args(&["build"]).output();
+        if let Ok(build_output) = build_result {
+            if build_output.status.success() {
+                let compile_result = Command::new("rustc")
+                    .args(&[
+                        &filename,
+                        "-L", "target/debug/deps",
+                        "--extern", "r_python=target/debug/libr_python.rlib",
+                        "-o", &binary_name
+                    ])
+                    .output();
+                    
+                if let Ok(compile_output) = compile_result {
+                    if compile_output.status.success() {
+                        let mut cmd = Command::new(&format!("./{}", binary_name));
+                        let mut assertion = cmd.assert().success();
+                        
+                        for expected in expected_outputs {
+                            assertion = assertion.stdout(predicates::str::contains(*expected));
+                        }
+                    }
+                }
             }
-        } else {
-            panic!("The 'print' function must be in the table");
         }
+        
+        fs::remove_file(&filename).ok();
+        fs::remove_file(&binary_name).ok();
+    }
+
+    // Helper function for tests that need exact output checking
+    fn run_print_builtin_test_exact(main_body: &str, expected_exact: &str, test_name: &str) {
+        use assert_cmd::Command;
+        use std::fs;
+        
+        let test_code = format!(r#"
+use r_python::environment::environment::Environment;
+use r_python::ir::ast::Expression;
+use r_python::stdlib::standard_library::print_builtin;
+
+fn main() {{
+{}
+}}
+"#, main_body);
+        
+        let filename = format!("test_print_{}.rs", test_name);
+        let binary_name = format!("test_print_{}", test_name);
+        
+        fs::write(&filename, test_code).unwrap();
+        
+        let build_result = Command::new("cargo").args(&["build"]).output();
+        if let Ok(build_output) = build_result {
+            if build_output.status.success() {
+                let compile_result = Command::new("rustc")
+                    .args(&[
+                        &filename,
+                        "-L", "target/debug/deps",
+                        "--extern", "r_python=target/debug/libr_python.rlib",
+                        "-o", &binary_name
+                    ])
+                    .output();
+                    
+                if let Ok(compile_output) = compile_result {
+                    if compile_output.status.success() {
+                        let output = Command::new(&format!("./{}", binary_name))
+                            .output()
+                            .expect("Failed to run test");
+                        
+                        assert_eq!(String::from_utf8_lossy(&output.stdout), expected_exact);
+                    }
+                }
+            }
+        }
+        
+        fs::remove_file(&filename).ok();
+        fs::remove_file(&binary_name).ok();
+    }
+
+    // Helper function to run input_builtin tests with simulated stdin input
+    fn run_input_builtin_test(main_body: &str, stdin_input: &str, expected_outputs: &[&str], test_name: &str) {
+        use assert_cmd::Command;
+        use std::fs;
+        
+        let test_code = format!(r#"
+use r_python::environment::environment::Environment;
+use r_python::ir::ast::{{Expression, Statement}};
+use r_python::stdlib::standard_library::input_builtin;
+
+fn main() {{
+{}
+}}
+"#, main_body);
+        
+        let filename = format!("test_input_{}.rs", test_name);
+        let binary_name = format!("test_input_{}", test_name);
+        
+        fs::write(&filename, test_code).unwrap();
+        
+        let build_result = Command::new("cargo").args(&["build"]).output();
+        if let Ok(build_output) = build_result {
+            if build_output.status.success() {
+                let compile_result = Command::new("rustc")
+                    .args(&[
+                        &filename,
+                        "-L", "target/debug/deps",
+                        "--extern", "r_python=target/debug/libr_python.rlib",
+                        "-o", &binary_name
+                    ])
+                    .output();
+                    
+                if let Ok(compile_output) = compile_result {
+                    if compile_output.status.success() {
+                        let mut cmd = Command::new(&format!("./{}", binary_name));
+                        let mut assertion = cmd
+                            .write_stdin(stdin_input)
+                            .assert()
+                            .success();
+                        
+                        for expected in expected_outputs {
+                            assertion = assertion.stdout(predicates::str::contains(*expected));
+                        }
+                    }
+                }
+            }
+        }
+        
+        fs::remove_file(&filename).ok();
+        fs::remove_file(&binary_name).ok();
+    }
+
+
+
+    #[test]
+    fn test_print_builtin_captures_output() {
+        let main_body = r#"
+    // Test 1: String value
+    let mut env1 = Environment::new();
+    env1.map_variable("value".to_string(), false, Expression::CString("Hello World".to_string()));
+    print_builtin(&mut env1);
+    
+    // Test 2: Integer value
+    let mut env2 = Environment::new();
+    env2.map_variable("value".to_string(), false, Expression::CInt(42));
+    print_builtin(&mut env2);
+    
+    // Test 3: Float value
+    let mut env3 = Environment::new();
+    env3.map_variable("value".to_string(), false, Expression::CReal(3.14));
+    print_builtin(&mut env3);
+    
+    // Test 4: No value (should print empty string)
+    let mut env4 = Environment::new();
+    print_builtin(&mut env4);"#;
+        
+        run_print_builtin_test(main_body, &["Hello World", "42", "3.14"], "builtin");
+    }
+
+    #[test]
+    fn test_print_builtin_with_special_strings() {
+        let main_body = r#"
+    // Test string with newlines
+    let mut env1 = Environment::new();
+    env1.map_variable("value".to_string(), false, Expression::CString("Hello\nWorld".to_string()));
+    print_builtin(&mut env1);
+    
+    // Test string with tabs
+    let mut env2 = Environment::new();
+    env2.map_variable("value".to_string(), false, Expression::CString("Hello\tWorld".to_string()));
+    print_builtin(&mut env2);
+    
+    // Test empty string
+    let mut env3 = Environment::new();
+    env3.map_variable("value".to_string(), false, Expression::CString("".to_string()));
+    print_builtin(&mut env3);
+    
+    // Test string with special characters
+    let mut env4 = Environment::new();
+    env4.map_variable("value".to_string(), false, Expression::CString("Olá, 世界! 🌍".to_string()));
+    print_builtin(&mut env4);"#;
+        
+        run_print_builtin_test(main_body, &["Hello", "World", "Olá", "世界"], "special_strings");
+    }
+
+    #[test]
+    fn test_print_builtin_with_cvoid_type() {
+        let main_body = r#"
+    // Test CVoid type (should use debug print)
+    let mut env = Environment::new();
+    env.map_variable("value".to_string(), false, Expression::CVoid);
+    print_builtin(&mut env);"#;
+        
+        run_print_builtin_test(main_body, &["CVoid"], "cvoid");
+    }
+
+    #[test]
+    fn test_print_builtin_no_value_variable() {
+        let main_body = r#"
+    // Test when no "value" variable exists (should print empty string)
+    let mut env = Environment::new();
+    print_builtin(&mut env);"#;
+        
+        run_print_builtin_test_exact(main_body, "\n", "no_value");
+    }
+
+    #[test]
+    fn test_print_builtin_return_value() {
+        // Test that print_builtin returns Statement::Return(CVoid)
+        let mut env = Environment::new();
+        env.map_variable("value".to_string(), false, Expression::CString("test".to_string()));
+        
+        let result = print_builtin(&mut env);
+        
+        match result {
+            Statement::Return(expr) => {
+                match *expr {
+                    Expression::CVoid => (), // Expected
+                    _ => panic!("print_builtin should return Statement::Return(CVoid)"),
+                }
+            },
+            _ => panic!("print_builtin should return Statement::Return"),
+        }
+    }
+
+    #[test]
+    fn test_input_builtin_with_prompt() {
+        let main_body = r#"
+    // Test with prompt
+    let mut env = Environment::new();
+    env.map_variable("prompt".to_string(), false, Expression::CString("Enter your name: ".to_string()));
+    let result = input_builtin(&mut env);
+    
+    match result {
+        Statement::Return(expr) => {
+            if let Expression::CString(input) = *expr {
+                println!("Input received: {}", input);
+            }
+        }
+        _ => panic!("Expected Statement::Return"),
+    }"#;
+        
+        run_input_builtin_test(main_body, "Alice\n", &["Enter your name: ", "Input received: Alice"], "with_prompt");
+    }
+
+    #[test]
+    fn test_input_builtin_without_prompt() {
+        let main_body = r#"
+    // Test without prompt (empty environment)
+    let mut env = Environment::new();
+    let result = input_builtin(&mut env);
+    
+    match result {
+        Statement::Return(expr) => {
+            if let Expression::CString(input) = *expr {
+                println!("Input received: {}", input);
+            }
+        }
+        _ => panic!("Expected Statement::Return"),
+    }"#;
+        
+        run_input_builtin_test(main_body, "Bob\n", &["Input received: Bob"], "without_prompt");
+    }
+
+    #[test]
+    fn test_input_builtin_empty_input() {
+        let main_body = r#"
+    // Test with empty input
+    let mut env = Environment::new();
+    env.map_variable("prompt".to_string(), false, Expression::CString("Press Enter: ".to_string()));
+    let result = input_builtin(&mut env);
+    
+    match result {
+        Statement::Return(expr) => {
+            if let Expression::CString(input) = *expr {
+                println!("Input length: {}", input.len());
+            }
+        }
+        _ => panic!("Expected Statement::Return"),
+    }"#;
+        
+        run_input_builtin_test(main_body, "\n", &["Press Enter: ", "Input length: 0"], "empty_input");
+    }
+
+    #[test]
+    fn test_input_builtin_multiline_input() {
+        let main_body = r#"
+    // Test with input containing special characters
+    let mut env = Environment::new();
+    env.map_variable("prompt".to_string(), false, Expression::CString("Enter text: ".to_string()));
+    let result = input_builtin(&mut env);
+    
+    match result {
+        Statement::Return(expr) => {
+            if let Expression::CString(input) = *expr {
+                println!("Input received: '{}'", input);
+            }
+        }
+        _ => panic!("Expected Statement::Return"),
+    }"#;
+        
+        run_input_builtin_test(main_body, "Hello World! 123\n", &["Enter text: ", "Input received: 'Hello World! 123'"], "multiline_input");
     }
 
     #[test]
