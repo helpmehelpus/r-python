@@ -123,10 +123,12 @@ fn join(sep: Rc<Doc>, docs: Vec<Rc<Doc>>) -> Rc<Doc> {
 }
 
 // --- Testes Robustos ---
+
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::ir::ast::Expression;
+    // CORREÇÃO: Importa tudo o que o `mod.rs` (super) exporta.
+    use super::*;
     use crate::pretty_print::pretty;
 
     #[test]
@@ -140,7 +142,7 @@ mod tests {
         );
         assert_eq!(pretty(80, &expr.to_doc()), "(a + b) * c");
     }
-
+    
     #[test]
     fn test_precedence_relational_and() {
         let expr = Expression::And(

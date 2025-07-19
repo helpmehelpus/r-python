@@ -106,15 +106,16 @@ impl ToDoc for FormalArgument {
 }
 
 // O bloco de testes permanece conceitualmente o mesmo, mas agora compila com a nova arquitetura.
+
 #[cfg(test)]
 mod tests {
+    // CORREÇÃO: Removida a importação de `Type` que não era usada aqui.
+    use crate::ir::ast::{Expression, Statement};
+    // CORREÇÃO: Importa tudo o que o `mod.rs` (super) exporta.
     use super::*;
-    use crate::ir::ast::{Expression, Type};
     use crate::pretty_print::pretty;
 
-    // Adicionando ToDoc stubs para Expression e Type para os testes compilarem de forma isolada.
-    impl ToDoc for Expression { fn to_doc(&self) -> Rc<Doc> { text(format!("[expr:{:?}]", self)) } }
-    impl ToDoc for Type { fn to_doc(&self) -> Rc<Doc> { text(format!("[type:{:?}]", self)) } }
+    // CORREÇÃO: Removidos os stubs `impl ToDoc for Expression` e `impl ToDoc for Type`.
 
     #[test]
     fn test_block_formatting() {
@@ -125,9 +126,10 @@ mod tests {
 
         let expected = "\
 :
-  var x = [expr:CInt(1)];
-  y = [expr:CInt(2)];
+  var x = 1;
+  y = 2;
 end";
+        // Os testes agora usarão as implementações REAIS de ToDoc para Expression e Type.
         assert_eq!(pretty(80, &block.to_doc()), expected);
     }
     

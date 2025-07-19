@@ -104,12 +104,10 @@ fn fits(mut w: isize, doc: &Rc<Doc>) -> bool {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    // Função auxiliar para juntar documentos nos testes.
     fn join(sep: Rc<Doc>, docs: Vec<Rc<Doc>>) -> Rc<Doc> {
         docs.into_iter().reduce(|acc, doc| concat(acc, concat(sep.clone(), doc))).unwrap_or_else(nil)
     }
@@ -135,38 +133,37 @@ mod tests {
 
     #[test]
     fn test_group_fits_on_one_line() {
-        // [1, 2, 3]
+        // CORREÇÃO: Aninhamento correto de `concat`
         let list_doc = group(concat(
             text("["),
-            nest(2, concat(
-                line(),
-                join(concat(text(","), line()), vec![text("1"), text("2"), text("3")])
-            )),
-            concat(line(), text("]"))
+            concat(
+                nest(2, concat(
+                    line(),
+                    join(concat(text(","), line()), vec![text("1"), text("2"), text("3")])
+                )),
+                concat(line(), text("]"))
+            )
         ));
-
-        // Com largura suficiente, `line()` vira espaço.
         assert_eq!(pretty(80, &list_doc), "[ 1, 2, 3 ]");
     }
 
     #[test]
     fn test_group_breaks_into_multiple_lines() {
-        // [ "um_item_longo", "outro_item_longo" ]
+        // CORREÇÃO: Aninhamento correto de `concat`
         let list_doc = group(concat(
             text("["),
-            nest(2, concat(
-                line(),
-                join(
-                    concat(text(","), line()),
-                    vec![text("\"um_item_longo\""), text("\"outro_item_longo\"")]
-                )
-            )),
-            concat(line(), text("]"))
+            concat(
+                nest(2, concat(
+                    line(),
+                    join(
+                        concat(text(","), line()),
+                        vec![text("\"um_item_longo\""), text("\"outro_item_longo\"")]
+                    )
+                )),
+                concat(line(), text("]"))
+            )
         ));
-
-        // Com pouca largura, `line()` vira `\n` e `nest` indenta.
-        let expected = "\
-[
+        let expected = "[
   \"um_item_longo\",
   \"outro_item_longo\"
 ]";

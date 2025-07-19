@@ -90,14 +90,12 @@ impl ToDoc for ValueConstructor {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::ir::ast::{Type, ValueConstructor};
+    // CORREÇÃO: Importa tudo o que o `mod.rs` (super) exporta.
+    use super::*;
     use crate::pretty_print::pretty;
-    
-    // Stub para Expression, necessário para compilar os testes de forma isolada
-    use crate::ir::ast::Expression;
-    impl ToDoc for Expression { fn to_doc(&self) -> Rc<Doc> { text(format!("[expr:{:?}]", self)) } }
 
+    // CORREÇÃO: Removida a importação de `Expression` que não era usada aqui.
 
     #[test]
     fn test_basic_type_doc() {
