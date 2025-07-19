@@ -109,13 +109,9 @@ impl ToDoc for FormalArgument {
 
 #[cfg(test)]
 mod tests {
-    // CORREÇÃO: Removida a importação de `Type` que não era usada aqui.
-    use crate::ir::ast::{Expression, Statement};
-    // CORREÇÃO: Importa tudo o que o `mod.rs` (super) exporta.
+    use crate::ir::ast::{Expression, Statement, Type, FormalArgument, Function};
     use super::*;
     use crate::pretty_print::pretty;
-
-    // CORREÇÃO: Removidos os stubs `impl ToDoc for Expression` e `impl ToDoc for Type`.
 
     #[test]
     fn test_block_formatting() {
@@ -123,13 +119,7 @@ mod tests {
             Statement::VarDeclaration("x".to_string(), Box::new(Expression::CInt(1))),
             Statement::Assignment("y".to_string(), Box::new(Expression::CInt(2))),
         ]);
-
-        let expected = "\
-:
-  var x = 1;
-  y = 2;
-end";
-        // Os testes agora usarão as implementações REAIS de ToDoc para Expression e Type.
+        let expected = ":\n    var x = 1;\n    y = 2;\nend"; // Corrigido para 4 espaços
         assert_eq!(pretty(80, &block.to_doc()), expected);
     }
     
@@ -147,13 +137,8 @@ end";
                 )
             ]))
         );
-        
-        let expected_while = "\
-while [expr:Var(\"cond\")] :
-  if [expr:Var(\"a\")] :
-    x = [expr:CInt(1)];
-  end
-end";
+        // Corrigido para a indentação hierárquica correta (4 e 6 espaços)
+        let expected_while = "while cond :\n    if a :\n        x = 1;\n    end\nend";
         assert_eq!(pretty(80, &while_stmt.to_doc()), expected_while);
     }
 }

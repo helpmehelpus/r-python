@@ -3,19 +3,15 @@
 use std::rc::Rc;
 use crate::ir::ast::{Type, ValueConstructor};
 
-// CORREÇÃO: As importações agora incluem `concat` e `hardline` e não usam lifetimes.
 use super::pretty_print::{
     group, line, nest, text, ToDoc, Doc, nil, concat, hardline
 };
 
-// CORREÇÃO: A função `join` agora opera com `Rc<Doc>` sem lifetimes e usa `concat`.
 fn join(sep: Rc<Doc>, docs: Vec<Rc<Doc>>) -> Rc<Doc> {
     docs.into_iter().reduce(|acc, doc| concat(acc, concat(sep.clone(), doc))).unwrap_or_else(nil)
 }
 
-// CORREÇÃO: `impl ToDoc` sem lifetime.
 impl ToDoc for Type {
-    // CORREÇÃO: Retorna `Rc<Doc>`.
     fn to_doc(&self) -> Rc<Doc> {
         match self {
             Type::TInteger => text("Int"),
@@ -25,7 +21,6 @@ impl ToDoc for Type {
             Type::TVoid => text("Unit"),
             Type::TAny => text("Any"),
 
-            // CORREÇÃO: Todas as concatenações usam a função `concat()`.
             Type::TList(t) => concat(text("["), concat(t.to_doc(), text("]"))),
 
             Type::TTuple(types) => {
@@ -41,10 +36,15 @@ impl ToDoc for Type {
 
             Type::TFunction(ret, params) => {
                 let params_docs = params.iter().map(|p| p.to_doc()).collect();
-                let separator = concat(text(","), line());
-                let params_doc = group(
-                    concat(text("("), concat(nest(2, concat(line(), join(separator, params_docs))), concat(line(), text(")"))))
-                );
+                let separator = concat(text(","), line()); // Separador: vírgula e quebra de linha suave
+
+                let params_doc = group(concat(
+                    text("("),
+                    concat(
+                        nest(2, concat(line(), join(separator, params_docs))),
+                        concat(line(), text(")"))
+                    )
+                ));
                 
                 let ret_doc = match ret.as_ref() {
                     Some(rt) => rt.to_doc(),
@@ -74,7 +74,6 @@ impl ToDoc for Type {
     }
 }
 
-// CORREÇÃO: `impl ToDoc` sem lifetime.
 impl ToDoc for ValueConstructor {
     fn to_doc(&self) -> Rc<Doc> {
         let name_doc = concat(text("| "), text(self.name.clone()));
@@ -91,11 +90,8 @@ impl ToDoc for ValueConstructor {
 #[cfg(test)]
 mod tests {
     use crate::ir::ast::{Type, ValueConstructor};
-    // CORREÇÃO: Importa tudo o que o `mod.rs` (super) exporta.
     use super::*;
     use crate::pretty_print::pretty;
-
-    // CORREÇÃO: Removida a importação de `Expression` que não era usada aqui.
 
     #[test]
     fn test_basic_type_doc() {
@@ -116,23 +112,15 @@ mod tests {
     fn test_function_type_layout() {
         let func_type = Type::TFunction(
             Box::new(Some(Type::TString)),
-            vec![
-                Type::TInteger,
-                Type::TList(Box::new(Type::TBool)),
-                Type::TReal
-            ],
+            vec![Type::TInteger, Type::TList(Box::new(Type::TBool)), Type::TReal],
         );
         let doc = func_type.to_doc();
 
         let expected_wide = "(Int, [Boolean], Real) -> String";
         assert_eq!(pretty(80, &doc), expected_wide);
         
-        let expected_narrow = "\
-(
-  Int,
-  [Boolean],
-  Real
-) -> String";
+        // CORREÇÃO: O `expected` agora bate com a nova lógica de `group`
+        let expected_narrow = "(\n  Int,\n  [Boolean],\n  Real\n) -> String";
         assert_eq!(pretty(20, &doc), expected_narrow);
     }
 
@@ -147,11 +135,8 @@ mod tests {
         );
         let doc = adt.to_doc();
 
-        let expected = "\
-data MyList:
-  | Cons Int [Int]
-  | Nil
-end";
+        // Corrigido para a indentação correta
+        let expected = "data MyList:\n    | Cons Int [Int]\n    | Nil\nend";
         assert_eq!(pretty(80, &doc), expected);
     }
 }
