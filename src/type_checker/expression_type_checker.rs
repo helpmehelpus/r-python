@@ -1,6 +1,5 @@
-use crate::environment::environment::Environment;
-use crate::ir::ast::{Expression, Name, Type};
-
+use crate::environment::environment::{Environment, FuncOrVar};
+use crate::ir::ast::{Expression, FuncSignature, Function, Name, Type};
 type ErrorMessage = String;
 
 pub fn check_expr(exp: Expression, env: &Environment<Type>) -> Result<Type, ErrorMessage> {
@@ -38,46 +37,78 @@ pub fn check_expr(exp: Expression, env: &Environment<Type>) -> Result<Type, Erro
         Expression::FuncCall(func_name, exp_vec) => {
             check_func_call(func_name.clone(), exp_vec.clone(), env)
         }
+        Expression::Lambda(func) => {
+            check_lambda(&func)
+        }
 
         _ => Err("not implemented yet.".to_string()),
     }
 }
 
-fn check_func_call(
+pub fn check_lambda(func: &Function) -> Result<Type, ErrorMessage> {
+    Ok(func_to_type(func))
+}
+
+pub fn func_to_type(func: &Function) -> Type {
+    let mut arg_types = Vec::new();
+    for formal_arg in &func.params {
+        arg_types.push(formal_arg.argument_type.clone());
+    }
+    Type::TFunction(Box::new(func.kind.clone()), arg_types)
+}
+
+pub fn check_func_call(
     func_name: Name,
     exp_vector: Vec<Expression>,
     env: &Environment<Type>,
 ) -> Result<Type, ErrorMessage> {
-    let func = env.lookup_function(&func_name);
+    let mut actual_arg_types = Vec::new();
+    for arg in exp_vector.iter() {
+        match arg {
+            Expression::Var(name) => match env.lookup_var_or_func(name) {
+                Some(FuncOrVar::Var((_, var_type))) => {
+                    actual_arg_types.push(var_type);
+                }
+                Some(FuncOrVar::Func(func)) => {
+                    actual_arg_types.push(func_to_type(&func));
+                }
+                None => {
+                    return Err(format!("Identifier '{}' was never declared", name));
+                }
+            },
+            _ => {
+                let arg_type = check_expr(arg.clone(), env)?;
+                actual_arg_types.push(arg_type);
+            }
+        }
+    }
+    let func_signature = FuncSignature {
+        name: func_name.clone(),
+        argument_types: actual_arg_types.clone(),
+    };
+
+    let func = env.lookup_function(&func_signature);
     if func.is_none() {
         return Err(format!(
-            "Function {} was called but never declared",
-            func_name
+            "Function {:?} was called but never declared",
+            func_signature
         ));
     }
     let func = func.unwrap();
-    if func.params.len() != exp_vector.len() {
-        return Err(format!(
-            "Function {} receives {} arguments, but {} were given",
-            func_name,
-            func.params.len(),
-            exp_vector.len()
-        ));
-    }
+
     let mut formal_arg_types = Vec::new();
-    let mut actual_arg_types = Vec::new();
-    for (param, arg) in func.params.iter().zip(exp_vector.iter()) {
+
+    for param in func.params.iter() {
         formal_arg_types.push(param.argument_type.clone());
-        let arg_type = check_expr(arg.clone(), env)?;
-        actual_arg_types.push(arg_type);
     }
+
     for (formal_type, actual_type) in formal_arg_types.iter().zip(actual_arg_types.iter()) {
         if formal_type != actual_type {
             return Err(format!(
-                "Mismatched types in function {} call \n
+                "Mismatched types in function {:?} call \n
             Expected:{:?}\n
             Received: {:?}",
-                func_name, formal_arg_types, actual_arg_types
+                func_signature, formal_arg_types, actual_arg_types
             ));
         }
     }
