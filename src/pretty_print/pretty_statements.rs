@@ -2,83 +2,98 @@
 
 use std::rc::Rc;
 use crate::ir::ast::{FormalArgument, Function, Statement};
-
-// CORREÇÃO: Removido o lifetime de todas as importações e usos.
 use super::pretty_print::{
     group, hardline, line, nest, nil, text, ToDoc, Doc, concat
 };
 
-// CORREÇÃO: A função `join` agora opera com `Rc<Doc>` sem lifetimes.
+/// Função auxiliar para juntar uma lista de documentos (`Vec<Rc<Doc>>`)
+/// com um separador, resultando em um único documento.
 fn join(sep: Rc<Doc>, docs: Vec<Rc<Doc>>) -> Rc<Doc> {
-    // CORREÇÃO: Usa `concat` em vez de `+`.
     docs.into_iter().reduce(|acc, doc| concat(acc, concat(sep.clone(), doc))).unwrap_or_else(nil)
 }
 
-// CORREÇÃO: `impl ToDoc` sem lifetime.
+/// Implementa a conversão de nós de `Statement` da AST para a representação `Doc`.
+/// Cada variante do `enum Statement` é mapeada para um layout de formatação específico.
 impl ToDoc for Statement {
-    // CORREÇÃO: Retorna `Rc<Doc>`.
     fn to_doc(&self) -> Rc<Doc> {
         match self {
-            // CORREÇÃO: Todas as concatenações usam a função `concat()`.
+            // Formata declarações como "var <nome> = <expr>;"
             Statement::VarDeclaration(name, expr) => {
                 concat(text("var "), concat(text(name.clone()), concat(text(" = "), concat(expr.to_doc(), text(";")))))
             }
+            // Formata declarações de constantes como "val <nome> = <expr>;"
             Statement::ValDeclaration(name, expr) => {
                 concat(text("val "), concat(text(name.clone()), concat(text(" = "), concat(expr.to_doc(), text(";")))))
             }
+            // Formata atribuições como "<nome> = <expr>;"
             Statement::Assignment(name, expr) => {
                 concat(text(name.clone()), concat(text(" = "), concat(expr.to_doc(), text(";"))))
             }
+            // Formata retornos como "return <expr>;"
             Statement::Return(expr) => {
                 concat(text("return "), concat(expr.to_doc(), text(";")))
             }
+            // Formata asserções como "assert(<check>, <msg>);"
             Statement::Assert(check, msg) => {
                 concat(text("assert("), concat(check.to_doc(), concat(text(", "), concat(msg.to_doc(), text(");")))))
             }
 
+            // Formata um bloco de código. Usa `hardline` para garantir quebras de linha
+            // e `nest` para indentar o conteúdo do bloco.
             Statement::Block(stmts) => {
                 let stmts_doc = stmts.iter().map(|s| s.to_doc()).collect();
                 concat(
                     text(":"),
                     concat(
+                        // Indenta o conteúdo do bloco em 4 espaços.
                         nest(4, concat(hardline(), join(hardline(), stmts_doc))),
                         concat(hardline(), text("end"))
                     )
                 )
             }
+            // Formata estruturas `if-then-else`.
             Statement::IfThenElse(cond, then_branch, else_branch) => {
                 let mut doc = concat(text("if "), concat(cond.to_doc(), concat(text(" "), then_branch.to_doc())));
+                // Adiciona a cláusula `else` apenas se ela existir.
                 if let Some(else_b) = else_branch {
                     doc = concat(doc, concat(text(" else "), else_b.to_doc()));
                 }
                 doc
             }
+            // Formata laços `while`.
             Statement::While(cond, body) => {
                 concat(text("while "), concat(cond.to_doc(), concat(text(" "), body.to_doc())))
             }
+            // Formata laços `for`.
             Statement::For(var, iterable, body) => {
                 concat(text("for "), concat(text(var.clone()), concat(text(" in "), concat(iterable.to_doc(), concat(text(" "), body.to_doc())))))
             }
+            // Delega a formatação da definição de função para a implementação `ToDoc` de `Function`.
             Statement::FuncDef(func) => func.to_doc(),
             
+            // Fallback para statements que ainda não têm uma regra de formatação.
             _ => text("// Statement não implementado"),
         }
     }
 }
 
-// CORREÇÃO: `impl ToDoc` sem lifetime.
+/// Implementa a conversão de uma `Function` da AST para `Doc`.
 impl ToDoc for Function {
     fn to_doc(&self) -> Rc<Doc> {
+        // Mapeia cada argumento formal para sua representação em `Doc`.
         let params_docs: Vec<Rc<Doc>> = self.params.iter().map(|p| p.to_doc()).collect();
+        // Agrupa a lista de parâmetros. Se não couber em uma linha, quebra e indenta.
         let params_doc = group(
             concat(text("("), concat(nest(4, concat(line(), join(concat(text(","), line()), params_docs))), concat(line(), text(")"))))
         );
 
+        // Formata o corpo da função. Se não houver corpo, imprime um bloco vazio.
         let body_doc = self.body.as_ref().map_or_else(
             || concat(text(":"), text(" end")),
             |b| b.to_doc(),
         );
 
+        // Concatena todas as partes para formar a definição completa da função.
         concat(
             text("def "),
             concat(
@@ -88,7 +103,7 @@ impl ToDoc for Function {
                     concat(
                         text(" -> "),
                         concat(
-                            self.kind.to_doc(),
+                            self.kind.to_doc(), // O tipo de retorno.
                             concat(text(" "), body_doc)
                         )
                     )
@@ -98,14 +113,13 @@ impl ToDoc for Function {
     }
 }
 
-// CORREÇÃO: `impl ToDoc` sem lifetime.
+/// Implementa a conversão de um `FormalArgument` (parâmetro de função) para `Doc`.
 impl ToDoc for FormalArgument {
     fn to_doc(&self) -> Rc<Doc> {
+        // Formata um argumento como "<nome>: <tipo>".
         concat(text(self.argument_name.clone()), concat(text(": "), self.argument_type.to_doc()))
     }
 }
-
-// O bloco de testes permanece conceitualmente o mesmo, mas agora compila com a nova arquitetura.
 
 #[cfg(test)]
 mod tests {
@@ -119,7 +133,7 @@ mod tests {
             Statement::VarDeclaration("x".to_string(), Box::new(Expression::CInt(1))),
             Statement::Assignment("y".to_string(), Box::new(Expression::CInt(2))),
         ]);
-        let expected = ":\n    var x = 1;\n    y = 2;\nend"; // Corrigido para 4 espaços
+        let expected = ":\n    var x = 1;\n    y = 2;\nend";
         assert_eq!(pretty(80, &block.to_doc()), expected);
     }
     
@@ -137,7 +151,6 @@ mod tests {
                 )
             ]))
         );
-        // Corrigido para a indentação hierárquica correta (4 e 6 espaços)
         let expected_while = "while cond :\n    if a :\n        x = 1;\n    end\nend";
         assert_eq!(pretty(80, &while_stmt.to_doc()), expected_while);
     }
