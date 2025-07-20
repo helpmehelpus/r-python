@@ -450,8 +450,8 @@ pub fn eval_function_call(
                             //This will never happen, but I need to cover all cases, otherwise it won't compile
                             _ => {
                                 return Err(format!(
-                                    "[Runtime Error] Function {} expected another function as argument, but received a non functional argument",
-                                    func_name
+                                    "[Runtime Error] Function {:?} expected another function as argument, but received a non functional argument",
+                                    func_signature
                                 ));
                             }
                         }

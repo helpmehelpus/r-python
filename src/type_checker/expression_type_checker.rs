@@ -90,8 +90,8 @@ pub fn check_func_call(
     let func = env.lookup_function(&func_signature);
     if func.is_none() {
         return Err(format!(
-            "Function {} was called but never declared",
-            func_name
+            "Function {:?} was called but never declared",
+            func_signature
         ));
     }
     let func = func.unwrap();
@@ -105,10 +105,10 @@ pub fn check_func_call(
     for (formal_type, actual_type) in formal_arg_types.iter().zip(actual_arg_types.iter()) {
         if formal_type != actual_type {
             return Err(format!(
-                "Mismatched types in function {} call \n
+                "Mismatched types in function {:?} call \n
             Expected:{:?}\n
             Received: {:?}",
-                func_name, formal_arg_types, actual_arg_types
+                func_signature, formal_arg_types, actual_arg_types
             ));
         }
     }
