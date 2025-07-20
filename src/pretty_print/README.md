@@ -6,6 +6,30 @@
 
 Este fork do projeto **RPython** introduz uma implementação robusta de uma biblioteca de **pretty-printing**. O objetivo principal é converter a Árvore de Sintaxe Abstrata (AST) da linguagem de volta para código-fonte legível, com formatação consistente, indentação correta e quebras de linha inteligentes que se adaptam ao espaço disponível.
 
+## Integrantes do grupoe e suas contribuições
+Célio Júnio de Freitas Eduardo - 211010350
+    - Escolha pela nova pasta e definição específica dos módulos necessários
+    - Escolha dos artigos de base
+    - Definição e esboço inicial do módulo pretty_print.rs (Tipos bases utilizados)
+    - Tentativa de fazer um teste de integração (não foi possível)
+    - Coordenação dos trabalhos e verificação conjunta com todos os membros
+Tiago Nunes Silva Nascimento - 200060422
+    - Esboço da parte de implementação específica do pretty_print.rs
+    - Desevolvimento das funcões principais
+    - Desenvolvimento dos testes unitários do módulo
+Ana Carolina Dias do Nascimento - 232035692
+    - Esboço da implementação do toDoc para Types
+    - Desenvolvimento completo do módulo
+    - Desenvolvimento dos testes unitários do módulo
+Gabriel Pessoa Faustino - 231006121
+    - Esboço da implementação do toDoc para Statements
+    - Desenvolvimento completo do módulo
+    - Desenvolvimento dos testes unitários do módulo
+Wagner de Sousa da Silva (Cyber) - 242039882
+    - Esboço da implementação do toDoc para Expressions
+    - Desenvolvimento completo do módulo
+    - Desenvolvimento dos testes unitários do módulo
+
 ## 📋 Sobre a Biblioteca de Pretty-Printer
 
 Um pretty-printer é uma ferramenta essencial no ciclo de vida de um compilador ou interpretador. Ele permite que a representação interna do código (a AST) seja visualizada de forma clara e esteticamente agradável, facilitando a depuração, a análise de código e a interação com o programador.
@@ -34,6 +58,9 @@ src/
     ├── pretty_statements.rs  # Implementação de ToDoc para Comandos
     ├── pretty_type.rs        # Implementação de ToDoc para Tipos
     └── README.md             # Documentação específica do módulo
+r-python-pp/
+└──tests/
+    └──pretty_print_tests.rs
 ```
 
   - **`main.rs` e `lib.rs`**: Não foram atualizados para declarar e expor o novo módulo `pretty_print`, isto será feito caso o projeto seja aceito na sua implementação definida aqui.
