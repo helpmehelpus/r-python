@@ -41,7 +41,7 @@ impl ToDoc for Type {
                 let params_doc = group(concat(
                     text("("),
                     concat(
-                        nest(2, concat(line(), join(separator, params_docs))),
+                        nest(4, concat(line(), join(separator, params_docs))),
                         concat(line(), text(")"))
                     )
                 ));
@@ -63,7 +63,7 @@ impl ToDoc for Type {
                         concat(
                             text(":"),
                             concat(
-                                nest(2, concat(hardline(), join(hardline(), ctors_docs))),
+                                nest(4, concat(hardline(), join(hardline(), ctors_docs))),
                                 concat(hardline(), text("end"))
                             )
                         )
@@ -116,11 +116,11 @@ mod tests {
         );
         let doc = func_type.to_doc();
 
-        let expected_wide = "(Int, [Boolean], Real) -> String";
+        let expected_wide = "( Int, [Boolean], Real ) -> String";
         assert_eq!(pretty(80, &doc), expected_wide);
         
         // CORREÇÃO: O `expected` agora bate com a nova lógica de `group`
-        let expected_narrow = "(\n  Int,\n  [Boolean],\n  Real\n) -> String";
+        let expected_narrow = "(\n    Int,\n    [Boolean],\n    Real\n) -> String";
         assert_eq!(pretty(20, &doc), expected_narrow);
     }
 

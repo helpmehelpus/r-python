@@ -120,14 +120,15 @@ mod tests {
 
     #[test]
     fn test_nesting() {
-        let doc = concat(text("inicio"), nest(2, concat(hardline(), text("meio"))));
-        let expected = "inicio\n    meio"; // Corrigido para 4 espaços
+        // CORREÇÃO: Usar nest(4, ...) para testar a indentação de 4 espaços.
+        let doc = concat(text("inicio"), nest(4, concat(hardline(), text("meio"))));
+        let expected = "inicio\n    meio";
         assert_eq!(pretty(80, &doc), expected);
     }
 
     #[test]
     fn test_group_fits_on_one_line() {
-        let list_doc = group(concat(text("["), concat(nest(2, concat(line(), join(concat(text(","), line()), vec![text("1"), text("2"), text("3")]))), concat(line(), text("]")))));
+        let list_doc = group(concat(text("["), concat(nest(4, concat(line(), join(concat(text(","), line()), vec![text("1"), text("2"), text("3")]))), concat(line(), text("]")))));
         assert_eq!(pretty(80, &list_doc), "[ 1, 2, 3 ]");
     }
 
@@ -136,7 +137,7 @@ mod tests {
         let list_doc = group(concat(
             text("["),
             concat(
-                nest(2, concat(
+                nest(4, concat(
                     line(),
                     join(concat(text(","), line()), vec![text("\"item1\""), text("\"item2\"")])
                 )),
@@ -144,7 +145,7 @@ mod tests {
             )
         ));
         // CORREÇÃO: O `expected` agora bate com a saída correta
-        let expected = "[\n  \"item1\",\n  \"item2\"\n]";
+        let expected = "[\n    \"item1\",\n    \"item2\"\n]";
         assert_eq!(pretty(10, &list_doc), expected);
     }
 }

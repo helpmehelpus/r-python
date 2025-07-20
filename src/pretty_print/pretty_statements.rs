@@ -41,7 +41,7 @@ impl ToDoc for Statement {
                 concat(
                     text(":"),
                     concat(
-                        nest(2, concat(hardline(), join(hardline(), stmts_doc))),
+                        nest(4, concat(hardline(), join(hardline(), stmts_doc))),
                         concat(hardline(), text("end"))
                     )
                 )
@@ -71,7 +71,7 @@ impl ToDoc for Function {
     fn to_doc(&self) -> Rc<Doc> {
         let params_docs: Vec<Rc<Doc>> = self.params.iter().map(|p| p.to_doc()).collect();
         let params_doc = group(
-            concat(text("("), concat(nest(2, concat(line(), join(concat(text(","), line()), params_docs))), concat(line(), text(")"))))
+            concat(text("("), concat(nest(4, concat(line(), join(concat(text(","), line()), params_docs))), concat(line(), text(")"))))
         );
 
         let body_doc = self.body.as_ref().map_or_else(
