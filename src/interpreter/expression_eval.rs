@@ -407,6 +407,9 @@ pub fn eval_function_call(
                 }
                 None => return Err(format!("Identifier '{}' was never declared", name)),
             },
+            Expression::Lambda(func) => {
+                actual_arg_values.push(Expression::Lambda(func.clone()));
+            }
             _ => match eval(arg.clone(), env)? {
                 ExpressionResult::Value(expr) => {
                     actual_arg_values.push(expr);

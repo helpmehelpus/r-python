@@ -101,7 +101,7 @@ fn parse_result_type(input: &str) -> IResult<&str, Type> {
     )(input)
 }
 
-fn parse_function_type(input: &str) -> IResult<&str, Type> {
+pub fn parse_function_type(input: &str) -> IResult<&str, Type> {
     map(
         tuple((
             preceded(multispace0, char(LEFT_PAREN)),

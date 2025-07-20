@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use crate::environment::environment::Environment;
 use crate::ir::ast::{
-    Expression, FormalArgument, FuncSignature, Function, Name, Statement, Type, ValueConstructor
+    Expression, FormalArgument, FuncSignature, Function, Name, Statement, Type, ValueConstructor,
 };
 use crate::type_checker::expression_type_checker::check_expr;
 
@@ -58,25 +58,35 @@ fn check_assignment_stmt(
     env: &Environment<Type>,
 ) -> Result<Environment<Type>, ErrorMessage> {
     let mut new_env = env.clone();
-    let exp_type = check_expr(*exp, &new_env)?;
+    let exp_type = check_expr(*exp.clone(), &new_env)?;
 
-    match new_env.lookup(&name) {
-        Some((mutable, var_type)) => {
-            if !mutable {
-                Err(format!("[Type Error] cannot reassign '{:?}' variable, since it was declared as a constant value.", name))
-            } else if var_type == Type::TAny {
-                new_env.map_variable(name.clone(), true, exp_type);
-                Ok(new_env)
-            } else if var_type == exp_type {
-                Ok(new_env)
-            } else {
-                Err(format!(
-                    "[Type Error] expected '{:?}', found '{:?}'.",
-                    var_type, exp_type
-                ))
-            }
+    match *exp {
+        Expression::Lambda(mut func) => {
+            func.name = name;
+            new_env = check_func_def_stmt(func, env)?;
+            Ok(new_env)
         }
-        None => Err(format!("[Type Error] variable '{:?}' not declared.", name)),
+        _ => match new_env.lookup(&name) {
+            Some((mutable, var_type)) => {
+                if !mutable {
+                    Err(format!(
+                        "[Type Error] cannot reassign '{:?}' variable, since it was declared as a constant value.",
+                        name
+                    ))
+                } else if var_type == Type::TAny {
+                    new_env.map_variable(name.clone(), true, exp_type);
+                    Ok(new_env)
+                } else if var_type == exp_type {
+                    Ok(new_env)
+                } else {
+                    Err(format!(
+                        "[Type Error] expected '{:?}', found '{:?}'.",
+                        var_type, exp_type
+                    ))
+                }
+            }
+            None => Err(format!("[Type Error] variable '{:?}' not declared.", name)),
+        },
     }
 }
 
@@ -205,9 +215,9 @@ fn check_func_def_stmt(
     // Previous environment functions and the formal parameters are regarded as global
     new_env.set_global_functions(env.get_all_functions());
 
-    // Ensure that each function is defined only once
-    if new_env
-        .globals
+    // Ensure that each function is defined only once in current scope
+    let current_scope = env.get_current_scope();
+    if current_scope
         .functions
         .contains_key(&FuncSignature::from_func(&function))
     {
@@ -230,21 +240,29 @@ fn check_func_def_stmt(
 
     for formal_arg in function.params.iter() {
         match formal_arg.argument_type.clone() {
-            Type::TFunction(arg_func_ret_type,arg_func_params_type ) => {
+            Type::TFunction(arg_func_ret_type, arg_func_params_type) => {
                 let mut params: Vec<FormalArgument> = Vec::new();
-                let mut count:u64 = 0;
-                for arg_type in &arg_func_params_type
-                {
-                    params.push(FormalArgument { argument_name: count.to_string(), argument_type: arg_type.clone() });
+                let mut count: u64 = 0;
+                for arg_type in &arg_func_params_type {
+                    params.push(FormalArgument {
+                        argument_name: count.to_string(),
+                        argument_type: arg_type.clone(),
+                    });
                     count += 1;
                 }
-                new_env.map_function(Function { name: formal_arg.argument_name.clone(), kind: *arg_func_ret_type, params: params, body: None});
+                new_env.map_function(Function {
+                    name: formal_arg.argument_name.clone(),
+                    kind: *arg_func_ret_type,
+                    params: params,
+                    body: None,
+                });
             }
-            _ =>
-            { 
-            new_env.map_variable(formal_arg.argument_name.clone(),
-            false,
-            formal_arg.argument_type.clone());
+            _ => {
+                new_env.map_variable(
+                    formal_arg.argument_name.clone(),
+                    false,
+                    formal_arg.argument_type.clone(),
+                );
             }
         }
     }

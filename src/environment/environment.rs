@@ -83,6 +83,10 @@ impl<A: Clone + Debug> Environment<A> {
         return self.current_func.clone();
     }
 
+    pub fn get_current_scope(&self) -> &Scope<A> {
+        self.stack.front().unwrap_or(&self.globals)
+    }
+
     pub fn set_current_func(&mut self, func_signature: &FuncSignature) {
         self.current_func = func_signature.clone();
     }

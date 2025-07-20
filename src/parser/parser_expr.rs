@@ -5,7 +5,7 @@ use nom::{
     combinator::{map, map_res, opt, value, verify},
     error::Error,
     multi::{fold_many0, separated_list0},
-    sequence::{delimited, pair, preceded, tuple},
+    sequence::{delimited, pair, preceded, terminated, tuple},
     IResult,
 };
 
@@ -133,11 +133,9 @@ fn parse_factor(input: &str) -> IResult<&str, Expression> {
     ))(input)
 }
 
-fn parse_lambda(input: &str) -> IResult<&str, Expression> {
-    map(
+pub fn parse_lambda(input: &str) -> IResult<&str, Expression> {  map(
         tuple((
-            keyword(LAMBDA_KEYWORD),
-            preceded(multispace1, identifier),
+            preceded(keyword(LAMBDA_KEYWORD), multispace0),
             delimited(
                 char::<&str, Error<&str>>(LEFT_PAREN),
                 separated_list0(
@@ -146,18 +144,21 @@ fn parse_lambda(input: &str) -> IResult<&str, Expression> {
                         char::<&str, Error<&str>>(COMMA_CHAR),
                         multispace0,
                     )),
-                    parse_formal_argument,
+                    terminated(parse_formal_argument, multispace0),
                 ),
                 char::<&str, Error<&str>>(RIGHT_PAREN),
             ),
             preceded(multispace0, tag(FUNCTION_ARROW)),
-            delimited(multispace0, parse_type, char::<&str, Error<&str>>(COLON_CHAR)),
-            parse_return_statement, 
-            keyword(END_KEYWORD)
+            delimited(
+                multispace0,
+                parse_type,
+                char::<&str, Error<&str>>(COLON_CHAR),
+            ),
+            delimited(multispace0, parse_return_statement, keyword(END_KEYWORD)),
         )),
-        |(_, name, args, _, t, return_stmt, _)| {
+        |(_, args, _, t, return_stmt)| {
             Expression::Lambda(Function {
-                name: name.to_string(),
+                name: "".to_string(),
                 kind: t,
                 params: args,
                 body: Some(Box::new(Statement::Block(vec![return_stmt]))),
