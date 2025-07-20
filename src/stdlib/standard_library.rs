@@ -1,16 +1,15 @@
 use crate::environment::environment::Environment;
-use crate::ir::ast::{Statement, Expression};
+use crate::ir::ast::{Expression, Statement};
 use std::collections::HashMap;
-use std::sync::OnceLock;
 use std::fs::File;
 use std::io::Read;
 use std::io::Write;
+use std::sync::OnceLock;
 
 pub type MetaBuiltinStmt = fn(&mut Environment<Expression>) -> Statement;
 
 // Tabela estática global de metabuiltins
 static METABUILTINS_TABLE: OnceLock<HashMap<String, MetaBuiltinStmt>> = OnceLock::new();
-
 
 pub fn get_metabuiltins_table() -> &'static HashMap<String, MetaBuiltinStmt> {
     METABUILTINS_TABLE.get_or_init(|| {
@@ -37,7 +36,8 @@ pub fn input_builtin(env: &mut Environment<Expression>) -> Statement {
 }
 
 pub fn print_builtin(env: &mut Environment<Expression>) -> Statement {
-    let value = env.lookup(&"value".to_string())
+    let value = env
+        .lookup(&"value".to_string())
         .map(|(_, v)| v)
         .unwrap_or(Expression::CString("".to_string()));
     match value {
@@ -49,18 +49,19 @@ pub fn print_builtin(env: &mut Environment<Expression>) -> Statement {
     Statement::Return(Box::new(Expression::CVoid))
 }
 
-pub fn open_builtin(env: &mut Environment<Expression>) -> Statement{
+pub fn open_builtin(env: &mut Environment<Expression>) -> Statement {
     let path = match env.lookup(&"path".to_string()) {
         Some((_, Expression::CString(p))) => p.clone(),
         _ => {
             return Statement::Return(Box::new(Expression::CString(
-                "open: first argument must be a string with the file path".to_string())));
+                "open: first argument must be a string with the file path".to_string(),
+            )));
         }
     };
 
     let mode = match env.lookup(&"mode".to_string()) {
         Some((_, Expression::CString(m))) => m.clone(),
-        _ => "r".to_string(), 
+        _ => "r".to_string(),
     };
 
     match mode.as_str() {
@@ -68,14 +69,18 @@ pub fn open_builtin(env: &mut Environment<Expression>) -> Statement{
             let mut file = match File::open(&path) {
                 Ok(f) => f,
                 Err(e) => {
-                    return Statement::Return(Box::new(Expression::CString(
-                        format!("open: could not open '{}' for reading: {}", path, e))));
+                    return Statement::Return(Box::new(Expression::CString(format!(
+                        "open: could not open '{}' for reading: {}",
+                        path, e
+                    ))));
                 }
             };
             let mut contents = String::new();
             if let Err(e) = file.read_to_string(&mut contents) {
-                return Statement::Return(Box::new(Expression::CString(
-                    format!("open: error reading '{}': {}", path, e))));
+                return Statement::Return(Box::new(Expression::CString(format!(
+                    "open: error reading '{}': {}",
+                    path, e
+                ))));
             }
 
             Statement::Return(Box::new(Expression::CString(contents)))
@@ -92,11 +97,13 @@ pub fn open_builtin(env: &mut Environment<Expression>) -> Statement{
 
             match std::fs::write(&path, content) {
                 Ok(_) => Statement::Return(Box::new(Expression::CVoid)),
-                Err(e) => Statement::Return(Box::new(Expression::CString(
-                    format!("open: could not write to '{}': {}", path, e)))),
+                Err(e) => Statement::Return(Box::new(Expression::CString(format!(
+                    "open: could not write to '{}': {}",
+                    path, e
+                )))),
             }
         }
-        
+
         "a" => {
             let content = match env.lookup(&"content".to_string()) {
                 Some((_, Expression::CString(c))) => c.clone(),
@@ -109,26 +116,29 @@ pub fn open_builtin(env: &mut Environment<Expression>) -> Statement{
             match std::fs::OpenOptions::new()
                 .append(true)
                 .create(true)
-                .open(&path) {
+                .open(&path)
+            {
                 Ok(mut file) => {
                     if let Err(e) = writeln!(file, "{}", content) {
-                        return Statement::Return(Box::new(Expression::CString(
-                            format!("open: could not append to '{}': {}", path, e))));
+                        return Statement::Return(Box::new(Expression::CString(format!(
+                            "open: could not append to '{}': {}",
+                            path, e
+                        ))));
                     }
                     Statement::Return(Box::new(Expression::CVoid))
-                },
-                Err(e) => Statement::Return(Box::new(Expression::CString(
-                    format!("open: could not open '{}' for appending: {}", path, e)))),
+                }
+                Err(e) => Statement::Return(Box::new(Expression::CString(format!(
+                    "open: could not open '{}' for appending: {}",
+                    path, e
+                )))),
             }
-            
         }
 
-        m => {
-            Statement::Return(Box::new(Expression::CString(
-                format!("open: unsupported mode '{}'.", m))))
-        }
+        m => Statement::Return(Box::new(Expression::CString(format!(
+            "open: unsupported mode '{}'.",
+            m
+        )))),
     }
-
 }
 
 #[cfg(test)]
@@ -138,22 +148,30 @@ mod tests {
     #[test]
     fn test_meta_stmt_table_contains_input_function() {
         let table = get_metabuiltins_table();
-        assert!(table.contains_key("input"), "The table must contain the 'input' function");
-        
+        assert!(
+            table.contains_key("input"),
+            "The table must contain the 'input' function"
+        );
+
         // Check if the function in the table is callable
         let input_func = table.get("input").unwrap();
         let _env: Environment<Expression> = Environment::new();
         // We do not execute the function to avoid blocking stdin
         // Just check if it exists and can be referenced
-        assert!(std::ptr::addr_of!(*input_func) != std::ptr::null(), 
-                "The 'input' function must exist in the table");
+        assert!(
+            std::ptr::addr_of!(*input_func) != std::ptr::null(),
+            "The 'input' function must exist in the table"
+        );
     }
 
     #[test]
     fn test_meta_stmt_table_contains_print_function() {
         let table = get_metabuiltins_table();
-        assert!(table.contains_key("print"), "The table must contain the 'print' function");
-        
+        assert!(
+            table.contains_key("print"),
+            "The table must contain the 'print' function"
+        );
+
         // Check if the function in the table is callable
         let print_func = table.get("print").unwrap();
         let mut env: Environment<Expression> = Environment::new();
@@ -174,20 +192,32 @@ mod tests {
     fn test_meta_stmt_table_contains_only_expected_keys() {
         let table = get_metabuiltins_table();
         let keys: Vec<&String> = table.keys().collect();
-        
-        assert!(keys.contains(&&"input".to_string()), "The table must contain the key 'input'");
-        assert!(keys.contains(&&"print".to_string()), "The table must contain the key 'print'");
-        assert!(keys.contains(&&"open".to_string()), "The table must contain the key 'open'");
+
+        assert!(
+            keys.contains(&&"input".to_string()),
+            "The table must contain the key 'input'"
+        );
+        assert!(
+            keys.contains(&&"print".to_string()),
+            "The table must contain the key 'print'"
+        );
+        assert!(
+            keys.contains(&&"open".to_string()),
+            "The table must contain the key 'open'"
+        );
         assert_eq!(keys.len(), 3, "The table must contain only 3 keys");
     }
 
     #[test]
     fn test_meta_stmt_table_functions_are_callable() {
         let table = get_metabuiltins_table();
-        
+
         // Check if the 'input' function exists in the table (without executing it)
-        assert!(table.contains_key("input"), "The 'input' function must be in the table");
-        
+        assert!(
+            table.contains_key("input"),
+            "The 'input' function must be in the table"
+        );
+
         // Check if the 'print' function can be called
         if let Some(print_func) = table.get("print") {
             let mut env: Environment<Expression> = Environment::new();
@@ -213,8 +243,12 @@ mod tests {
     fn test_print_builtin_function_signature() {
         // Checks if the print_builtin function can be called with an Environment
         let mut env: Environment<Expression> = Environment::new();
-        env.map_variable("value".to_string(), false, Expression::CString("Hello World".to_string()));
-        
+        env.map_variable(
+            "value".to_string(),
+            false,
+            Expression::CString("Hello World".to_string()),
+        );
+
         let result = print_builtin(&mut env);
         match result {
             Statement::Return(_) => (), // Expected
@@ -222,12 +256,13 @@ mod tests {
         }
     }
 
-        // Helper function to run print_builtin tests with custom main function
+    // Helper function to run print_builtin tests with custom main function
     fn run_print_builtin_test(main_body: &str, expected_outputs: &[&str], test_name: &str) {
         use assert_cmd::Command;
         use std::fs;
-        
-        let test_code = format!(r#"
+
+        let test_code = format!(
+            r#"
 use r_python::environment::environment::Environment;
 use r_python::ir::ast::Expression;
 use r_python::stdlib::standard_library::print_builtin;
@@ -235,30 +270,35 @@ use r_python::stdlib::standard_library::print_builtin;
 fn main() {{
 {}
 }}
-"#, main_body);
-        
+"#,
+            main_body
+        );
+
         let filename = format!("test_print_{}.rs", test_name);
         let binary_name = format!("test_print_{}", test_name);
-        
+
         fs::write(&filename, test_code).unwrap();
-        
+
         let build_result = Command::new("cargo").args(&["build"]).output();
         if let Ok(build_output) = build_result {
             if build_output.status.success() {
                 let compile_result = Command::new("rustc")
                     .args(&[
                         &filename,
-                        "-L", "target/debug/deps",
-                        "--extern", "r_python=target/debug/libr_python.rlib",
-                        "-o", &binary_name
+                        "-L",
+                        "target/debug/deps",
+                        "--extern",
+                        "r_python=target/debug/libr_python.rlib",
+                        "-o",
+                        &binary_name,
                     ])
                     .output();
-                    
+
                 if let Ok(compile_output) = compile_result {
                     if compile_output.status.success() {
                         let mut cmd = Command::new(&format!("./{}", binary_name));
                         let mut assertion = cmd.assert().success();
-                        
+
                         for expected in expected_outputs {
                             assertion = assertion.stdout(predicates::str::contains(*expected));
                         }
@@ -266,7 +306,7 @@ fn main() {{
                 }
             }
         }
-        
+
         fs::remove_file(&filename).ok();
         fs::remove_file(&binary_name).ok();
     }
@@ -275,8 +315,9 @@ fn main() {{
     fn run_print_builtin_test_exact(main_body: &str, expected_exact: &str, test_name: &str) {
         use assert_cmd::Command;
         use std::fs;
-        
-        let test_code = format!(r#"
+
+        let test_code = format!(
+            r#"
 use r_python::environment::environment::Environment;
 use r_python::ir::ast::Expression;
 use r_python::stdlib::standard_library::print_builtin;
@@ -284,47 +325,58 @@ use r_python::stdlib::standard_library::print_builtin;
 fn main() {{
 {}
 }}
-"#, main_body);
-        
+"#,
+            main_body
+        );
+
         let filename = format!("test_print_{}.rs", test_name);
         let binary_name = format!("test_print_{}", test_name);
-        
+
         fs::write(&filename, test_code).unwrap();
-        
+
         let build_result = Command::new("cargo").args(&["build"]).output();
         if let Ok(build_output) = build_result {
             if build_output.status.success() {
                 let compile_result = Command::new("rustc")
                     .args(&[
                         &filename,
-                        "-L", "target/debug/deps",
-                        "--extern", "r_python=target/debug/libr_python.rlib",
-                        "-o", &binary_name
+                        "-L",
+                        "target/debug/deps",
+                        "--extern",
+                        "r_python=target/debug/libr_python.rlib",
+                        "-o",
+                        &binary_name,
                     ])
                     .output();
-                    
+
                 if let Ok(compile_output) = compile_result {
                     if compile_output.status.success() {
                         let output = Command::new(&format!("./{}", binary_name))
                             .output()
                             .expect("Failed to run test");
-                        
+
                         assert_eq!(String::from_utf8_lossy(&output.stdout), expected_exact);
                     }
                 }
             }
         }
-        
+
         fs::remove_file(&filename).ok();
         fs::remove_file(&binary_name).ok();
     }
 
     // Helper function to run input_builtin tests with simulated stdin input
-    fn run_input_builtin_test(main_body: &str, stdin_input: &str, expected_outputs: &[&str], test_name: &str) {
+    fn run_input_builtin_test(
+        main_body: &str,
+        stdin_input: &str,
+        expected_outputs: &[&str],
+        test_name: &str,
+    ) {
         use assert_cmd::Command;
         use std::fs;
-        
-        let test_code = format!(r#"
+
+        let test_code = format!(
+            r#"
 use r_python::environment::environment::Environment;
 use r_python::ir::ast::{{Expression, Statement}};
 use r_python::stdlib::standard_library::input_builtin;
@@ -332,33 +384,35 @@ use r_python::stdlib::standard_library::input_builtin;
 fn main() {{
 {}
 }}
-"#, main_body);
-        
+"#,
+            main_body
+        );
+
         let filename = format!("test_input_{}.rs", test_name);
         let binary_name = format!("test_input_{}", test_name);
-        
+
         fs::write(&filename, test_code).unwrap();
-        
+
         let build_result = Command::new("cargo").args(&["build"]).output();
         if let Ok(build_output) = build_result {
             if build_output.status.success() {
                 let compile_result = Command::new("rustc")
                     .args(&[
                         &filename,
-                        "-L", "target/debug/deps",
-                        "--extern", "r_python=target/debug/libr_python.rlib",
-                        "-o", &binary_name
+                        "-L",
+                        "target/debug/deps",
+                        "--extern",
+                        "r_python=target/debug/libr_python.rlib",
+                        "-o",
+                        &binary_name,
                     ])
                     .output();
-                    
+
                 if let Ok(compile_output) = compile_result {
                     if compile_output.status.success() {
                         let mut cmd = Command::new(&format!("./{}", binary_name));
-                        let mut assertion = cmd
-                            .write_stdin(stdin_input)
-                            .assert()
-                            .success();
-                        
+                        let mut assertion = cmd.write_stdin(stdin_input).assert().success();
+
                         for expected in expected_outputs {
                             assertion = assertion.stdout(predicates::str::contains(*expected));
                         }
@@ -366,12 +420,10 @@ fn main() {{
                 }
             }
         }
-        
+
         fs::remove_file(&filename).ok();
         fs::remove_file(&binary_name).ok();
     }
-
-
 
     #[test]
     fn test_print_builtin_captures_output() {
@@ -394,7 +446,7 @@ fn main() {{
     // Test 4: No value (should print empty string)
     let mut env4 = Environment::new();
     print_builtin(&mut env4);"#;
-        
+
         run_print_builtin_test(main_body, &["Hello World", "42", "3.14"], "builtin");
     }
 
@@ -420,8 +472,12 @@ fn main() {{
     let mut env4 = Environment::new();
     env4.map_variable("value".to_string(), false, Expression::CString("Olá, 世界! 🌍".to_string()));
     print_builtin(&mut env4);"#;
-        
-        run_print_builtin_test(main_body, &["Hello", "World", "Olá", "世界"], "special_strings");
+
+        run_print_builtin_test(
+            main_body,
+            &["Hello", "World", "Olá", "世界"],
+            "special_strings",
+        );
     }
 
     #[test]
@@ -431,7 +487,7 @@ fn main() {{
     let mut env = Environment::new();
     env.map_variable("value".to_string(), false, Expression::CVoid);
     print_builtin(&mut env);"#;
-        
+
         run_print_builtin_test(main_body, &["CVoid"], "cvoid");
     }
 
@@ -441,7 +497,7 @@ fn main() {{
     // Test when no "value" variable exists (should print empty string)
     let mut env = Environment::new();
     print_builtin(&mut env);"#;
-        
+
         run_print_builtin_test_exact(main_body, "\n", "no_value");
     }
 
@@ -449,17 +505,21 @@ fn main() {{
     fn test_print_builtin_return_value() {
         // Test that print_builtin returns Statement::Return(CVoid)
         let mut env = Environment::new();
-        env.map_variable("value".to_string(), false, Expression::CString("test".to_string()));
-        
+        env.map_variable(
+            "value".to_string(),
+            false,
+            Expression::CString("test".to_string()),
+        );
+
         let result = print_builtin(&mut env);
-        
+
         match result {
             Statement::Return(expr) => {
                 match *expr {
                     Expression::CVoid => (), // Expected
                     _ => panic!("print_builtin should return Statement::Return(CVoid)"),
                 }
-            },
+            }
             _ => panic!("print_builtin should return Statement::Return"),
         }
     }
@@ -480,8 +540,13 @@ fn main() {{
         }
         _ => panic!("Expected Statement::Return"),
     }"#;
-        
-        run_input_builtin_test(main_body, "Alice\n", &["Enter your name: ", "Input received: Alice"], "with_prompt");
+
+        run_input_builtin_test(
+            main_body,
+            "Alice\n",
+            &["Enter your name: ", "Input received: Alice"],
+            "with_prompt",
+        );
     }
 
     #[test]
@@ -499,8 +564,13 @@ fn main() {{
         }
         _ => panic!("Expected Statement::Return"),
     }"#;
-        
-        run_input_builtin_test(main_body, "Bob\n", &["Input received: Bob"], "without_prompt");
+
+        run_input_builtin_test(
+            main_body,
+            "Bob\n",
+            &["Input received: Bob"],
+            "without_prompt",
+        );
     }
 
     #[test]
@@ -519,8 +589,13 @@ fn main() {{
         }
         _ => panic!("Expected Statement::Return"),
     }"#;
-        
-        run_input_builtin_test(main_body, "\n", &["Press Enter: ", "Input length: 0"], "empty_input");
+
+        run_input_builtin_test(
+            main_body,
+            "\n",
+            &["Press Enter: ", "Input length: 0"],
+            "empty_input",
+        );
     }
 
     #[test]
@@ -539,8 +614,13 @@ fn main() {{
         }
         _ => panic!("Expected Statement::Return"),
     }"#;
-        
-        run_input_builtin_test(main_body, "Hello World! 123\n", &["Enter text: ", "Input received: 'Hello World! 123'"], "multiline_input");
+
+        run_input_builtin_test(
+            main_body,
+            "Hello World! 123\n",
+            &["Enter text: ", "Input received: 'Hello World! 123'"],
+            "multiline_input",
+        );
     }
 
     #[test]
@@ -551,11 +631,19 @@ fn main() {{
         fs::write(test_file_path, test_content).unwrap();
 
         let mut env: Environment<Expression> = Environment::new();
-        env.map_variable("path".to_string(), false, Expression::CString(test_file_path.to_string()));
-        env.map_variable("mode".to_string(), false, Expression::CString("r".to_string()));
+        env.map_variable(
+            "path".to_string(),
+            false,
+            Expression::CString(test_file_path.to_string()),
+        );
+        env.map_variable(
+            "mode".to_string(),
+            false,
+            Expression::CString("r".to_string()),
+        );
 
         let result = open_builtin(&mut env);
-        
+
         match result {
             Statement::Return(expr) => {
                 if let Expression::CString(content) = *expr {
@@ -577,12 +665,24 @@ fn main() {{
         let test_content = "This is a test write.";
 
         let mut env: Environment<Expression> = Environment::new();
-        env.map_variable("path".to_string(), false, Expression::CString(test_file_path.to_string()));
-        env.map_variable("mode".to_string(), false, Expression::CString("w".to_string()));
-        env.map_variable("content".to_string(), false, Expression::CString(test_content.to_string()));
+        env.map_variable(
+            "path".to_string(),
+            false,
+            Expression::CString(test_file_path.to_string()),
+        );
+        env.map_variable(
+            "mode".to_string(),
+            false,
+            Expression::CString("w".to_string()),
+        );
+        env.map_variable(
+            "content".to_string(),
+            false,
+            Expression::CString(test_content.to_string()),
+        );
 
         let result = open_builtin(&mut env);
-        
+
         match result {
             Statement::Return(expr) => {
                 if let Expression::CVoid = *expr {
@@ -607,17 +707,35 @@ fn main() {{
         fs::write(test_file_path, initial_content).unwrap();
 
         let mut env: Environment<Expression> = Environment::new();
-        env.map_variable("path".to_string(), false, Expression::CString(test_file_path.to_string()));
-        env.map_variable("mode".to_string(), false, Expression::CString("a".to_string()));
-        env.map_variable("content".to_string(), false, Expression::CString(append_content.to_string()));
+        env.map_variable(
+            "path".to_string(),
+            false,
+            Expression::CString(test_file_path.to_string()),
+        );
+        env.map_variable(
+            "mode".to_string(),
+            false,
+            Expression::CString("a".to_string()),
+        );
+        env.map_variable(
+            "content".to_string(),
+            false,
+            Expression::CString(append_content.to_string()),
+        );
 
         let result = open_builtin(&mut env);
         match result {
             Statement::Return(expr) => {
                 if let Expression::CVoid = *expr {
                     let content = fs::read_to_string(test_file_path).unwrap();
-                    assert!(content.contains(initial_content), "File should contain initial content");
-                    assert!(content.contains(append_content), "File should contain appended content");
+                    assert!(
+                        content.contains(initial_content),
+                        "File should contain initial content"
+                    );
+                    assert!(
+                        content.contains(append_content),
+                        "File should contain appended content"
+                    );
                 } else {
                     panic!("Expected CVoid after appending to file");
                 }
@@ -625,22 +743,31 @@ fn main() {{
             _ => panic!("Expected Statement::Return"),
         }
         fs::remove_file(test_file_path).unwrap();
-
     }
 
     #[test]
     fn test_open_builtin_unsupported_mode() {
-
         let mut env: Environment<Expression> = Environment::new();
-        env.map_variable("path".to_string(), false, Expression::CString("dummy.txt".to_string()));
-        env.map_variable("mode".to_string(), false, Expression::CString("x".to_string())); // Unsupported mode
+        env.map_variable(
+            "path".to_string(),
+            false,
+            Expression::CString("dummy.txt".to_string()),
+        );
+        env.map_variable(
+            "mode".to_string(),
+            false,
+            Expression::CString("x".to_string()),
+        ); // Unsupported mode
 
         let result = open_builtin(&mut env);
-        
+
         match result {
             Statement::Return(expr) => {
                 if let Expression::CString(msg) = *expr {
-                    assert_eq!(msg, "open: unsupported mode 'x'.", "Error message should match");
+                    assert_eq!(
+                        msg, "open: unsupported mode 'x'.",
+                        "Error message should match"
+                    );
                 } else {
                     panic!("Expected CString with error message");
                 }
@@ -652,36 +779,57 @@ fn main() {{
     #[test]
     fn test_open_builtin_read_invalid_path() {
         let mut env: Environment<Expression> = Environment::new();
-        env.map_variable("path".to_string(), false, Expression::CString("invalid_path.txt".to_string()));
-        env.map_variable("mode".to_string(), false, Expression::CString("r".to_string()));
+        env.map_variable(
+            "path".to_string(),
+            false,
+            Expression::CString("invalid_path.txt".to_string()),
+        );
+        env.map_variable(
+            "mode".to_string(),
+            false,
+            Expression::CString("r".to_string()),
+        );
 
         let result = open_builtin(&mut env);
 
         match result {
             Statement::Return(expr) => {
                 if let Expression::CString(msg) = *expr {
-                    assert!(msg.contains("open: could not open 'invalid_path.txt' for reading"), "Error message should indicate invalid path");
+                    assert!(
+                        msg.contains("open: could not open 'invalid_path.txt' for reading"),
+                        "Error message should indicate invalid path"
+                    );
                 } else {
                     panic!("Expected CString with error message");
                 }
             }
             _ => panic!("Expected Statement::Return"),
         }
-
     }
 
     #[test]
     fn test_open_builtin_read_nonexistent_file() {
         let mut env: Environment<Expression> = Environment::new();
-        env.map_variable("path".to_string(), false, Expression::CString("nonexistent.txt".to_string()));
-        env.map_variable("mode".to_string(), false, Expression::CString("r".to_string()));
+        env.map_variable(
+            "path".to_string(),
+            false,
+            Expression::CString("nonexistent.txt".to_string()),
+        );
+        env.map_variable(
+            "mode".to_string(),
+            false,
+            Expression::CString("r".to_string()),
+        );
 
         let result = open_builtin(&mut env);
-        
+
         match result {
             Statement::Return(expr) => {
                 if let Expression::CString(msg) = *expr {
-                    assert!(msg.contains("open: could not open 'nonexistent.txt' for reading"), "Error message should indicate file not found");
+                    assert!(
+                        msg.contains("open: could not open 'nonexistent.txt' for reading"),
+                        "Error message should indicate file not found"
+                    );
                 } else {
                     panic!("Expected CString with error message");
                 }
@@ -696,12 +844,24 @@ fn main() {{
         let test_file_path = "test_empty_write_file.txt";
 
         let mut env: Environment<Expression> = Environment::new();
-        env.map_variable("path".to_string(), false, Expression::CString(test_file_path.to_string()));
-        env.map_variable("mode".to_string(), false, Expression::CString("w".to_string()));
-        env.map_variable("content".to_string(), false, Expression::CString("".to_string()));
+        env.map_variable(
+            "path".to_string(),
+            false,
+            Expression::CString(test_file_path.to_string()),
+        );
+        env.map_variable(
+            "mode".to_string(),
+            false,
+            Expression::CString("w".to_string()),
+        );
+        env.map_variable(
+            "content".to_string(),
+            false,
+            Expression::CString("".to_string()),
+        );
 
         let result = open_builtin(&mut env);
-        
+
         match result {
             Statement::Return(expr) => {
                 if let Expression::CVoid = *expr {
@@ -720,11 +880,19 @@ fn main() {{
     #[test]
     fn test_open_builtin_write_missing_content_argument() {
         let mut env: Environment<Expression> = Environment::new();
-        env.map_variable("path".to_string(), false, Expression::CString("dummy.txt".to_string()));
-        env.map_variable("mode".to_string(), false, Expression::CString("w".to_string()));
+        env.map_variable(
+            "path".to_string(),
+            false,
+            Expression::CString("dummy.txt".to_string()),
+        );
+        env.map_variable(
+            "mode".to_string(),
+            false,
+            Expression::CString("w".to_string()),
+        );
 
         let result = open_builtin(&mut env);
-        
+
         match result {
             Statement::Return(expr) => {
                 if let Expression::CString(msg) = *expr {
@@ -741,14 +909,21 @@ fn main() {{
     fn test_open_builtin_first_argument_not_string() {
         let mut env: Environment<Expression> = Environment::new();
         env.map_variable("path".to_string(), false, Expression::CInt(42));
-        env.map_variable("mode".to_string(), false, Expression::CString("r".to_string()));
+        env.map_variable(
+            "mode".to_string(),
+            false,
+            Expression::CString("r".to_string()),
+        );
 
         let result = open_builtin(&mut env);
-        
+
         match result {
             Statement::Return(expr) => {
                 if let Expression::CString(msg) = *expr {
-                    assert_eq!(msg, "open: first argument must be a string with the file path", "Error message should indicate invalid first argument");
+                    assert_eq!(
+                        msg, "open: first argument must be a string with the file path",
+                        "Error message should indicate invalid first argument"
+                    );
                 } else {
                     panic!("Expected CString with error message");
                 }
@@ -760,8 +935,16 @@ fn main() {{
     #[test]
     fn test_open_builtin_append_missing_content_argument() {
         let mut env: Environment<Expression> = Environment::new();
-        env.map_variable("path".to_string(), false, Expression::CString("dummy.txt".to_string()));
-        env.map_variable("mode".to_string(), false, Expression::CString("a".to_string()));
+        env.map_variable(
+            "path".to_string(),
+            false,
+            Expression::CString("dummy.txt".to_string()),
+        );
+        env.map_variable(
+            "mode".to_string(),
+            false,
+            Expression::CString("a".to_string()),
+        );
 
         let result = open_builtin(&mut env);
         match result {
@@ -774,6 +957,5 @@ fn main() {{
             }
             _ => panic!("Expected Statement::Return"),
         }
-
     }
-} 
+}

@@ -14,28 +14,29 @@ pub mod environment;
 pub mod interpreter;
 pub mod ir;
 pub mod parser;
-pub mod type_checker;
 pub mod stdlib;
+pub mod type_checker;
 
 fn main() {
     println!("Hello, world!");
-    
+
     // Testes da tabela estática de metabuiltins
-    test_metabuiltins_static_table();
-    
+    //test_metabuiltins_static_table();
+
     // Teste interativo da função input
-    test_metabuiltins_input_interativo();
+    //test_metabuiltins_input_interativo();
 }
 
+/*
 fn test_metabuiltins_static_table() {
     println!("\n=== Testando Tabela Estática de Metabuiltins ===");
-    
+
     // Teste 1: Verificar se a tabela estática está disponível
     println!("1. Verificando disponibilidade da tabela estática...");
     let table = stdlib::standard_library::get_metabuiltins_table();
     println!("   ✓ Tabela estática criada com sucesso");
     println!("   ✓ Número de funções na tabela: {}", table.len());
-    
+
     // Teste 2: Verificar se as funções esperadas estão presentes
     println!("\n2. Verificando funções na tabela...");
     if table.contains_key("input") {
@@ -43,19 +44,23 @@ fn test_metabuiltins_static_table() {
     } else {
         println!("   ✗ Função 'input' NÃO encontrada na tabela");
     }
-    
+
     if table.contains_key("print") {
         println!("   ✓ Função 'print' encontrada na tabela");
     } else {
         println!("   ✗ Função 'print' NÃO encontrada na tabela");
     }
-    
+
     // Teste 3: Verificar se as funções são callable
     println!("\n3. Testando se as funções são executáveis...");
     if let Some(print_func) = table.get("print") {
         let mut env = environment::environment::Environment::new();
-        env.map_variable("value".to_string(), false, ir::ast::Expression::CString("Teste da tabela estática!".to_string()));
-        
+        env.map_variable(
+            "value".to_string(),
+            false,
+            ir::ast::Expression::CString("Teste da tabela estática!".to_string()),
+        );
+
         let result = print_func(&mut env);
         match result {
             ir::ast::Statement::Return(_) => {
@@ -68,51 +73,55 @@ fn test_metabuiltins_static_table() {
     } else {
         println!("   ✗ Função 'print' não encontrada para teste");
     }
-    
+
     // Teste 4: Verificar se a tabela é realmente estática (mesma referência)
     println!("\n4. Verificando se a tabela é realmente estática...");
     let table1 = stdlib::standard_library::get_metabuiltins_table();
     let table2 = stdlib::standard_library::get_metabuiltins_table();
-    
+
     if std::ptr::eq(table1, table2) {
         println!("   ✓ Tabela é realmente estática (mesma referência)");
     } else {
         println!("   ✗ Tabela não é estática (referências diferentes)");
     }
-    
+
     // Teste 5: Listar todas as funções disponíveis
     println!("\n5. Listando todas as funções disponíveis:");
     for (name, _) in table.iter() {
         println!("   - {}", name);
     }
-    
+
     // Teste 6: Testar múltiplas chamadas da tabela
     println!("\n6. Testando múltiplas chamadas da tabela...");
     for i in 1..=3 {
         let table_call = stdlib::standard_library::get_metabuiltins_table();
         println!("   Chamada {}: {} funções encontradas", i, table_call.len());
     }
-    
+
     // Teste 7: Testar função print com diferentes tipos
     println!("\n7. Testando função print com diferentes tipos...");
     if let Some(print_func) = table.get("print") {
         let mut env = environment::environment::Environment::new();
-        
+
         // Teste com string
-        env.map_variable("value".to_string(), false, ir::ast::Expression::CString("String test".to_string()));
+        env.map_variable(
+            "value".to_string(),
+            false,
+            ir::ast::Expression::CString("String test".to_string()),
+        );
         let _ = print_func(&mut env);
-        
+
         // Teste com inteiro
         env.map_variable("value".to_string(), false, ir::ast::Expression::CInt(42));
         let _ = print_func(&mut env);
-        
+
         // Teste com real
         env.map_variable("value".to_string(), false, ir::ast::Expression::CReal(3.14));
         let _ = print_func(&mut env);
-        
+
         println!("   ✓ Função 'print' testada com diferentes tipos");
     }
-    
+
     // Teste 8: Verificar que funções inexistentes não são encontradas
     println!("\n8. Verificando funções inexistentes...");
     if table.get("funcao_inexistente").is_none() {
@@ -120,7 +129,7 @@ fn test_metabuiltins_static_table() {
     } else {
         println!("   ✗ Função inexistente foi encontrada (erro)");
     }
-    
+
     println!("\n=== Testes da Tabela Estática Concluídos ===");
 }
 
@@ -131,7 +140,11 @@ fn test_metabuiltins_input_interativo() {
     if let Some(input_func) = table.get("input") {
         let mut env = environment::environment::Environment::new();
         // Definir um prompt customizado
-        env.map_variable("prompt".to_string(), false, ir::ast::Expression::CString("Digite algo: ".to_string()));
+        env.map_variable(
+            "prompt".to_string(),
+            false,
+            ir::ast::Expression::CString("Digite algo: ".to_string()),
+        );
 
         // Chama a função input_builtin (vai esperar o usuário digitar algo)
         let result = input_func(&mut env);
@@ -141,12 +154,16 @@ fn test_metabuiltins_input_interativo() {
                 // Extrair a string do CString
                 if let ir::ast::Expression::CString(input_value) = *expr {
                     println!("   ✓ Valor digitado: '{}'", input_value);
-                    
+
                     // Agora usar a função print da tabela para mostrar o resultado
                     if let Some(print_func) = table.get("print") {
                         let mut print_env = environment::environment::Environment::new();
-                        print_env.map_variable("value".to_string(), false, ir::ast::Expression::CString(format!("Você digitou: {}", input_value)));
-                        
+                        print_env.map_variable(
+                            "value".to_string(),
+                            false,
+                            ir::ast::Expression::CString(format!("Você digitou: {}", input_value)),
+                        );
+
                         println!("   Usando função print da tabela:");
                         let _ = print_func(&mut print_env);
                     }
@@ -162,6 +179,7 @@ fn test_metabuiltins_input_interativo() {
         println!("   ✗ Função 'input' não encontrada na tabela");
     }
 }
+*/
 
 /*
 fn run_test(name: &str, program: &str) -> String {
