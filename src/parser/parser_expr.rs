@@ -1,7 +1,7 @@
 use nom::{
     branch::alt,
     bytes::complete::{tag, take_while},
-    character::complete::{char, digit1, multispace0, multispace1},
+    character::complete::{char, digit1, multispace0},
     combinator::{map, map_res, opt, value, verify},
     error::Error,
     multi::{fold_many0, separated_list0},
