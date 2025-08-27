@@ -13,9 +13,9 @@ use crate::ir::ast::Type;
 use crate::ir::ast::{FormalArgument, Function, Statement};
 use crate::parser::parser_common::{
     identifier, keyword, ASSERTEQ_KEYWORD, ASSERTFALSE_KEYWORD, ASSERTNEQ_KEYWORD,
-    ASSERTTRUE_KEYWORD, ASSERT_KEYWORD, COLON_CHAR, COMMA_CHAR, DEF_KEYWORD, ELSE_KEYWORD,
-    END_KEYWORD, EQUALS_CHAR, FOR_KEYWORD, FUNCTION_ARROW, IF_KEYWORD, IN_KEYWORD, LEFT_PAREN,
-    RIGHT_PAREN, SEMICOLON_CHAR, VAL_KEYWORD, VAR_KEYWORD, WHILE_KEYWORD, ELIF_KEYWORD
+    ASSERTTRUE_KEYWORD, ASSERT_KEYWORD, COLON_CHAR, COMMA_CHAR, DEF_KEYWORD, ELIF_KEYWORD,
+    ELSE_KEYWORD, END_KEYWORD, EQUALS_CHAR, FOR_KEYWORD, FUNCTION_ARROW, IF_KEYWORD, IN_KEYWORD,
+    LEFT_PAREN, RIGHT_PAREN, SEMICOLON_CHAR, VAL_KEYWORD, VAR_KEYWORD, WHILE_KEYWORD,
 };
 use crate::parser::parser_expr::parse_expression;
 use crate::parser::parser_type::parse_type;
@@ -108,11 +108,10 @@ fn parse_if_else_statement(input: &str) -> IResult<&str, Statement> {
 }
 
 pub fn parse_if_chain_statement(input: &str) -> IResult<&str, Statement> {
-    
     let (input_after_if, _) = keyword(IF_KEYWORD)(input)?;
     let (input_after_expr, cond_if) = parse_expression(input_after_if)?;
     let (input_after_block, block_if) = parse_block(input_after_expr)?;
-    
+
     let mut branches = vec![(Box::new(cond_if), Box::new(block_if))];
     let mut current_input = input_after_block;
 
@@ -509,7 +508,6 @@ mod tests {
 
     #[test]
     fn test_parse_if_chain_statement() {
-
         // Cenário 1: Apenas um "if", sem "elif" ou "else".
         let input_if_only = "if True: x = 1; end";
         let expected_if_only = Statement::IfChain {
@@ -569,22 +567,31 @@ mod tests {
         };
         let (_, parsed_if_elif_else) = parse_if_chain_statement(input_if_elif_else).unwrap();
         assert_eq!(parsed_if_elif_else, expected_if_elif_else);
-        
+
         // Cenário 4: "if" com múltiplos "elif" e sem "else".
         let input_multi_elif = "if a: x=1; end elif b: y=2; end elif c: z=3; end";
         let expected_multi_elif = Statement::IfChain {
             branches: vec![
                 (
                     Box::new(Expression::Var("a".to_string())),
-                    Box::new(Statement::Block(vec![Statement::Assignment("x".to_string(), Box::new(Expression::CInt(1)))])),
+                    Box::new(Statement::Block(vec![Statement::Assignment(
+                        "x".to_string(),
+                        Box::new(Expression::CInt(1)),
+                    )])),
                 ),
                 (
                     Box::new(Expression::Var("b".to_string())),
-                    Box::new(Statement::Block(vec![Statement::Assignment("y".to_string(), Box::new(Expression::CInt(2)))])),
+                    Box::new(Statement::Block(vec![Statement::Assignment(
+                        "y".to_string(),
+                        Box::new(Expression::CInt(2)),
+                    )])),
                 ),
                 (
                     Box::new(Expression::Var("c".to_string())),
-                    Box::new(Statement::Block(vec![Statement::Assignment("z".to_string(), Box::new(Expression::CInt(3)))])),
+                    Box::new(Statement::Block(vec![Statement::Assignment(
+                        "z".to_string(),
+                        Box::new(Expression::CInt(3)),
+                    )])),
                 ),
             ],
             else_branch: None,
@@ -867,5 +874,3 @@ mod tests {
         }
     }
 }
-
-
