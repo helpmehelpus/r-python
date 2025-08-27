@@ -1,5 +1,7 @@
+// Type alias for variable and function names
 pub type Name = String;
 
+// Represents a function in the AST
 #[derive(Clone, Debug, PartialEq)]
 pub struct Function {
     pub name: Name,
@@ -9,6 +11,7 @@ pub struct Function {
 }
 
 impl Function {
+    // Creates a new function with default values
     pub fn new() -> Function {
         return Function {
             name: "__main__".to_string(),
@@ -19,6 +22,7 @@ impl Function {
     }
 }
 
+// Represents a formal argument in a function definition
 #[derive(Debug, PartialEq, Clone)]
 pub struct FormalArgument {
     pub argument_name: Name,
@@ -26,6 +30,7 @@ pub struct FormalArgument {
 }
 
 impl FormalArgument {
+    // Creates a new formal argument
     pub fn new(argument_name: Name, argument_type: Type) -> Self {
         FormalArgument {
             argument_name,
@@ -34,6 +39,7 @@ impl FormalArgument {
     }
 }
 
+// Represents the types that can be used in the AST
 #[derive(Clone, Debug, PartialEq)]
 pub enum Type {
     TInteger,
@@ -50,6 +56,7 @@ pub enum Type {
     TAlgebraicData(Name, Vec<ValueConstructor>),
 }
 
+// Represents a value constructor for an algebraic data type
 #[derive(Debug, PartialEq, Clone)]
 pub struct ValueConstructor {
     pub name: Name,
@@ -57,14 +64,16 @@ pub struct ValueConstructor {
 }
 
 impl ValueConstructor {
+    // Creates a new value constructor
     pub fn new(name: Name, types: Vec<Type>) -> Self {
         ValueConstructor { name, types }
     }
 }
 
+// Represents expressions in the AST
 #[derive(Debug, PartialEq, Clone)]
 pub enum Expression {
-    /* constants */
+    // Constants
     CTrue,
     CFalse,
     CInt(i32),
@@ -72,24 +81,24 @@ pub enum Expression {
     CString(String),
     CVoid,
 
-    /* variable reference */
+    // Variable reference
     Var(Name),
 
-    /* function call */
+    // Function call
     FuncCall(Name, Vec<Expression>),
 
-    /* arithmetic expressions over numbers */
+    // Arithmetic expressions over numbers
     Add(Box<Expression>, Box<Expression>),
     Sub(Box<Expression>, Box<Expression>),
     Mul(Box<Expression>, Box<Expression>),
     Div(Box<Expression>, Box<Expression>),
 
-    /* boolean expressions over booleans */
+    // Boolean expressions over booleans
     And(Box<Expression>, Box<Expression>),
     Or(Box<Expression>, Box<Expression>),
     Not(Box<Expression>),
 
-    /* relational expressions over numbers */
+    // Relational expressions over numbers
     EQ(Box<Expression>, Box<Expression>),
     NEQ(Box<Expression>, Box<Expression>),
     GT(Box<Expression>, Box<Expression>),
@@ -97,10 +106,9 @@ pub enum Expression {
     GTE(Box<Expression>, Box<Expression>),
     LTE(Box<Expression>, Box<Expression>),
 
-    /* error-related expressions */
+    // Error-related expressions
     COk(Box<Expression>),
     CErr(Box<Expression>),
-
     CJust(Box<Expression>),
     CNothing,
     Unwrap(Box<Expression>),
@@ -108,11 +116,14 @@ pub enum Expression {
     IsNothing(Box<Expression>),
     Propagate(Box<Expression>),
 
+    // List value
     ListValue(Vec<Expression>),
 
+    // Constructor
     Constructor(Name, Vec<Box<Expression>>),
 }
 
+// Represents statements in the AST
 #[derive(Debug, PartialEq, Clone)]
 pub enum Statement {
     VarDeclaration(Name, Box<Expression>),
@@ -127,11 +138,11 @@ pub enum Statement {
     For(Name, Box<Expression>, Box<Statement>),
     Block(Vec<Statement>),
     Sequence(Box<Statement>, Box<Statement>),
-    Assert(Box<Expression>, Box<Expression>),
-    AssertTrue(Box<Expression>, String),
-    AssertFalse(Box<Expression>, String),
-    AssertEQ(Box<Expression>, Box<Expression>, String),
-    AssertNEQ(Box<Expression>, Box<Expression>, String),
+    Assert(Box<Expression>, Box<Expression>), //Segundo expression deve ser String
+    AssertTrue(Box<Expression>, Box<Expression>), //Segundo expression deve ser String
+    AssertFalse(Box<Expression>, Box<Expression>), //Segundo expression deve ser String
+    AssertEQ(Box<Expression>, Box<Expression>, Box<Expression>), //Terceiro expression deve ser String
+    AssertNEQ(Box<Expression>, Box<Expression>, Box<Expression>), //Terceiro expression deve ser String
     TestDef(Function),
     ModTestDef(Name, Box<Statement>),
     AssertFails(String),

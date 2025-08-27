@@ -1,7 +1,7 @@
 use nom::{
     branch::alt,
     bytes::complete::tag,
-    character::complete::{alpha1, multispace0, alphanumeric1},
+    character::complete::{alpha1, multispace0},
     combinator::{not, peek, recognize},
     multi::many0,
     sequence::{delimited, terminated},
@@ -34,9 +34,14 @@ pub const WHILE_KEYWORD: &str = "while";
 pub const FOR_KEYWORD: &str = "for";
 pub const IN_KEYWORD: &str = "in";
 pub const ASSERT_KEYWORD: &str = "assert";
+pub const ASSERTEQ_KEYWORD: &str = "asserteq";
+pub const ASSERTNEQ_KEYWORD: &str = "assertneq";
+pub const ASSERTTRUE_KEYWORD: &str = "asserttrue";
+pub const ASSERTFALSE_KEYWORD: &str = "assertfalse";
 pub const VAR_KEYWORD: &str = "var";
 pub const VAL_KEYWORD: &str = "val";
 pub const DEF_KEYWORD: &str = "def";
+pub const TEST_KEYWORD: &str = "test";
 
 // Operator and symbol constants
 pub const FUNCTION_ARROW: &str = "->";
@@ -71,12 +76,13 @@ pub fn separator<'a>(sep: &'static str) -> impl FnMut(&'a str) -> IResult<&'a st
 /// A implementação da função keyword foi alterada para que seja garantida que a keyword seja uma palavra completa e seja separada por um espaço
 pub fn keyword<'a>(kw: &'static str) -> impl FnMut(&'a str) -> IResult<&'a str, &'a str> {
     delimited(
-        multispace0, 
+        multispace0,
         terminated(
-            tag(kw), 
-            peek(not(alphanumeric1)), 
+            tag(kw),
+            // Ensure the keyword is not followed by an identifier character (letter, digit, or underscore)
+            peek(not(identifier_start_or_continue)),
         ),
-        multispace0, 
+        multispace0,
     )
 }
 
