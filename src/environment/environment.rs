@@ -49,6 +49,21 @@ impl<A: Clone> Scope<A> {
             .map(|(mutable, value)| (*mutable, value.clone()))
     }
 
+    fn update_var(&mut self, var: &Name, value: A) -> bool {
+        if let Some((mutable, slot)) = self.variables.get_mut(var) {
+            *slot = value;
+            // preserve existing mutability flag
+            let _ = mutable; // silence unused warning if optimised out
+            true
+        } else {
+            false
+        }
+    }
+
+    fn remove_var(&mut self, var: &Name) -> bool {
+        self.variables.remove(var).is_some()
+    }
+
     fn lookup_function(&self, name: &Name) -> Option<&Function> {
         self.functions.get(name)
     }
@@ -111,6 +126,30 @@ impl<A: Clone> Environment<A> {
             }
         }
         self.globals.lookup_var(var)
+    }
+
+    /// Update an existing variable in the nearest scope where it's defined.
+    /// Returns true if the variable existed and was updated; false otherwise.
+    pub fn update_existing_variable(&mut self, var: &Name, value: A) -> bool {
+        // Search local scopes first (top-most first)
+        for scope in self.stack.iter_mut() {
+            if scope.update_var(var, value.clone()) {
+                return true;
+            }
+        }
+        // Fallback to globals
+        self.globals.update_var(var, value)
+    }
+
+    /// Remove a variable from the nearest scope where it's defined.
+    /// Returns true if something was removed; false otherwise.
+    pub fn remove_variable(&mut self, var: &Name) -> bool {
+        for scope in self.stack.iter_mut() {
+            if scope.remove_var(var) {
+                return true;
+            }
+        }
+        self.globals.remove_var(var)
     }
 
     pub fn lookup_function(&self, name: &Name) -> Option<&Function> {

@@ -119,6 +119,9 @@ pub enum Expression {
     // List value
     ListValue(Vec<Expression>),
 
+    // Tuple value
+    Tuple(Vec<Expression>),
+
     // Constructor
     Constructor(Name, Vec<Box<Expression>>),
 }

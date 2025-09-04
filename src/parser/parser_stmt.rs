@@ -22,9 +22,9 @@ use crate::parser::parser_type::parse_type;
 
 pub fn parse_statement(input: &str) -> IResult<&str, Statement> {
     alt((
+        // Prefer keyword-led statements first to avoid consuming keywords as identifiers in assignments
         parse_var_declaration_statement,
         parse_val_declaration_statement,
-        parse_assignment_statement,
         parse_if_chain_statement,
         parse_if_else_statement,
         parse_while_statement,
@@ -36,6 +36,8 @@ pub fn parse_statement(input: &str) -> IResult<&str, Statement> {
         parse_asserttrue_statement,
         parse_test_function_definition_statement,
         parse_function_definition_statement,
+        // Fallback: generic assignment should be tried last
+        parse_assignment_statement,
     ))(input)
 }
 
@@ -150,9 +152,11 @@ fn parse_for_statement(input: &str) -> IResult<&str, Statement> {
     map(
         tuple((
             keyword(FOR_KEYWORD),
-            preceded(multispace1, identifier),
+            // keyword() already consumes trailing spaces; allow zero or more here
+            preceded(multispace0, identifier),
             preceded(multispace0, keyword(IN_KEYWORD)),
-            preceded(multispace1, parse_expression),
+            // Likewise, allow optional spaces before the iterable expression
+            preceded(multispace0, parse_expression),
             parse_block,
         )),
         |(_, var, _, expr, block)| Statement::For(var.to_string(), Box::new(expr), Box::new(block)),

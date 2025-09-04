@@ -248,7 +248,25 @@ pub fn execute(stmt: Statement, env: &Environment<Expression>) -> Result<Computa
                     return Ok(Computation::PropagateError(expr, new_env))
                 }
             };
-            new_env.map_variable(name, true, value);
+            // Respect existing mutability; if variable exists and is immutable, propagate error
+            match new_env.lookup(&name) {
+                Some((is_mut, _)) => {
+                    if !is_mut {
+                        return Ok(Computation::PropagateError(
+                            Expression::CString(format!(
+                                "Cannot assign to immutable variable '{}'",
+                                name
+                            )),
+                            new_env,
+                        ));
+                    }
+                    let _ = new_env.update_existing_variable(&name, value);
+                }
+                None => {
+                    // If not previously declared, create as mutable (back-compat with tests)
+                    new_env.map_variable(name, true, value);
+                }
+            }
             Ok(Computation::Continue(new_env))
         }
 
@@ -316,18 +334,22 @@ pub fn execute(stmt: Statement, env: &Environment<Expression>) -> Result<Computa
             }
         }
 
-        Statement::For(var, list, stmt) => {
-            let values = match eval(*list.clone(), &new_env)? {
+        Statement::For(var, expr, stmt) => {
+            let coll = match eval(*expr.clone(), &new_env)? {
                 ExpressionResult::Value(expr) => expr,
                 ExpressionResult::Propagate(expr) => {
                     return Ok(Computation::PropagateError(expr, new_env))
                 }
             };
 
-            match values {
-                Expression::ListValue(expressions) => {
-                    for exp in expressions {
-                        new_env.map_variable(var.clone(), false, exp);
+            match coll {
+                // List of values
+                Expression::ListValue(items) => {
+                    for item in items {
+                        // Bind loop variable in a transient manner: shadow during iteration
+                        // Save previous binding (if any)
+                        let prev = new_env.lookup(&var.clone());
+                        new_env.map_variable(var.clone(), false, item);
                         match execute(*stmt.clone(), &new_env)? {
                             Computation::Continue(env) => new_env = env,
                             Computation::Return(expr, env) => {
@@ -337,10 +359,84 @@ pub fn execute(stmt: Statement, env: &Environment<Expression>) -> Result<Computa
                                 return Ok(Computation::PropagateError(expr, env))
                             }
                         }
+                        // Restore previous binding after each iteration
+                        let _ = new_env.remove_variable(&var.clone());
+                        if let Some((was_mut, old_val)) = prev {
+                            new_env.map_variable(var.clone(), was_mut, old_val);
+                        }
                     }
-                    return Ok(Computation::Continue(new_env));
+                    Ok(Computation::Continue(new_env))
                 }
-                _ => unreachable!(),
+
+                // String - itera sobre caracteres
+                Expression::CString(s) => {
+                    for ch in s.chars() {
+                        let char_value = Expression::CString(ch.to_string());
+                        let prev = new_env.lookup(&var.clone());
+                        new_env.map_variable(var.clone(), false, char_value);
+                        match execute(*stmt.clone(), &new_env)? {
+                            Computation::Continue(env) => new_env = env,
+                            Computation::Return(expr, env) => {
+                                return Ok(Computation::Return(expr, env))
+                            }
+                            Computation::PropagateError(expr, env) => {
+                                return Ok(Computation::PropagateError(expr, env))
+                            }
+                        }
+                        let _ = new_env.remove_variable(&var.clone());
+                        if let Some((was_mut, old_val)) = prev {
+                            new_env.map_variable(var.clone(), was_mut, old_val);
+                        }
+                    }
+                    Ok(Computation::Continue(new_env))
+                }
+
+                // Tupla (assumindo que você tem Expression::Tuple)
+                Expression::Tuple(items) => {
+                    for item in items {
+                        let prev = new_env.lookup(&var.clone());
+                        new_env.map_variable(var.clone(), false, item);
+                        match execute(*stmt.clone(), &new_env)? {
+                            Computation::Continue(env) => new_env = env,
+                            Computation::Return(expr, env) => {
+                                return Ok(Computation::Return(expr, env))
+                            }
+                            Computation::PropagateError(expr, env) => {
+                                return Ok(Computation::PropagateError(expr, env))
+                            }
+                        }
+                        let _ = new_env.remove_variable(&var.clone());
+                        if let Some((was_mut, old_val)) = prev {
+                            new_env.map_variable(var.clone(), was_mut, old_val);
+                        }
+                    }
+                    Ok(Computation::Continue(new_env))
+                }
+
+                // Constructor (já existia)
+                Expression::Constructor(_, items) => {
+                    for item_expr in items {
+                        let item_value = *item_expr.clone();
+                        let prev = new_env.lookup(&var.clone());
+                        new_env.map_variable(var.clone(), false, item_value);
+                        match execute(*stmt.clone(), &new_env)? {
+                            Computation::Continue(env) => new_env = env,
+                            Computation::Return(expr, env) => {
+                                return Ok(Computation::Return(expr, env))
+                            }
+                            Computation::PropagateError(expr, env) => {
+                                return Ok(Computation::PropagateError(expr, env))
+                            }
+                        }
+                        let _ = new_env.remove_variable(&var.clone());
+                        if let Some((was_mut, old_val)) = prev {
+                            new_env.map_variable(var.clone(), was_mut, old_val);
+                        }
+                    }
+                    Ok(Computation::Continue(new_env))
+                }
+
+                _ => Err(String::from("Cannot iterate over provided expression")),
             }
         }
 
@@ -859,11 +955,9 @@ mod tests {
             let (_, result_expr) = result_value.unwrap();
             assert_eq!(result_expr, Expression::CInt(42));
 
-            // Check that loop variable i is still accessible with the last value
+            // With isolated loop scope, the iterator variable should NOT leak outside the loop
             let i_value = final_env.lookup(&"i".to_string());
-            assert!(i_value.is_some());
-            let (_, i_expr) = i_value.unwrap();
-            assert_eq!(i_expr, Expression::CInt(42));
+            assert!(i_value.is_none());
         }
 
         #[test]

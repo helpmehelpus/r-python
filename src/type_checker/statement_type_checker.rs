@@ -168,6 +168,28 @@ fn check_while_stmt(
     Ok(new_env)
 }
 
+// Função auxiliar para determinar o tipo do elemento iterável
+fn get_iterable_element_type(expr_type: &Type) -> Result<Type, ErrorMessage> {
+    match expr_type {
+        Type::TList(base_type) => Ok((**base_type).clone()),
+        Type::TString => Ok(Type::TString), // Caracteres como strings
+        Type::TTuple(types) => {
+            if types.is_empty() {
+                return Err("[Type Error] Cannot iterate over empty tuple type".to_string());
+            }
+
+            // Verificar se todos os tipos são iguais (tupla homogênea)
+            let first_type = &types[0];
+            if types.iter().all(|t| t == first_type) {
+                Ok(first_type.clone())
+            } else {
+                Err("[Type Error] Can only iterate over homogeneous tuples (all elements same type)".to_string())
+            }
+        }
+        _ => Err(format!("[Type Error] Type {:?} is not iterable", expr_type)),
+    }
+}
+
 fn check_for_stmt(
     var: Name,
     expr: Box<Expression>,
@@ -175,32 +197,31 @@ fn check_for_stmt(
     env: &Environment<Type>,
 ) -> Result<Environment<Type>, ErrorMessage> {
     let mut new_env = env.clone();
-    let _var_type = env.lookup(&var);
+    // Avaliar o tipo da expressão iterável
     let expr_type = check_expr(*expr, &new_env)?;
-    match expr_type {
-        Type::TList(base_type) => {
-            if let Some((_, t)) = env.lookup(&var) {
-                if t == *base_type || *base_type == Type::TAny {
-                    new_env = check_stmt(*stmt, &new_env)?;
-                    return Ok(new_env);
-                } else {
-                    return Err(format!(
-                        "[TypeError] Type mismatch between {:?} and {:?}",
-                        t, base_type
-                    ));
-                }
-            } else {
-                new_env.map_variable(var.clone(), false, *base_type);
-                new_env = check_stmt(*stmt, &new_env)?;
-                return Ok(new_env);
-            }
-        }
-        _ => {
-            return Err(format!(
-                "[TypeError] Expecting a List type, but found a {:?}",
-                expr_type
+
+    // Determinar o tipo do elemento
+    let element_type = get_iterable_element_type(&expr_type)?;
+
+    // Regra híbrida:
+    // - Se a variável já existe, não cria novo escopo e só checa o corpo.
+    // - Se não existe, mapeia a variável no escopo atual (imutável) e checa o corpo.
+    if let Some((_mutable, existing_type)) = new_env.lookup(&var) {
+        // Permitir TAny e igualdade de tipos
+        if existing_type == element_type
+            || element_type == Type::TAny
+            || existing_type == Type::TAny
+        {
+            check_stmt(*stmt, &new_env)
+        } else {
+            Err(format!(
+                "[Type Error] Type mismatch for iterator '{:?}': expected {:?}, found {:?}",
+                var, existing_type, element_type
             ))
         }
+    } else {
+        new_env.map_variable(var.clone(), false, element_type);
+        check_stmt(*stmt, &new_env)
     }
 }
 

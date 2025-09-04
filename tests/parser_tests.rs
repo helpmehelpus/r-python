@@ -109,6 +109,42 @@ mod expression_tests {
         assert_eq!(rest, "");
         assert_eq!(result, expected);
     }
+
+    #[test]
+    fn test_tuple_literals() {
+        let cases = vec![
+            (
+                "(1, 2, 3)",
+                Expression::Tuple(vec![
+                    Expression::CInt(1),
+                    Expression::CInt(2),
+                    Expression::CInt(3),
+                ]),
+            ),
+            (
+                "(\"hello\", True)",
+                Expression::Tuple(vec![
+                    Expression::CString("hello".to_string()),
+                    Expression::CTrue,
+                ]),
+            ),
+            ("()", Expression::Tuple(vec![])),
+            ("(42,)", Expression::Tuple(vec![Expression::CInt(42)])),
+            (
+                "((1, 2), (3, 4))",
+                Expression::Tuple(vec![
+                    Expression::Tuple(vec![Expression::CInt(1), Expression::CInt(2)]),
+                    Expression::Tuple(vec![Expression::CInt(3), Expression::CInt(4)]),
+                ]),
+            ),
+        ];
+
+        for (input, expected) in cases {
+            let (rest, result) = parse_expression(input).unwrap();
+            assert_eq!(rest, "");
+            assert_eq!(result, expected);
+        }
+    }
 }
 
 // Statement Tests
@@ -202,6 +238,75 @@ mod statement_tests {
         let (rest, result) = parse_statement(input).unwrap();
         assert_eq!(rest, "");
         assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_for_over_tuple() {
+        let cases = vec![
+            (
+                "for x in (1, 2, 3): x = x + 1; end",
+                Statement::For(
+                    "x".to_string(),
+                    Box::new(Expression::Tuple(vec![
+                        Expression::CInt(1),
+                        Expression::CInt(2),
+                        Expression::CInt(3),
+                    ])),
+                    Box::new(Statement::Block(vec![Statement::Assignment(
+                        "x".to_string(),
+                        Box::new(Expression::Add(
+                            Box::new(Expression::Var("x".to_string())),
+                            Box::new(Expression::CInt(1)),
+                        )),
+                    )])),
+                ),
+            ),
+            (
+                "for item in (\"a\", \"b\"): val x = item; end",
+                Statement::For(
+                    "item".to_string(),
+                    Box::new(Expression::Tuple(vec![
+                        Expression::CString("a".to_string()),
+                        Expression::CString("b".to_string()),
+                    ])),
+                    Box::new(Statement::Block(vec![Statement::ValDeclaration(
+                        "x".to_string(),
+                        Box::new(Expression::Var("item".to_string())),
+                    )])),
+                ),
+            ),
+            (
+                "for x in (): val y = 1; end",
+                Statement::For(
+                    "x".to_string(),
+                    Box::new(Expression::Tuple(vec![])),
+                    Box::new(Statement::Block(vec![Statement::ValDeclaration(
+                        "y".to_string(),
+                        Box::new(Expression::CInt(1)),
+                    )])),
+                ),
+            ),
+            (
+                "for t in ((1,2), (3,4)): val x = t; end",
+                Statement::For(
+                    "t".to_string(),
+                    Box::new(Expression::Tuple(vec![
+                        Expression::Tuple(vec![Expression::CInt(1), Expression::CInt(2)]),
+                        Expression::Tuple(vec![Expression::CInt(3), Expression::CInt(4)]),
+                    ])),
+                    Box::new(Statement::Block(vec![Statement::ValDeclaration(
+                        "x".to_string(),
+                        Box::new(Expression::Var("t".to_string())),
+                    )])),
+                ),
+            ),
+        ];
+
+        for (input, expected) in cases {
+            let (rest, result) = parse_statement(input).unwrap();
+            assert_eq!(rest, "");
+            assert_eq!(result, expected);
+        }
     }
 
     #[test]

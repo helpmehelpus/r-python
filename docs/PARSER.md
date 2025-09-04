@@ -60,6 +60,16 @@ The parser supports various types of statements:
 - Assert statements
 - ADT (Algebraic Data Type) declarations
 
+#### For statement semantics (iterables and scoping)
+
+- Syntax: `for <identifier> in <expression>: <block> end`
+- Supported iterables at parse time (resolved at runtime/type-check):
+    - Lists: `[e1, e2, ...]`
+    - Strings: "abc" (iterates over characters as 1-length strings)
+    - Tuples: `(e1, e2, ...)` (see tuple literals below)
+- Scoping: the loop variable is bound in an inner scope created for the loop body. It is not visible outside the loop.
+    - The variable is considered immutable by the type checker; each iteration rebinds it.
+
 ### Expression Parsing
 Handles different types of expressions:
 - Arithmetic expressions
@@ -68,6 +78,17 @@ Handles different types of expressions:
 - Variables
 - Literals (numbers, strings, booleans)
 - ADT constructors and pattern matching
+
+#### Tuple literals and parenthesis grouping
+
+The parser supports tuple literals and distinguishes them from parenthesized groupings:
+
+- Empty tuple: `()` -> `Expression::Tuple([])`
+- Single-element tuple: `(x,)` -> `Expression::Tuple([x])`
+- Multi-element tuple: `(x, y, z)` -> `Expression::Tuple([x, y, z])`
+- Grouping (no comma): `(expr)` -> parsed as `expr` (not a tuple)
+
+Tuples may be nested, e.g., `((1, 2), (3, 4))`.
 
 ### Type System
 Supports a rich type system including:
