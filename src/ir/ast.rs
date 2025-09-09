@@ -119,6 +119,9 @@ pub enum Expression {
     // List value
     ListValue(Vec<Expression>),
 
+    // Tuple value
+    Tuple(Vec<Expression>),
+
     // Constructor
     Constructor(Name, Vec<Box<Expression>>),
 }
@@ -130,6 +133,10 @@ pub enum Statement {
     ValDeclaration(Name, Box<Expression>),
     Assignment(Name, Box<Expression>),
     IfThenElse(Box<Expression>, Box<Statement>, Option<Box<Statement>>),
+    IfChain {
+        branches: Vec<(Box<Expression>, Box<Statement>)>,
+        else_branch: Option<Box<Statement>>,
+    },
     While(Box<Expression>, Box<Statement>),
     For(Name, Box<Expression>, Box<Statement>),
     Block(Vec<Statement>),

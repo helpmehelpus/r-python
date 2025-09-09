@@ -33,6 +33,7 @@ pub fn eval(exp: Expression, env: &Environment<Expression>) -> Result<Expression
         Expression::IsNothing(e) => eval_isnothing_expression(*e, env),
         Expression::FuncCall(name, args) => eval_function_call(name, args, env),
         Expression::ListValue(values) => eval_list_value(values, env),
+        Expression::Tuple(values) => eval_tuple_value(values, env),
         _ if is_constant(exp.clone()) => Ok(ExpressionResult::Value(exp)),
         _ => Err(String::from("Not implemented yet.")),
     }
@@ -533,6 +534,20 @@ fn eval_list_value(
         }
     }
     Ok(ExpressionResult::Value(Expression::ListValue(values)))
+}
+
+fn eval_tuple_value(
+    sub_expressions: Vec<Expression>,
+    env: &Environment<Expression>,
+) -> Result<ExpressionResult, String> {
+    let mut values = Vec::new();
+    for exp in sub_expressions {
+        match eval(exp, env)? {
+            ExpressionResult::Value(expr) => values.push(expr),
+            ExpressionResult::Propagate(expr) => return Ok(ExpressionResult::Propagate(expr)),
+        }
+    }
+    Ok(ExpressionResult::Value(Expression::Tuple(values)))
 }
 
 #[cfg(test)]
