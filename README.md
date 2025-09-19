@@ -24,6 +24,7 @@ Para uma compreensão mais profunda dos componentes do projeto, consulte nossa d
 
 - **[Type Checker Module](docs/type_checker.md)** - Sistema de verificação de tipos estática que analisa expressões e declarações para garantir segurança de tipos em tempo de compilação. Implementa regras de tipagem bem definidas para todos os construtos da linguagem. *(Em desenvolvimento)*
 
+
 ## 🤝 Contribuindo
 
 Adoraríamos contar com sua contribuição! Por favor, leia nossos guias de contribuição:
