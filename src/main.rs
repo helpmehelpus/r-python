@@ -14,8 +14,8 @@ pub mod environment;
 pub mod interpreter;
 pub mod ir;
 pub mod parser;
-pub mod type_checker;
 pub mod pretty_print;
+pub mod type_checker;
 
 fn main() {
     println!("Hello, world!");

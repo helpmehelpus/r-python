@@ -23,7 +23,13 @@ pub mod pretty_type;
 // Isso cria uma API conveniente e unificada. Em vez de um usuário do módulo precisar
 // importar de `crate::pretty_print::pretty_print::ToDoc`, ele pode simplesmente
 // importar de `crate::pretty_print::ToDoc`.
+// Reexports: mantidos para ergonomia; suprimimos warnings se alguns símbolos
+// não forem usados em determinados binários/testes.
+#[allow(unused_imports)]
 pub use pretty_expressions::*;
+#[allow(unused_imports)]
 pub use pretty_print::*;
+#[allow(unused_imports)]
 pub use pretty_statements::*;
+#[allow(unused_imports)]
 pub use pretty_type::*;

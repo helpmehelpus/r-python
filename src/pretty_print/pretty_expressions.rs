@@ -1,23 +1,21 @@
 // src/pretty_print/pretty_expressions.rs
 
-use std::rc::Rc;
+use super::pretty_print::{concat, group, line, nest, punctuate, space, text, Doc, ToDoc};
 use crate::ir::ast::Expression;
-use super::pretty_print::{
-    group, nest, nil, text, ToDoc, Doc, concat, line
-};
+use std::rc::Rc;
 
 // --- Níveis de Precedência dos Operadores ---
 // Define a ordem de operações para evitar o uso desnecessário de parênteses.
 // Um operador com maior precedência é avaliado antes de um com menor precedência.
 // Ex: `*` (PREC_MUL_DIV) tem maior precedência que `+` (PREC_ADD_SUB).
-const PREC_NONE: usize = 0;       // Contexto sem operador, como o topo de uma expressão.
-const PREC_OR: usize = 1;         // Precedência para o operador `or`.
-const PREC_AND: usize = 2;        // Precedência para o operador `and`.
+const PREC_NONE: usize = 0; // Contexto sem operador, como o topo de uma expressão.
+const PREC_OR: usize = 1; // Precedência para o operador `or`.
+const PREC_AND: usize = 2; // Precedência para o operador `and`.
 const PREC_RELATIONAL: usize = 3; // Precedência para operadores como `==`, `>`, `<`.
-const PREC_ADD_SUB: usize = 4;    // Precedência para `+`, `-`.
-const PREC_MUL_DIV: usize = 5;    // Precedência para `*`, `/`.
-const PREC_UNARY: usize = 6;      // Precedência para operadores unários como `not`.
-const PREC_CALL: usize = 7;       // Precedência para chamadas de função e construtores.
+const PREC_ADD_SUB: usize = 4; // Precedência para `+`, `-`.
+const PREC_MUL_DIV: usize = 5; // Precedência para `*`, `/`.
+const PREC_UNARY: usize = 6; // Precedência para operadores unários como `not`.
+const PREC_CALL: usize = 7; // Precedência para chamadas de função e construtores.
 
 // --- Implementação do Trait ---
 
@@ -37,9 +35,9 @@ impl Expression {
     /// # Argumentos
     /// * `parent_precedence` - O nível de precedência da expressão externa (pai).
     fn to_doc_inner(&self, parent_precedence: usize) -> Rc<Doc> {
-        /// Closure que adiciona parênteses a um `Doc` se a precedência atual
-        /// for menor que a do operador pai. Ex: em `(a + b) * c`, `+` tem
-        /// menor precedência que `*`, então `a + b` precisa de parênteses.
+        // Closure que adiciona parênteses a um `Doc` se a precedência atual
+        // for menor que a do operador pai. Ex: em `(a + b) * c`, `+` tem
+        // menor precedência que `*`, então `a + b` precisa de parênteses.
         let maybe_paren = |current_precedence, doc| {
             if current_precedence < parent_precedence {
                 concat(text("("), concat(doc, text(")")))
@@ -47,19 +45,31 @@ impl Expression {
                 doc
             }
         };
-        
-        /// Closure auxiliar para formatar operadores binários de forma consistente,
-        /// aplicando a lógica de parênteses.
-        let binary_op = |op, current_prec, lhs: &Expression, rhs: &Expression| {
-            let doc = concat(
-                // Formata o lado esquerdo, passando a precedência atual.
-                lhs.to_doc_inner(current_prec),
-                // Adiciona o operador.
-                concat(text(op), rhs.to_doc_inner(current_prec)),
-            );
-            // Adiciona parênteses se necessário.
-            maybe_paren(current_prec, doc)
-        };
+
+        // Closure auxiliar para formatar operadores binários de forma consistente,
+        // aplicando a lógica de parênteses.
+        // Closure parametrizada para operadores binários.
+        // Em operadores NÃO associativos (ex: -, /, comparações), o lado direito
+        // recebe uma precedência artificialmente MAIOR para forçar parênteses
+        // quando necessário e evitar reinterpretação incorreta.
+        let binary_op =
+            |op, current_prec, assoc: Associativity, lhs: &Expression, rhs: &Expression| {
+                let rhs_prec = match assoc {
+                    Associativity::Left => current_prec, // seguro para + e *
+                    Associativity::NonAssociative => current_prec + 1, // força parênteses no RHS quando igual
+                };
+                let doc = concat(
+                    lhs.to_doc_inner(current_prec),
+                    concat(text(op), rhs.to_doc_inner(rhs_prec)),
+                );
+                maybe_paren(current_prec, doc)
+            };
+
+        #[derive(Copy, Clone)]
+        enum Associativity {
+            Left,
+            NonAssociative,
+        }
 
         match self {
             // Literais e variáveis são simples: apenas converte para texto.
@@ -72,57 +82,73 @@ impl Expression {
             Expression::Var(name) => text(name.clone()),
 
             // Formatação para todos os operadores binários usando a closure `binary_op`.
-            Expression::Or(l, r) => binary_op(" or ", PREC_OR, l, r),
-            Expression::And(l, r) => binary_op(" and ", PREC_AND, l, r),
-            Expression::EQ(l, r) => binary_op(" == ", PREC_RELATIONAL, l, r),
-            Expression::NEQ(l, r) => binary_op(" != ", PREC_RELATIONAL, l, r),
-            Expression::GT(l, r) => binary_op(" > ", PREC_RELATIONAL, l, r),
-            Expression::LT(l, r) => binary_op(" < ", PREC_RELATIONAL, l, r),
-            Expression::GTE(l, r) => binary_op(" >= ", PREC_RELATIONAL, l, r),
-            Expression::LTE(l, r) => binary_op(" <= ", PREC_RELATIONAL, l, r),
-            Expression::Add(l, r) => binary_op(" + ", PREC_ADD_SUB, l, r),
-            Expression::Sub(l, r) => binary_op(" - ", PREC_ADD_SUB, l, r),
-            Expression::Mul(l, r) => binary_op(" * ", PREC_MUL_DIV, l, r),
-            Expression::Div(l, r) => binary_op(" / ", PREC_MUL_DIV, l, r),
+            Expression::Or(l, r) => binary_op(" or ", PREC_OR, Associativity::Left, l, r),
+            Expression::And(l, r) => binary_op(" and ", PREC_AND, Associativity::Left, l, r),
+            Expression::EQ(l, r) => {
+                binary_op(" == ", PREC_RELATIONAL, Associativity::NonAssociative, l, r)
+            }
+            Expression::NEQ(l, r) => {
+                binary_op(" != ", PREC_RELATIONAL, Associativity::NonAssociative, l, r)
+            }
+            Expression::GT(l, r) => {
+                binary_op(" > ", PREC_RELATIONAL, Associativity::NonAssociative, l, r)
+            }
+            Expression::LT(l, r) => {
+                binary_op(" < ", PREC_RELATIONAL, Associativity::NonAssociative, l, r)
+            }
+            Expression::GTE(l, r) => {
+                binary_op(" >= ", PREC_RELATIONAL, Associativity::NonAssociative, l, r)
+            }
+            Expression::LTE(l, r) => {
+                binary_op(" <= ", PREC_RELATIONAL, Associativity::NonAssociative, l, r)
+            }
+            Expression::Add(l, r) => binary_op(" + ", PREC_ADD_SUB, Associativity::Left, l, r),
+            Expression::Sub(l, r) => {
+                binary_op(" - ", PREC_ADD_SUB, Associativity::NonAssociative, l, r)
+            }
+            Expression::Mul(l, r) => binary_op(" * ", PREC_MUL_DIV, Associativity::Left, l, r),
+            Expression::Div(l, r) => {
+                binary_op(" / ", PREC_MUL_DIV, Associativity::NonAssociative, l, r)
+            }
 
             // Formatação para operadores unários.
             Expression::Not(expr) => {
                 let doc = concat(text("not "), expr.to_doc_inner(PREC_UNARY));
                 maybe_paren(PREC_UNARY, doc)
             }
-            Expression::Unwrap(expr) => {
-                 concat(expr.to_doc_inner(PREC_CALL), text("!"))
-            }
+            Expression::Unwrap(expr) => concat(expr.to_doc_inner(PREC_CALL), text("!")),
 
             // Estruturas complexas que podem ter quebra de linha.
             Expression::FuncCall(name, args) => {
-                let separator = concat(text(","), line()); // Separador: "," e uma possível quebra de linha.
-                let args_docs = args.iter().map(|arg| arg.to_doc_inner(PREC_NONE)).collect();
-                
+                let arg_docs: Vec<Rc<Doc>> =
+                    args.iter().map(|a| a.to_doc_inner(PREC_NONE)).collect();
+                let sep = concat(text(","), line());
+                let joined = punctuate(sep, &arg_docs);
                 concat(
                     text(name.clone()),
-                    // `group` permite que a lista de argumentos fique em uma linha ou
-                    // seja quebrada e indentada se não couber.
-                    group(concat(
-                        text("("),
-                        concat(nest(4, join(separator, args_docs)), text(")")),
-                    )),
+                    group(concat(text("("), concat(nest(4, joined), text(")")))),
                 )
             }
 
             Expression::ListValue(elements) => {
-                let separator = concat(text(","), line());
-                let elems_docs = elements.iter().map(|el| el.to_doc_inner(PREC_NONE)).collect();
-                
+                let elem_docs: Vec<Rc<Doc>> =
+                    elements.iter().map(|e| e.to_doc_inner(PREC_NONE)).collect();
+                let sep = concat(text(","), line());
+                let joined = punctuate(sep, &elem_docs);
                 group(concat(
                     text("["),
-                    concat(nest(4, concat(line(), join(separator, elems_docs))), concat(line(), text("]")))
+                    concat(nest(4, concat(line(), joined)), concat(line(), text("]"))),
                 ))
             }
 
             Expression::Constructor(name, args) => {
-                let args_docs = args.iter().map(|arg| arg.to_doc_inner(PREC_NONE)).collect();
-                let doc = concat(text(name.clone()), concat(text(" "), join(text(" "), args_docs)));
+                if args.is_empty() {
+                    return text(name.clone());
+                }
+                let arg_docs: Vec<Rc<Doc>> =
+                    args.iter().map(|a| a.to_doc_inner(PREC_NONE)).collect();
+                let spaced = punctuate(space(), &arg_docs);
+                let doc = concat(text(name.clone()), concat(space(), spaced));
                 maybe_paren(PREC_CALL, doc)
             }
 
@@ -131,22 +157,29 @@ impl Expression {
             Expression::CErr(expr) => concat(text("Err("), concat(expr.to_doc(), text(")"))),
             Expression::CJust(expr) => concat(text("Just("), concat(expr.to_doc(), text(")"))),
             Expression::CNothing => text("Nothing"),
-            
-            // Fallback para expressões que ainda não têm uma regra de formatação.
-            _ => text("/* expr not implemented */"),
+
+            // Predicados / inspeções
+            Expression::IsError(expr) => concat(
+                text("is_error("),
+                concat(expr.to_doc_inner(PREC_NONE), text(")")),
+            ),
+            Expression::IsNothing(expr) => concat(
+                text("is_nothing("),
+                concat(expr.to_doc_inner(PREC_NONE), text(")")),
+            ),
+
+            // Propagação (usamos sintaxe pseudo-operador ?)
+            Expression::Propagate(expr) => concat(expr.to_doc_inner(PREC_CALL), text("?")),
         }
     }
 }
 
-/// Função auxiliar para juntar uma lista de documentos com um separador.
-fn join(sep: Rc<Doc>, docs: Vec<Rc<Doc>>) -> Rc<Doc> {
-    docs.into_iter().reduce(|acc, doc| concat(acc, concat(sep.clone(), doc))).unwrap_or_else(nil)
-}
+// (função join antiga removida – usar helpers punctuate / join_balanced)
 
 #[cfg(test)]
 mod tests {
-    use crate::ir::ast::Expression;
     use super::*;
+    use crate::ir::ast::Expression;
     use crate::pretty_print::pretty;
 
     #[test]
@@ -160,7 +193,7 @@ mod tests {
         );
         assert_eq!(pretty(80, &expr.to_doc()), "(a + b) * c");
     }
-    
+
     #[test]
     fn test_precedence_relational_and() {
         let expr = Expression::And(
@@ -182,14 +215,51 @@ mod tests {
             Expression::CString("item longo".to_string()),
             Expression::CString("outro item longo".to_string()),
         ]);
-        
+
         let doc = list.to_doc();
 
         // Com espaço suficiente, a lista é formatada em uma única linha.
-        assert_eq!(pretty(100, &doc), "[ \"item longo\", \"outro item longo\" ]");
+        assert_eq!(
+            pretty(100, &doc),
+            "[ \"item longo\", \"outro item longo\" ]"
+        );
 
         // Com espaço limitado, a lista quebra a linha e indenta os elementos.
         let narrow_expected = "[\n    \"item longo\",\n    \"outro item longo\"\n]";
         assert_eq!(pretty(20, &doc), narrow_expected);
+    }
+
+    #[test]
+    fn test_precedence_sub_nested() {
+        // a - (b - c) deve manter parênteses ao re-imprimir.
+        let expr = Expression::Sub(
+            Box::new(Expression::Var("a".into())),
+            Box::new(Expression::Sub(
+                Box::new(Expression::Var("b".into())),
+                Box::new(Expression::Var("c".into())),
+            )),
+        );
+        assert_eq!(pretty(80, &expr.to_doc()), "a - (b - c)");
+    }
+
+    #[test]
+    fn test_precedence_div_nested() {
+        // a / (b / c) deve manter parênteses.
+        let expr = Expression::Div(
+            Box::new(Expression::Var("a".into())),
+            Box::new(Expression::Div(
+                Box::new(Expression::Var("b".into())),
+                Box::new(Expression::Var("c".into())),
+            )),
+        );
+        assert_eq!(pretty(80, &expr.to_doc()), "a / (b / c)");
+    }
+
+    #[test]
+    fn test_is_error_and_propagate_and_is_nothing() {
+        let expr = Expression::IsError(Box::new(Expression::Propagate(Box::new(
+            Expression::IsNothing(Box::new(Expression::Var("x".into()))),
+        ))));
+        assert_eq!(pretty(80, &expr.to_doc()), "is_error(is_nothing(x)?)");
     }
 }

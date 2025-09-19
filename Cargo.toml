@@ -7,3 +7,11 @@ edition = "2021"
 nom = "7.0"
 approx = "0.5.1"
 once_cell = "1.10"
+
+[features]
+# Ativar contadores de instrumentação do pretty printer
+pp-profile = []
+# Habilita cache experimental para resultados de flatten (memoization estrutural)
+pp-flatten-cache = []
+# Mede duração do render do pretty printer e expõe função com métricas
+pp-timing = []

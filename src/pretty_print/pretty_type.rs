@@ -1,15 +1,15 @@
 // src/pretty_print/pretty_type.rs
 
-use std::rc::Rc;
+use super::pretty_print::{concat, group, hardline, line, nest, nil, text, Doc, ToDoc};
 use crate::ir::ast::{Type, ValueConstructor};
-use super::pretty_print::{
-    group, line, nest, text, ToDoc, Doc, nil, concat, hardline
-};
+use std::rc::Rc;
 
 /// Função auxiliar para juntar uma lista de documentos (`Vec<Rc<Doc>>`)
 /// com um separador, resultando em um único documento.
 fn join(sep: Rc<Doc>, docs: Vec<Rc<Doc>>) -> Rc<Doc> {
-    docs.into_iter().reduce(|acc, doc| concat(acc, concat(sep.clone(), doc))).unwrap_or_else(nil)
+    docs.into_iter()
+        .reduce(|acc, doc| concat(acc, concat(sep.clone(), doc)))
+        .unwrap_or_else(nil)
 }
 
 /// Implementa a conversão de nós de `Type` da AST para a representação `Doc`.
@@ -31,13 +31,17 @@ impl ToDoc for Type {
             Type::TTuple(types) => {
                 let inner_docs = types.iter().map(|t| t.to_doc()).collect();
                 concat(text("("), concat(join(text(", "), inner_docs), text(")")))
-            },
+            }
 
             Type::TMaybe(t) => concat(text("Maybe["), concat(t.to_doc(), text("]"))),
 
-            Type::TResult(ok, err) => {
-                concat(text("Result["), concat(ok.to_doc(), concat(text(", "), concat(err.to_doc(), text("]")))))
-            }
+            Type::TResult(ok, err) => concat(
+                text("Result["),
+                concat(
+                    ok.to_doc(),
+                    concat(text(", "), concat(err.to_doc(), text("]"))),
+                ),
+            ),
 
             // A formatação de tipos de função usa `group` para um layout flexível.
             Type::TFunction(ret, params) => {
@@ -49,10 +53,10 @@ impl ToDoc for Type {
                     text("("),
                     concat(
                         nest(4, concat(line(), join(separator, params_docs))),
-                        concat(line(), text(")"))
-                    )
+                        concat(line(), text(")")),
+                    ),
                 ));
-                
+
                 let ret_doc = match ret.as_ref() {
                     Some(rt) => rt.to_doc(),
                     None => text("Unit"), // Retorno padrão se não especificado.
@@ -74,10 +78,10 @@ impl ToDoc for Type {
                             // e `nest` para indentá-los.
                             concat(
                                 nest(4, concat(hardline(), join(hardline(), ctors_docs))),
-                                concat(hardline(), text("end"))
-                            )
-                        )
-                    )
+                                concat(hardline(), text("end")),
+                            ),
+                        ),
+                    ),
                 )
             }
         }
@@ -100,11 +104,10 @@ impl ToDoc for ValueConstructor {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
-    use crate::ir::ast::{Type, ValueConstructor};
     use super::*;
+    use crate::ir::ast::{Type, ValueConstructor};
     use crate::pretty_print::pretty;
 
     #[test]
@@ -121,18 +124,22 @@ mod tests {
         let tuple_type = Type::TTuple(vec![Type::TInteger, Type::TReal]);
         assert_eq!(pretty(80, &tuple_type.to_doc()), "(Int, Real)");
     }
-    
+
     #[test]
     fn test_function_type_layout() {
         let func_type = Type::TFunction(
             Box::new(Some(Type::TString)),
-            vec![Type::TInteger, Type::TList(Box::new(Type::TBool)), Type::TReal],
+            vec![
+                Type::TInteger,
+                Type::TList(Box::new(Type::TBool)),
+                Type::TReal,
+            ],
         );
         let doc = func_type.to_doc();
 
         let expected_wide = "( Int, [Boolean], Real ) -> String";
         assert_eq!(pretty(80, &doc), expected_wide);
-        
+
         let expected_narrow = "(\n    Int,\n    [Boolean],\n    Real\n) -> String";
         assert_eq!(pretty(20, &doc), expected_narrow);
     }
@@ -142,7 +149,10 @@ mod tests {
         let adt = Type::TAlgebraicData(
             "MyList".to_string(),
             vec![
-                ValueConstructor::new("Cons".to_string(), vec![Type::TInteger, Type::TList(Box::new(Type::TInteger))]),
+                ValueConstructor::new(
+                    "Cons".to_string(),
+                    vec![Type::TInteger, Type::TList(Box::new(Type::TInteger))],
+                ),
                 ValueConstructor::new("Nil".to_string(), vec![]),
             ],
         );
