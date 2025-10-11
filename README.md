@@ -4,52 +4,284 @@
 [![GitHub issues](https://img.shields.io/github/issues/UnBCIC-TP2/r-python)](https://github.com/UnBCIC-TP2/r-python/issues)
 [![CI Status](https://img.shields.io/github/actions/workflow/status/UnBCIC-TP2/r-python/ci.yml?branch=main&label=ci-status&color=blue)](https://github.com/UnBCIC-TP2/r-python/actions)
 
+Um compilador/interpretador experimental escrito em Rust para uma linguagem com sintaxe inspirada no Python, mas com regras explícitas de tipagem estática e blocos delimitados por `end`. O projeto nasceu como ferramenta acadêmica para explorar conceitos de construção de compiladores e interpretação de linguagens.
 
-Um compilador experimental implementado em Rust que interpreta uma linguagem com sintaxe similar ao Python. Este projeto foi desenvolvido como ferramenta de aprendizado para conceitos de técnicas de programação.
+> 🔎 Precisa copiar o README inteiro? A versão crua está disponível em `README.md`, bastando abrir o arquivo em modo *Raw* no GitHub ou executar `cat README.md` após clonar o repositório.
 
-## 📋 Sobre o Projeto
+## 🧭 Índice
 
-RPython é um projeto educacional que visa:
-- Implementar um compilador funcional em Rust
-- Explorar conceitos fundamentais de técnicas de programação
-- Criar uma linguagem com sintaxe amigável similar ao Python
+- [Visão Geral](#-visão-geral)
+- [Arquitetura em Alto Nível](#-arquitetura-em-alto-nível)
+- [Catálogo de Features da Linguagem](#-catálogo-de-features-da-linguagem)
+  - [Literais e Operações Numéricas](#literais-e-operações-numéricas)
+  - [Lógica Booleana e Comparações](#lógica-booleana-e-comparações)
+  - [Listas e Tuplas](#listas-e-tuplas)
+  - [Declarações `val`/`var` e Atribuições](#declarações-valvar-e-atribuições)
+  - [Controle de Fluxo (`if`/`elif`/`else`, `while`, `for`)](#controle-de-fluxo-ifelifelse-while-for)
+  - [Funções Tipadas, Retorno e Recursão](#funções-tipadas-retorno-e-recursão)
+  - [Assertions em Tempo de Execução](#assertions-em-tempo-de-execução)
+  - [Blocos de Teste Automatizado](#blocos-de-teste-automatizado)
+  - [Valores `Result` e Propagação de Erros](#valores-result-e-propagação-de-erros)
+  - [Valores `Maybe` (Opcionais)](#valores-maybe-opcionais)
+  - [Construtores de Tipos Algébricos (ADT)](#construtores-de-tipos-algébricos-adt)
+- [Guia Rápido](#-guia-rápido)
+- [Documentação Complementar](#-documentação-complementar)
+- [Contribuindo](#-contribuindo)
 
-## 📚 Documentação
+## 📋 Visão Geral
 
-Para uma compreensão mais profunda dos componentes do projeto, consulte nossa documentação técnica:
+RPython tem como foco:
 
-- **[Environment Module](docs/environment.md)** - Sistema de gerenciamento de escopo lexical com tabela de símbolos para variáveis e funções. Implementa uma pilha de escopos com resolução adequada da cadeia de escopo.
+- **Aprendizado de compiladores:** o código-fonte serve como laboratório para parsing, análise semântica, verificação de tipos e interpretação.
+- **Linguagem familiar:** a sintaxe lembra Python, mas inclui recursos clássicos de linguagens fortemente tipadas (anotações obrigatórias em funções, declarações `var`/`val`, ADTs em desenvolvimento).
+- **Ferramentas modernas:** todo o pipeline é escrito em Rust, aproveitando segurança de memória e uma rica base de testes automatizados.
 
-- **[Parser Component](docs/parser.md)** - Componente de análise sintática que transforma código fonte em Árvore de Sintaxe Abstrata (AST). Usa a biblioteca `nom` e segue um design modular com funcionalidades especializadas para expressões, tipos e declarações.
+## 🏗️ Arquitetura em Alto Nível
 
-- **[Type Checker Module](docs/type_checker.md)** - Sistema de verificação de tipos estática que analisa expressões e declarações para garantir segurança de tipos em tempo de compilação. Implementa regras de tipagem bem definidas para todos os construtos da linguagem. *(Em desenvolvimento)*
+- **Parser (`src/parser`)** – Constrói a Árvore de Sintaxe Abstrata (AST) a partir do código-fonte utilizando `nom`.
+- **IR/AST (`src/ir`)** – Define as estruturas centrais da linguagem (expressões, declarações, tipos e construtores).
+- **Environment (`src/environment`)** – Implementa pilha de escopos para variáveis, funções e tipos.
+- **Type Checker (`src/type_checker`)** – Analisa programas para garantir consistência de tipos antes da execução. (Algumas funcionalidades avançadas ainda estão em desenvolvimento.)
+- **Interpreter (`src/interpreter`)** – Avalia a AST produzindo resultados de execução.
+- **Pretty Printer (`src/pretty_print`)** – Gera representações legíveis da AST, útil para debugging e tooling.
 
+## 🧪 Catálogo de Features da Linguagem
 
-## 🤝 Contribuindo
+Os módulos de AST, parser, verificação de tipos e interpretador já oferecem um conjunto sólido de recursos — de operações aritméticas a estruturas de controle, passando por coleções, funções tipadas e tratamento de erros. Consulte `src/ir/ast.rs` e `src/parser/parser_stmt.rs` para ver a implementação completa de cada construção apresentada abaixo. A seguir reunimos exemplos autoexplicativos para cada feature disponível hoje.
 
-Adoraríamos contar com sua contribuição! Por favor, leia nossos guias de contribuição:
-- [Guia de Contribuição em Português](CONTRIBUTING_pt.md)
-- [Contributing Guidelines in English](CONTRIBUTING_en.md)
+### Literais e Operações Numéricas
 
-## 🚀 Começando
+```text
+val inteiro = 42;
+val real = 3.14;
+
+val soma = inteiro + 8;
+val mix = real * 2.0 - inteiro;
+val divisao = inteiro / 2;
+```
+
+<!-- -->
+
+### Lógica Booleana e Comparações
+
+```text
+val idade = 20;
+val possui_autorizacao = False;
+
+val maior_de_idade = idade >= 18;
+val pode_participar = maior_de_idade or possui_autorizacao;
+val precisa_aviso = not maior_de_idade and possui_autorizacao == False;
+```
+
+### Listas e Tuplas
+
+```text
+val lista_vazia = [];
+val linguagens = ["RPython", "Rust", "Python"];
+val pares = [(1, "um"), (2, "dois")];
+val coordenada = (latitude, longitude, "Norte");
+```
+
+> ℹ️ Listas e tuplas aparecem como `ListValue` e `Tuple` na AST, garantindo suporte a coleções homogêneas e heterogêneas (veja `src/ir/ast.rs`).
+
+### Declarações `val`/`var` e Atribuições
+
+```text
+val nome = "RPython";      # imutável
+var contador = 0;          # mutável
+
+contador = contador + 1;
+val saudacao = "Olá, " + nome;
+```
+
+> ℹ️ Declarações `val`/`var` e reatribuições são modeladas por `Statement::ValDeclaration`, `Statement::VarDeclaration` e `Statement::Assignment` em `src/ir/ast.rs`.
+
+### Controle de Fluxo (`if`/`elif`/`else`, `while`, `for`)
+
+```text
+if nota >= 9:
+    conceito = "Excelente";
+elif nota >= 7:
+    conceito = "Bom";
+else:
+    conceito = "Recuperação";
+end
+
+var total = 0;
+while total < 3:
+    total = total + 1;
+end
+
+val numeros = [1, 2, 3];
+var soma = 0;
+for n in numeros:
+    soma = soma + n;
+end
+```
+
+> ℹ️ O núcleo reconhece `if`/`elif`/`else`, laços `while` e `for` como variantes específicas da AST, preservando o bloco associado a cada controle de fluxo (implementações em `src/ir/ast.rs` e `src/parser/parser_stmt.rs`).
+
+### Funções Tipadas, Retorno e Recursão
+
+```text
+def fibonacci(n: Int) -> Int:
+    if n <= 1:
+        return n;
+    end
+    return fibonacci(n - 1) + fibonacci(n - 2);
+end;
+
+val resultado = fibonacci(10);
+asserttrue(resultado == 55, "Fib(10) deve ser 55");
+```
+
+> ℹ️ Funções são representadas por `Function` + `Statement::FuncDef`, com anotações obrigatórias de tipos de parâmetros e retorno (`src/ir/ast.rs` e `src/parser/parser_stmt.rs`).
+
+### Assertions em Tempo de Execução
+
+```text
+asserttrue(condicao, "Mensagem de sucesso");
+assertfalse(condicao, "Mensagem de erro");
+asserteq(resultado, esperado, "Valores devem ser iguais");
+assertneq(id_atual, ultimo_id, "IDs não podem coincidir");
+```
+
+> ℹ️ Há variantes dedicadas para cada assertiva (`Assert`, `AssertTrue`, `AssertFalse`, `AssertEQ`, `AssertNEQ`) que permitem mensagens customizadas e integração com o runner de testes (detalhes em `src/ir/ast.rs`).
+
+### Blocos de Teste Automatizado
+
+```text
+test soma_basica():
+    val resultado = 2 + 3;
+    asserttrue(resultado == 5, "2 + 3 deve ser 5");
+end
+```
+
+> ℹ️ O interpretador expõe `Statement::TestDef` para registrar casos de teste e executá-los isoladamente com coleta de resultados (veja `src/ir/ast.rs` e `src/interpreter/statement_execute.rs`).
+
+### Valores `Result` e Propagação de Erros
+
+```text
+def dividir(a: Int, b: Int) -> Result[Int, String]:
+    if b == 0:
+        return Err("Divisão por zero");
+    end
+    return Ok(a / b);
+end;
+
+def dividir_e_incrementar(a: Int, b: Int, inc: Int) -> Result[Int, String]:
+    val quociente = dividir(a, b)?;   # Propaga Err automaticamente
+    return Ok(quociente + inc);
+end;
+
+val resultado = dividir_e_incrementar(10, 2, 1);
+assertfalse(is_error(resultado), "Esperávamos um Ok");
+```
+
+> ℹ️ Resultado de erros utiliza as variantes `COk`, `CErr`, `Propagate`, `IsError` e `Unwrap` dentro da AST e do interpretador, cobrindo desde a construção até a propagação de falhas (`src/ir/ast.rs` e `src/interpreter/expression_eval.rs`).
+
+### Valores `Maybe` (Opcionais)
+
+```text
+val nome = Just("RPython");
+
+if is_nothing(nome):
+    assertfalse(True, "Nome não deveria ser Nothing");
+end
+
+val texto = nome!;  # unwrap: lança erro se for Nothing
+```
+
+> ℹ️ Valores opcionais contam com `CJust`, `CNothing`, `IsNothing` e `Unwrap`, permitindo presença ou ausência de dados com verificação estática (consulte `src/ir/ast.rs` e `src/type_checker/expression_type_checker.rs`).
+
+### Construtores de Tipos Algébricos (ADT)
+
+```text
+data Forma:
+    | Circulo Int
+    | Retangulo Int Int
+end
+
+val figura = Circulo(5);
+```
+
+> ℹ️ Tipos algébricos são descritos por `Type::TAlgebraicData` e `ValueConstructor`, habilitando construtores nomeados com múltiplos campos (`src/ir/ast.rs`).
+
+> 💡 A sintaxe usa `;` para separar instruções dentro de blocos e a palavra-chave `end` para finalizar estruturas de controle e definições.
+
+## ⚙️ Guia Rápido
 
 ### Pré-requisitos
 
 - Rust (última versão estável)
-- Cargo (gerenciador de pacotes do Rust)
-- Git (para clonar o repositório)
-- Editor de texto ou IDE de sua preferência
+- Cargo (já incluído na instalação padrão do Rust)
+- Git
 
-### Configuração do Ambiente
+### Clonando o repositório
 
-1. Primeiro, instale o Rust e Cargo usando rustup:
-   - Windows: 
-     - Baixe e execute rustup-init.exe em https://rustup.rs
-     - Siga as instruções do instalador
-   - Linux/macOS:
-     - Abra o terminal e execute:
-     ```bash
-     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-     ```
-     - Siga as instruções do instalador
-     - Reinicie seu terminal após a instalação
+```bash
+git clone https://github.com/UnBCIC-TP2/r-python.git
+cd r-python
+```
+
+### Compilação e testes
+
+```bash
+# Compilar o projeto
+cargo build
+
+# Executar a suíte de testes
+cargo test
+```
+
+### Executando exemplos
+
+Você pode experimentar trechos da linguagem utilizando `cargo test -- --nocapture` para observar os programas de exemplo instrumentados no `main`. Em breve disponibilizaremos uma CLI dedicada para avaliar arquivos `.rpy` diretamente.
+
+### Copiando o README em formato raw
+
+Para copiar o conteúdo completo deste arquivo com um único comando, utilize uma das opções abaixo:
+
+```bash
+# Dentro do repositório clonado
+cat README.md
+
+# Diretamente do GitHub (substitua `main` pelo branch desejado, se necessário)
+curl -L https://raw.githubusercontent.com/UnBCIC-TP2/r-python/main/README.md
+```
+
+#### Enviando diretamente para a área de transferência
+
+Se preferir já deixar o conteúdo pronto para colar, é possível combinar os comandos acima com as ferramentas padrão de cada
+sistema operacional:
+
+```bash
+# macOS
+curl -L https://raw.githubusercontent.com/UnBCIC-TP2/r-python/main/README.md | pbcopy
+
+# Linux (utilizando xclip)
+curl -L https://raw.githubusercontent.com/UnBCIC-TP2/r-python/main/README.md | xclip -selection clipboard
+
+# Linux (Wayland com wl-copy)
+curl -L https://raw.githubusercontent.com/UnBCIC-TP2/r-python/main/README.md | wl-copy
+
+# Windows (PowerShell)
+curl https://raw.githubusercontent.com/UnBCIC-TP2/r-python/main/README.md | Set-Clipboard
+```
+
+> 💡 No Linux, instale o `xclip` com `sudo apt install xclip` (ou o gerenciador equivalente) caso não esteja disponível. Para ambientes Wayland, o pacote `wl-clipboard` fornece o comando `wl-copy` demonstrado acima.
+
+## 📚 Documentação Complementar
+
+- **[Environment Module](docs/environment.md)** – Escopos, tabelas de símbolos e política de resolução de nomes.
+- **[Parser Component](docs/parser.md)** – Estratégias de parsing com `nom`, gramática suportada e exemplos de AST.
+- **[Type Checker Module](docs/type_checker.md)** – Regras de tipagem, tipos suportados e roadmap do verificador. *(Em evolução)*
+
+## 🤝 Contribuindo
+
+Contribuições são muito bem-vindas! Antes de abrir issues ou enviar pull requests, consulte nossos guias:
+
+- [Guia de Contribuição em Português](CONTRIBUTING_pt.md)
+- [Contributing Guidelines in English](CONTRIBUTING_en.md)
+
+Fique à vontade para sugerir melhorias na linguagem, adicionar novos exemplos ou expandir a documentação.
