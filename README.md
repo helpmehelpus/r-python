@@ -238,39 +238,6 @@ cargo test
 
 Você pode experimentar trechos da linguagem utilizando `cargo test -- --nocapture` para observar os programas de exemplo instrumentados no `main`. Em breve disponibilizaremos uma CLI dedicada para avaliar arquivos `.rpy` diretamente.
 
-### Copiando o README em formato raw
-
-Para copiar o conteúdo completo deste arquivo com um único comando, utilize uma das opções abaixo:
-
-```bash
-# Dentro do repositório clonado
-cat README.md
-
-# Diretamente do GitHub (substitua `main` pelo branch desejado, se necessário)
-curl -L https://raw.githubusercontent.com/UnBCIC-TP2/r-python/main/README.md
-```
-
-#### Enviando diretamente para a área de transferência
-
-Se preferir já deixar o conteúdo pronto para colar, é possível combinar os comandos acima com as ferramentas padrão de cada
-sistema operacional:
-
-```bash
-# macOS
-curl -L https://raw.githubusercontent.com/UnBCIC-TP2/r-python/main/README.md | pbcopy
-
-# Linux (utilizando xclip)
-curl -L https://raw.githubusercontent.com/UnBCIC-TP2/r-python/main/README.md | xclip -selection clipboard
-
-# Linux (Wayland com wl-copy)
-curl -L https://raw.githubusercontent.com/UnBCIC-TP2/r-python/main/README.md | wl-copy
-
-# Windows (PowerShell)
-curl https://raw.githubusercontent.com/UnBCIC-TP2/r-python/main/README.md | Set-Clipboard
-```
-
-> 💡 No Linux, instale o `xclip` com `sudo apt install xclip` (ou o gerenciador equivalente) caso não esteja disponível. Para ambientes Wayland, o pacote `wl-clipboard` fornece o comando `wl-copy` demonstrado acima.
-
 ## 📚 Documentação Complementar
 
 - **[Environment Module](docs/environment.md)** – Escopos, tabelas de símbolos e política de resolução de nomes.
