@@ -1,6 +1,7 @@
 use crate::ir::ast::Function;
 use crate::ir::ast::Name;
 use crate::ir::ast::ValueConstructor;
+use indexmap::IndexMap;
 use std::collections::HashMap;
 use std::collections::LinkedList;
 
@@ -9,6 +10,7 @@ pub struct Scope<A> {
     pub variables: HashMap<Name, (bool, A)>,
     pub functions: HashMap<Name, Function>,
     pub adts: HashMap<Name, Vec<ValueConstructor>>,
+    pub tests: IndexMap<Name, Function>,
 }
 
 impl<A: Clone> Scope<A> {
@@ -17,6 +19,7 @@ impl<A: Clone> Scope<A> {
             variables: HashMap::new(),
             functions: HashMap::new(),
             adts: HashMap::new(),
+            tests: IndexMap::new(), //TODO: Apresentar Mudança no Environment
         }
     }
 
@@ -27,6 +30,11 @@ impl<A: Clone> Scope<A> {
 
     fn map_function(&mut self, function: Function) -> () {
         self.functions.insert(function.name.clone(), function);
+        return ();
+    }
+
+    fn map_test(&mut self, test: Function) -> () {
+        self.tests.insert(test.name.clone(), test);
         return ();
     }
 
@@ -41,8 +49,27 @@ impl<A: Clone> Scope<A> {
             .map(|(mutable, value)| (*mutable, value.clone()))
     }
 
+    fn update_var(&mut self, var: &Name, value: A) -> bool {
+        if let Some((mutable, slot)) = self.variables.get_mut(var) {
+            *slot = value;
+            // preserve existing mutability flag
+            let _ = mutable; // silence unused warning if optimised out
+            true
+        } else {
+            false
+        }
+    }
+
+    fn remove_var(&mut self, var: &Name) -> bool {
+        self.variables.remove(var).is_some()
+    }
+
     fn lookup_function(&self, name: &Name) -> Option<&Function> {
         self.functions.get(name)
+    }
+
+    fn lookup_test(&self, name: &Name) -> Option<&Function> {
+        self.tests.get(name)
     }
 
     fn lookup_adt(&self, name: &Name) -> Option<&Vec<ValueConstructor>> {
@@ -78,6 +105,13 @@ impl<A: Clone> Environment<A> {
         }
     }
 
+    pub fn map_test(&mut self, test: Function) -> () {
+        match self.stack.front_mut() {
+            None => self.globals.map_test(test),
+            Some(top) => top.map_test(test),
+        }
+    }
+
     pub fn map_adt(&mut self, name: Name, cons: Vec<ValueConstructor>) -> () {
         match self.stack.front_mut() {
             None => self.globals.map_adt(name, cons),
@@ -94,6 +128,30 @@ impl<A: Clone> Environment<A> {
         self.globals.lookup_var(var)
     }
 
+    /// Update an existing variable in the nearest scope where it's defined.
+    /// Returns true if the variable existed and was updated; false otherwise.
+    pub fn update_existing_variable(&mut self, var: &Name, value: A) -> bool {
+        // Search local scopes first (top-most first)
+        for scope in self.stack.iter_mut() {
+            if scope.update_var(var, value.clone()) {
+                return true;
+            }
+        }
+        // Fallback to globals
+        self.globals.update_var(var, value)
+    }
+
+    /// Remove a variable from the nearest scope where it's defined.
+    /// Returns true if something was removed; false otherwise.
+    pub fn remove_variable(&mut self, var: &Name) -> bool {
+        for scope in self.stack.iter_mut() {
+            if scope.remove_var(var) {
+                return true;
+            }
+        }
+        self.globals.remove_var(var)
+    }
+
     pub fn lookup_function(&self, name: &Name) -> Option<&Function> {
         for scope in self.stack.iter() {
             if let Some(func) = scope.lookup_function(name) {
@@ -101,6 +159,28 @@ impl<A: Clone> Environment<A> {
             }
         }
         self.globals.lookup_function(name)
+    }
+
+    pub fn lookup_test(&self, name: &Name) -> Option<&Function> {
+        for scope in self.stack.iter() {
+            if let Some(test) = scope.lookup_test(name) {
+                return Some(test);
+            }
+        }
+        self.globals.lookup_test(name)
+    }
+
+    pub fn get_all_tests(&self) -> Vec<Function> {
+        let mut tests = Vec::new();
+        for scope in self.stack.iter() {
+            for test in scope.tests.values() {
+                tests.push(test.clone());
+            }
+        }
+        for test in self.globals.tests.values() {
+            tests.push(test.clone());
+        }
+        tests
     }
 
     pub fn lookup_adt(&self, name: &Name) -> Option<&Vec<ValueConstructor>> {
@@ -144,6 +224,22 @@ impl<A: Clone> Environment<A> {
         }
 
         vars
+    }
+}
+
+pub struct TestResult {
+    pub name: Name,
+    pub result: bool,
+    pub error: Option<String>,
+}
+
+impl TestResult {
+    pub fn new(name: Name, result: bool, error: Option<String>) -> Self {
+        TestResult {
+            name,
+            result,
+            error,
+        }
     }
 }
 

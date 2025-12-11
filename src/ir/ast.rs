@@ -119,6 +119,9 @@ pub enum Expression {
     // List value
     ListValue(Vec<Expression>),
 
+    // Tuple value
+    Tuple(Vec<Expression>),
+
     // Constructor
     Constructor(Name, Vec<Box<Expression>>),
 }
@@ -130,15 +133,19 @@ pub enum Statement {
     ValDeclaration(Name, Box<Expression>),
     Assignment(Name, Box<Expression>),
     IfThenElse(Box<Expression>, Box<Statement>, Option<Box<Statement>>),
+    IfChain {
+        branches: Vec<(Box<Expression>, Box<Statement>)>,
+        else_branch: Option<Box<Statement>>,
+    },
     While(Box<Expression>, Box<Statement>),
     For(Name, Box<Expression>, Box<Statement>),
     Block(Vec<Statement>),
     Sequence(Box<Statement>, Box<Statement>),
-    Assert(Box<Expression>, Box<Expression>),
-    AssertTrue(Box<Expression>, String),
-    AssertFalse(Box<Expression>, String),
-    AssertEQ(Box<Expression>, Box<Expression>, String),
-    AssertNEQ(Box<Expression>, Box<Expression>, String),
+    Assert(Box<Expression>, Box<Expression>), //Segundo expression deve ser String
+    AssertTrue(Box<Expression>, Box<Expression>), //Segundo expression deve ser String
+    AssertFalse(Box<Expression>, Box<Expression>), //Segundo expression deve ser String
+    AssertEQ(Box<Expression>, Box<Expression>, Box<Expression>), //Terceiro expression deve ser String
+    AssertNEQ(Box<Expression>, Box<Expression>, Box<Expression>), //Terceiro expression deve ser String
     TestDef(Function),
     ModTestDef(Name, Box<Statement>),
     AssertFails(String),

@@ -117,12 +117,60 @@ fn parse_factor(input: &str) -> IResult<&str, Expression> {
         parse_list,
         parse_function_call,
         parse_var,
-        delimited(
-            char::<&str, Error<&str>>(LEFT_PAREN),
-            parse_expression,
-            char::<&str, Error<&str>>(RIGHT_PAREN),
-        ),
+        parse_paren_or_tuple,
     ))(input)
+}
+
+// Parses either a parenthesized expression or a tuple literal.
+// Cases:
+// - ()            => Tuple([])
+// - (x,)          => Tuple([x])
+// - (x, y, z)     => Tuple([...])
+// - (expr)        => expr (grouping)
+fn parse_paren_or_tuple(input: &str) -> IResult<&str, Expression> {
+    let (input, _) = char::<&str, Error<&str>>(LEFT_PAREN)(input)?;
+    let (input, _) = multispace0(input)?;
+
+    // Try to parse an optional first expression
+    let (input, first_opt) = opt(parse_expression)(input)?;
+    let (input, _) = multispace0(input)?;
+
+    // Try to consume a comma to decide if it's a tuple
+    let (input_after_comma_try, comma_opt) = opt(delimited(
+        multispace0,
+        char::<&str, Error<&str>>(COMMA_CHAR),
+        multispace0,
+    ))(input)?;
+
+    let (input, result_expr) = match (first_opt, comma_opt) {
+        (None, _) => {
+            // No expression inside: must be () => empty tuple
+            (input, Expression::Tuple(vec![]))
+        }
+        (Some(first), Some(_)) => {
+            // There was a comma: it's a tuple. Parse remaining elements (possibly zero)
+            let (input, rest) = separated_list0(
+                tuple((
+                    multispace0,
+                    char::<&str, Error<&str>>(COMMA_CHAR),
+                    multispace0,
+                )),
+                parse_expression,
+            )(input_after_comma_try)?;
+            let mut elements = Vec::with_capacity(1 + rest.len());
+            elements.push(first);
+            elements.extend(rest);
+            (input, Expression::Tuple(elements))
+        }
+        (Some(expr), None) => {
+            // Single expression and no comma: grouping
+            (input, expr)
+        }
+    };
+
+    let (input, _) = multispace0(input)?;
+    let (input, _) = char::<&str, Error<&str>>(RIGHT_PAREN)(input)?;
+    Ok((input, result_expr))
 }
 
 fn parse_bool(input: &str) -> IResult<&str, Expression> {

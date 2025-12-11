@@ -236,6 +236,34 @@ Error: type mismatch
 ```
 
 ### Statement Sequences
+### For Loops
+
+Typing rules for `for` loops support the following iterable types:
+
+- `TList(T)` iterates elements of type `T`.
+- `TString` iterates characters as `TString` (1-length strings).
+- `TTuple([T, T, ..., T])` iterates elements if and only if the tuple is homogeneous (all element types equal). Empty tuple is rejected.
+
+Scoping and binding:
+
+- The loop introduces an inner scope for the body using `push()`/`pop()`.
+- The iterator variable is bound as immutable to the element type in that inner scope.
+- The variable does not escape to the outer scope after the loop finishes.
+
+Formally:
+
+```
+Γ ⊢ e : TList(T)      or      Γ ⊢ e : TString      or      Γ ⊢ e : TTuple([T, ..., T]) (homogeneous, non-empty)
+Γ, x:T ⊢ s : Γ'    (checked in an inner scope)
+———————————————————————————————————————————————————————————————————————————————
+Γ ⊢ For(x, e, s) : Γ
+```
+
+Errors:
+
+- Non-iterable type in `e` → `[Type Error] Type <...> is not iterable`.
+- Empty tuple type → `[Type Error] Cannot iterate over empty tuple type`.
+- Heterogeneous tuple → `[Type Error] Can only iterate over homogeneous tuples (all elements same type)`.
 
 ```rust
 // Sequential composition
