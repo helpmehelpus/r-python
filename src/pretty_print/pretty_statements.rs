@@ -206,7 +206,7 @@ impl ToDoc for Statement {
             }
 
             // Metabuiltin statement: just emit its name as a standalone command.
-            Statement::MetaStmt(name) => concat(text("meta " ), text(name.clone())),
+            Statement::MetaStmt(name) => concat(text("meta "), text(name.clone())),
 
             // Test definitions (similar a function, mas preservando palavra-chave test/modtest)
             Statement::TestDef(func) => {
