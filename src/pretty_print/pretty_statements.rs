@@ -205,6 +205,9 @@ impl ToDoc for Statement {
                 )
             }
 
+            // Statement de expressão: apenas imprime a expressão seguida de ';'
+            Statement::ExprStmt(expr) => concat(expr.to_doc(), text(";")),
+
             // Metabuiltin statement: just emit its name as a standalone command.
             Statement::MetaStmt(name) => concat(text("meta "), text(name.clone())),
 

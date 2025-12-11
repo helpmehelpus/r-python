@@ -152,5 +152,7 @@ pub enum Statement {
     FuncDef(Function),
     Return(Box<Expression>),
     TypeDeclaration(Name, Vec<ValueConstructor>),
+    /// Avalia uma expressão apenas por seus efeitos colaterais (ex: chamada de função).
+    ExprStmt(Box<Expression>),
     MetaStmt(String),
 }

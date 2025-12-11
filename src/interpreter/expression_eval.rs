@@ -1,6 +1,7 @@
 use super::statement_execute::Computation;
 use crate::environment::environment::Environment;
-use crate::ir::ast::{Expression, Name};
+use crate::ir::ast::{Expression, Name, Statement};
+use crate::stdlib::standard_library::get_metabuiltins_table;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum ExpressionResult {
@@ -422,7 +423,125 @@ pub fn eval_function_call(
                 Err(e) => Err(e),
             }
         }
-        _ => Err(format!("Function {} not found", name)),
+        None => {
+            // Se não for função definida pelo usuário, tenta despachar para a stdlib
+            let table = get_metabuiltins_table();
+            if let Some(meta_fn) = table.get(&name) {
+                let mut meta_env: Environment<Expression> = Environment::new();
+
+                match name.as_str() {
+                    // input([prompt]) -> String
+                    "input" => {
+                        if let Some(prompt_expr) = args.get(0) {
+                            let prompt_val = match eval(prompt_expr.clone(), env)? {
+                                ExpressionResult::Value(Expression::CString(s)) => {
+                                    Expression::CString(s)
+                                }
+                                ExpressionResult::Value(v) => {
+                                    // Fallback simples: usa Debug para montar string
+                                    Expression::CString(format!("{:?}", v))
+                                }
+                                ExpressionResult::Propagate(e) => {
+                                    return Ok(ExpressionResult::Propagate(e))
+                                }
+                            };
+                            meta_env.map_variable("prompt".to_string(), false, prompt_val);
+                        }
+
+                        let stmt = meta_fn(&mut meta_env);
+                        if let Statement::Return(expr) = stmt {
+                            Ok(ExpressionResult::Value(*expr))
+                        } else {
+                            Err("[Runtime Error] input builtin did not return a value".into())
+                        }
+                    }
+
+                    // print(value) -> Unit, com efeito em stdout
+                    "print" => {
+                        if args.len() != 1 {
+                            return Err("[Runtime Error] print expects exactly 1 argument".into());
+                        }
+                        let val = match eval(args[0].clone(), env)? {
+                            ExpressionResult::Value(v) => v,
+                            ExpressionResult::Propagate(e) => {
+                                return Ok(ExpressionResult::Propagate(e))
+                            }
+                        };
+                        meta_env.map_variable("value".to_string(), false, val);
+                        let _ = meta_fn(&mut meta_env);
+                        Ok(ExpressionResult::Value(Expression::CVoid))
+                    }
+
+                    // open(path, [mode], [content]) -> String ou Unit
+                    "open" => {
+                        if args.is_empty() {
+                            return Err(
+                                "[Runtime Error] open expects at least 1 argument (path)".into()
+                            );
+                        }
+
+                        // path
+                        let path_val = match eval(args[0].clone(), env)? {
+                            ExpressionResult::Value(Expression::CString(s)) => {
+                                Expression::CString(s)
+                            }
+                            ExpressionResult::Value(_) => {
+                                return Err("[Runtime Error] open path must be a string".into());
+                            }
+                            ExpressionResult::Propagate(e) => {
+                                return Ok(ExpressionResult::Propagate(e))
+                            }
+                        };
+                        meta_env.map_variable("path".to_string(), false, path_val);
+
+                        // mode (opcional)
+                        if args.len() >= 2 {
+                            let mode_val = match eval(args[1].clone(), env)? {
+                                ExpressionResult::Value(Expression::CString(s)) => {
+                                    Expression::CString(s)
+                                }
+                                ExpressionResult::Value(_) => {
+                                    return Err("[Runtime Error] open mode must be a string".into());
+                                }
+                                ExpressionResult::Propagate(e) => {
+                                    return Ok(ExpressionResult::Propagate(e))
+                                }
+                            };
+                            meta_env.map_variable("mode".to_string(), false, mode_val);
+                        }
+
+                        // content (opcional, para 'w' / 'a')
+                        if args.len() >= 3 {
+                            let content_val = match eval(args[2].clone(), env)? {
+                                ExpressionResult::Value(Expression::CString(s)) => {
+                                    Expression::CString(s)
+                                }
+                                ExpressionResult::Value(_) => {
+                                    return Err(
+                                        "[Runtime Error] open content must be a string".into()
+                                    );
+                                }
+                                ExpressionResult::Propagate(e) => {
+                                    return Ok(ExpressionResult::Propagate(e))
+                                }
+                            };
+                            meta_env.map_variable("content".to_string(), false, content_val);
+                        }
+
+                        let stmt = meta_fn(&mut meta_env);
+                        if let Statement::Return(expr) = stmt {
+                            Ok(ExpressionResult::Value(*expr))
+                        } else {
+                            Err("[Runtime Error] open builtin did not return a value".into())
+                        }
+                    }
+
+                    _ => Err(format!("Function {} not found", name)),
+                }
+            } else {
+                Err(format!("Function {} not found", name))
+            }
+        }
     }
 }
 

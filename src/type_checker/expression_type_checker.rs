@@ -19,6 +19,7 @@ pub fn check_expr(exp: Expression, env: &Environment<Type>) -> Result<Type, Erro
         Expression::Or(l, r) => check_bin_boolean_expression(*l, *r, env),
         Expression::Not(e) => check_not_expression(*e, env),
         Expression::EQ(l, r) => check_bin_relational_expression(*l, *r, env),
+        Expression::NEQ(l, r) => check_bin_relational_expression(*l, *r, env),
         Expression::GT(l, r) => check_bin_relational_expression(*l, *r, env),
         Expression::LT(l, r) => check_bin_relational_expression(*l, *r, env),
         Expression::GTE(l, r) => check_bin_relational_expression(*l, *r, env),
@@ -33,9 +34,46 @@ pub fn check_expr(exp: Expression, env: &Environment<Type>) -> Result<Type, Erro
         Expression::Unwrap(e) => check_unwrap_type(*e, env),
         Expression::Propagate(e) => check_propagate_type(*e, env),
         Expression::ListValue(elements) => check_list_value(&elements, env),
+        Expression::Tuple(elements) => check_tuple_value(&elements, env),
+        Expression::FuncCall(name, args) => check_function_call(name, args, env),
         Expression::Constructor(name, args) => check_adt_constructor(name, args, env),
+    }
+}
 
-        _ => Err("not implemented yet.".to_string()),
+fn check_function_call(
+    name: Name,
+    args: Vec<Expression>,
+    env: &Environment<Type>,
+) -> Result<Type, ErrorMessage> {
+    match env.lookup_function(&name) {
+        Some(function) => {
+            // Checa número de argumentos
+            if args.len() != function.params.len() {
+                return Err(format!(
+                    "[Type Error] Function '{}' expects {} arguments, but got {}.",
+                    name,
+                    function.params.len(),
+                    args.len()
+                ));
+            }
+
+            // Checa tipos de cada argumento contra o parâmetro correspondente
+            for (arg_expr, param) in args.into_iter().zip(function.params.iter()) {
+                let arg_type = check_expr(arg_expr, env)?;
+                let param_type = param.argument_type.clone();
+
+                // Permite TAny em qualquer lado como curinga
+                if param_type != Type::TAny && arg_type != Type::TAny && arg_type != param_type {
+                    return Err(format!(
+                        "[Type Error] In call to function '{}', argument '{}' expected type '{:?}', found '{:?}'.",
+                        name, param.argument_name, param_type, arg_type
+                    ));
+                }
+            }
+
+            Ok(function.kind.clone())
+        }
+        None => Err(format!("[Type Error] Function '{}' is not defined.", name)),
     }
 }
 
@@ -182,6 +220,18 @@ fn check_list_value(
     }
 
     Ok(Type::TList(Box::new(first_type)))
+}
+
+fn check_tuple_value(
+    elements: &[Expression],
+    env: &Environment<Type>,
+) -> Result<Type, ErrorMessage> {
+    let mut types = Vec::with_capacity(elements.len());
+    for element in elements {
+        let element_type = check_expr(element.clone(), env)?;
+        types.push(element_type);
+    }
+    Ok(Type::TTuple(types))
 }
 
 fn check_adt_constructor(

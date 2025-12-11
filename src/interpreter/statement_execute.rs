@@ -479,6 +479,12 @@ pub fn execute(stmt: Statement, env: &Environment<Expression>) -> Result<Computa
             Ok(Computation::Continue(new_env))
         }
 
+        // Executa uma expressão apenas por seus efeitos colaterais (por exemplo, print(x)).
+        Statement::ExprStmt(exp) => match eval(*exp, &new_env)? {
+            ExpressionResult::Value(_) => Ok(Computation::Continue(new_env)),
+            ExpressionResult::Propagate(expr) => Ok(Computation::PropagateError(expr, new_env)),
+        },
+
         Statement::MetaStmt(ref name) => {
             let table = get_metabuiltins_table();
             if let Some(f) = table.get(name) {

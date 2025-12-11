@@ -16,11 +16,27 @@ pub fn check_stmt(
         Statement::IfThenElse(cond, stmt_then, stmt_else_opt) => {
             check_if_then_else_stmt(cond, stmt_then, stmt_else_opt, env)
         }
+        Statement::IfChain {
+            branches,
+            else_branch,
+        } => check_if_chain_stmt(branches, else_branch, env),
         Statement::While(cond, stmt) => check_while_stmt(cond, stmt, env),
         Statement::For(var, expr, stmt) => check_for_stmt(var, expr, stmt, env),
         Statement::FuncDef(function) => check_func_def_stmt(function, env),
         Statement::TypeDeclaration(name, cons) => check_adt_declarations_stmt(name, cons, env),
         Statement::Return(exp) => check_return_stmt(exp, env),
+
+        // Blocos no nível de statement: empilham escopo e checam internamente.
+        Statement::Block(stmts) => {
+            let mut block_env = env.clone();
+            block_env.push();
+
+            for s in stmts {
+                block_env = check_stmt(s, &block_env)?;
+            }
+            block_env.pop();
+            Ok(block_env)
+        }
 
         Statement::Assert(expr1, errmsg) => check_assert(expr1, errmsg, env),
         Statement::AssertTrue(expr1, errmsg) => check_assert_true(expr1, errmsg, env),
@@ -29,7 +45,25 @@ pub fn check_stmt(
         Statement::AssertNEQ(lhs, rhs, errmsg) => check_assert_neq(lhs, rhs, errmsg, env),
         Statement::TestDef(function) => check_test_function_stmt(function, env),
 
-        _ => Err("Not implemented yet".to_string()),
+        // Statement de expressão: só garante que a expressão é bem-tipada.
+        Statement::ExprStmt(exp) => {
+            let _ = check_expr(*exp, env)?;
+            Ok(env.clone())
+        }
+
+        // Metabuiltins são tratados apenas em tempo de execução; do ponto de vista
+        // de tipos, não alteram o ambiente.
+        Statement::MetaStmt(_) => Ok(env.clone()),
+
+        // AssertFails carrega apenas uma mensagem literal; não há expressão a checar.
+        Statement::AssertFails(_) => Ok(env.clone()),
+
+        // ModTestDef agrupa um statement de teste por módulo; checamos o corpo,
+        // mas não expomos nada novo no ambiente global.
+        Statement::ModTestDef(_, stmt) => {
+            let _ = check_stmt(*stmt, env)?;
+            Ok(env.clone())
+        }
     }
 }
 
@@ -150,6 +184,45 @@ fn check_if_then_else_stmt(
         new_env = merge_environments(&new_env, &then_env)?;
     }
     Ok(new_env)
+}
+
+fn check_if_chain_stmt(
+    branches: Vec<(Box<Expression>, Box<Statement>)>,
+    else_branch: Option<Box<Statement>>,
+    env: &Environment<Type>,
+) -> Result<Environment<Type>, ErrorMessage> {
+    if branches.is_empty() {
+        return Err("[Type Error] if-chain must have at least one branch.".to_string());
+    }
+
+    let mut branch_envs: Vec<Environment<Type>> = Vec::new();
+
+    for (cond, stmt) in branches {
+        let mut local_env = env.clone();
+        let cond_type = check_expr(*cond, &local_env)?;
+        if cond_type != Type::TBool {
+            return Err(
+                "[Type Error] a condition in an 'if/elif' branch must be of type boolean."
+                    .to_string(),
+            );
+        }
+        local_env = check_stmt(*stmt, &local_env)?;
+        branch_envs.push(local_env);
+    }
+
+    if let Some(stmt) = else_branch {
+        let else_env = check_stmt(*stmt, env)?;
+        branch_envs.push(else_env);
+    }
+
+    // Mescla progressivamente todos os ambientes resultantes,
+    // começando do ambiente original.
+    let mut acc_env = env.clone();
+    for branch_env in branch_envs {
+        acc_env = merge_environments(&acc_env, &branch_env)?;
+    }
+
+    Ok(acc_env)
 }
 
 fn check_while_stmt(
