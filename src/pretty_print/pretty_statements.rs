@@ -215,10 +215,7 @@ impl ToDoc for Statement {
             // O parser já restringe TestDef a funções sem parâmetros e retorno Void;
             // aqui apenas espelhamos essa forma textual.
             Statement::TestDef(func) => {
-                let header = concat(
-                    text("test "),
-                    concat(text(func.name.clone()), text("()")),
-                );
+                let header = concat(text("test "), concat(text(func.name.clone()), text("()")));
 
                 let body_doc = func
                     .body
