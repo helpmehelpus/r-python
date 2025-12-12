@@ -211,11 +211,30 @@ impl ToDoc for Statement {
             // Metabuiltin statement: just emit its name as a standalone command.
             Statement::MetaStmt(name) => concat(text("meta "), text(name.clone())),
 
-            // Test definitions (similar a function, mas preservando palavra-chave test/modtest)
+            // Test definitions: seguem a sintaxe do parser `test nome(): ... end`.
+            // O parser já restringe TestDef a funções sem parâmetros e retorno Void;
+            // aqui apenas espelhamos essa forma textual.
             Statement::TestDef(func) => {
-                // Reusa ToDoc de Function mas prefixa com 'test '.
-                concat(text("test "), func.to_doc())
+                let header = concat(
+                    text("test "),
+                    concat(text(func.name.clone()), text("()")),
+                );
+
+                let body_doc = func
+                    .body
+                    .as_ref()
+                    // Para testes unitários sem corpo explícito, usamos um bloco vazio
+                    // alinhado com a gramática: `test nome(): end`.
+                    .map_or_else(|| concat(text(":"), text(" end")), |b| b.to_doc());
+
+                // Importante: não inserir espaço entre `()` e `:`; o parser espera
+                // que o bloco comece imediatamente após `)`.
+                concat(header, body_doc)
             }
+
+            // ModTestDef: mantemos o prefixo `modtest` seguido do nome do módulo e
+            // do statement interno. Quando o corpo é um bloco, o pretty-printer
+            // produz naturalmente `: ... end`, alinhado com o estilo de `test`.
             Statement::ModTestDef(module, stmt) => concat(
                 text("modtest "),
                 concat(text(module.clone()), concat(text(" "), stmt.to_doc())),
@@ -362,7 +381,14 @@ mod tests {
             Box::new(Statement::Return(Box::new(Expression::CInt(1)))),
         );
         let t1 = pretty(80, &test_def.to_doc());
-        assert!(t1.starts_with("test def f"));
+        // Formato deve bater exatamente com a gramática do parser: `test f(): end`.
+        assert_eq!(t1, "test f(): end");
+
+        // Verifica também que o texto gerado é parseável como TestDef.
+        use crate::parser::parse_statement;
+        let (rest, parsed) = parse_statement(&t1).expect("pretty output for TestDef must parse");
+        assert!(rest.trim().is_empty());
+        matches!(parsed, Statement::TestDef(_));
         let t2 = pretty(80, &mod_test.to_doc());
         assert!(t2.starts_with("modtest m "));
     }
