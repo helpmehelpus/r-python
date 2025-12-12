@@ -57,10 +57,7 @@ impl ToDoc for Type {
                     ),
                 ));
 
-                let ret_doc = match ret.as_ref() {
-                    Some(rt) => rt.to_doc(),
-                    None => text("Unit"), // Retorno padrão se não especificado.
-                };
+                let ret_doc = ret.to_doc();
 
                 concat(params_doc, concat(text(" -> "), ret_doc))
             }
@@ -128,7 +125,7 @@ mod tests {
     #[test]
     fn test_function_type_layout() {
         let func_type = Type::TFunction(
-            Box::new(Some(Type::TString)),
+            Box::new(Type::TString),
             vec![
                 Type::TInteger,
                 Type::TList(Box::new(Type::TBool)),

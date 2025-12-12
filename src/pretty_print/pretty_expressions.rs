@@ -171,6 +171,9 @@ impl Expression {
             // Propagação (usamos sintaxe pseudo-operador ?)
             Expression::Propagate(expr) => concat(expr.to_doc_inner(PREC_CALL), text("?")),
 
+            // Lambda expressions
+            Expression::Lambda(_func) => text("<lambda>"),
+
             // Tuple formatting: (a, b, c). Para 1 elemento usar (x,) se desejado (aqui seguimos Python style)
             Expression::Tuple(elements) => {
                 if elements.is_empty() {

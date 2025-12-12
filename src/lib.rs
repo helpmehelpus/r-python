@@ -5,3 +5,4 @@ pub mod parser;
 pub mod prelude;
 pub mod pretty_print;
 pub mod stdlib;
+pub mod type_checker;

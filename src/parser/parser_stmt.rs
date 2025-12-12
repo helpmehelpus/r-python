@@ -1,7 +1,7 @@
 use nom::{
     branch::alt,
     bytes::complete::tag,
-    character::complete::{char, multispace0, multispace1},
+    character::complete::{char, multispace0},
     combinator::{map, opt},
     error::Error,
     multi::separated_list0,
@@ -9,13 +9,13 @@ use nom::{
     IResult,
 };
 
-use crate::ir::ast::Type;
-use crate::ir::ast::{FormalArgument, Function, Statement};
+use crate::ir::ast::{FormalArgument, Function, Statement, Type};
 use crate::parser::parser_common::{
     identifier, keyword, ASSERTEQ_KEYWORD, ASSERTFALSE_KEYWORD, ASSERTNEQ_KEYWORD,
     ASSERTTRUE_KEYWORD, ASSERT_KEYWORD, COLON_CHAR, COMMA_CHAR, DEF_KEYWORD, ELIF_KEYWORD,
     ELSE_KEYWORD, END_KEYWORD, EQUALS_CHAR, FOR_KEYWORD, FUNCTION_ARROW, IF_KEYWORD, IN_KEYWORD,
-    LEFT_PAREN, RIGHT_PAREN, SEMICOLON_CHAR, VAL_KEYWORD, VAR_KEYWORD, WHILE_KEYWORD,
+    LEFT_PAREN, RET_KEYWORD, RIGHT_PAREN, SEMICOLON_CHAR, TEST_KEYWORD, VAL_KEYWORD, VAR_KEYWORD,
+    WHILE_KEYWORD,
 };
 use crate::parser::parser_expr::parse_expression;
 use crate::parser::parser_type::parse_type;
@@ -36,9 +36,17 @@ pub fn parse_statement(input: &str) -> IResult<&str, Statement> {
         parse_asserttrue_statement,
         parse_test_function_definition_statement,
         parse_function_definition_statement,
+        parse_return_statement,
         // Fallback: generic assignment should be tried last
         parse_assignment_statement,
     ))(input)
+}
+
+pub fn parse_return_statement(input: &str) -> IResult<&str, Statement> {
+    map(
+        tuple((keyword(RET_KEYWORD), multispace0, parse_expression)),
+        |(_, _, expr)| Statement::Return(Box::new(expr)),
+    )(input)
 }
 
 fn parse_var_declaration_statement(input: &str) -> IResult<&str, Statement> {
@@ -92,7 +100,7 @@ fn parse_if_else_statement(input: &str) -> IResult<&str, Statement> {
     map(
         tuple((
             keyword(IF_KEYWORD),
-            preceded(multispace1, parse_expression),
+            preceded(multispace0, parse_expression),
             parse_block,
             opt(preceded(
                 tuple((multispace0, keyword(ELSE_KEYWORD))),
@@ -141,7 +149,7 @@ fn parse_while_statement(input: &str) -> IResult<&str, Statement> {
     map(
         tuple((
             keyword(WHILE_KEYWORD),
-            preceded(multispace1, parse_expression),
+            preceded(multispace0, parse_expression),
             parse_block,
         )),
         |(_, cond, block)| Statement::While(Box::new(cond), Box::new(block)),
@@ -306,9 +314,8 @@ fn parse_function_definition_statement(input: &str) -> IResult<&str, Statement> 
     map(
         tuple((
             keyword(DEF_KEYWORD),
-            preceded(multispace1, identifier),
+            preceded(multispace0, identifier),
             delimited(
-                // Corrigido: Removido o comentário que quebrava a sintaxe
                 char::<&str, Error<&str>>(LEFT_PAREN),
                 separated_list0(
                     tuple((
@@ -324,7 +331,6 @@ fn parse_function_definition_statement(input: &str) -> IResult<&str, Statement> 
             preceded(multispace0, parse_type),
             parse_block,
         )),
-        // Corrigido: O nome da variável 'args' agora está correto
         |(_, name, args, _, t, block)| {
             Statement::FuncDef(Function {
                 name: name.to_string(),
@@ -336,13 +342,12 @@ fn parse_function_definition_statement(input: &str) -> IResult<&str, Statement> 
     )(input)
 }
 
-//TODO: Apresentar TestDef
+// TestDef: test f(): ... end
 fn parse_test_function_definition_statement(input: &str) -> IResult<&str, Statement> {
     map(
         tuple((
-            //keyword(TEST_KEYWORD),
-            tag("test"),
-            preceded(multispace1, identifier),
+            keyword(TEST_KEYWORD),
+            identifier,
             delimited(
                 char::<&str, Error<&str>>(LEFT_PAREN),
                 multispace0,
@@ -353,15 +358,15 @@ fn parse_test_function_definition_statement(input: &str) -> IResult<&str, Statem
         |(_, name, _, block)| {
             Statement::TestDef(Function {
                 name: name.to_string(),
-                kind: Type::TVoid,  // Sempre void
-                params: Vec::new(), // Nenhum argumento
+                kind: Type::TVoid,
+                params: Vec::new(),
                 body: Some(Box::new(block)),
             })
         },
     )(input)
 }
 
-fn parse_block(input: &str) -> IResult<&str, Statement> {
+pub fn parse_block(input: &str) -> IResult<&str, Statement> {
     map(
         tuple((
             char::<&str, Error<&str>>(COLON_CHAR),
@@ -384,7 +389,7 @@ fn parse_block(input: &str) -> IResult<&str, Statement> {
     )(input)
 }
 
-fn parse_formal_argument(input: &str) -> IResult<&str, FormalArgument> {
+pub fn parse_formal_argument(input: &str) -> IResult<&str, FormalArgument> {
     map(
         tuple((
             preceded(multispace0, identifier),
@@ -409,7 +414,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn test_parse_if_else_statement() {
         let input = "if True: x = 1; end";
         let expected = Statement::IfThenElse(
@@ -425,7 +429,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn test_parse_while_statement() {
         let input = "while True: x = 1; end";
         let expected = Statement::While(
@@ -440,7 +443,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn test_parse_for_statement() {
         let input = "for x in y: x = 1; end";
         let expected = Statement::For(
@@ -456,7 +458,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn test_parse_function_definition_statement() {
         let input = "def f(x: Int) -> Int: x = 1; end";
         let expected = Statement::FuncDef(Function {

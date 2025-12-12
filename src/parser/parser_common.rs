@@ -1,7 +1,7 @@
 use nom::{
     branch::alt,
     bytes::complete::tag,
-    character::complete::{alpha1, multispace0},
+    character::complete::{alpha1, digit1, multispace0},
     combinator::{not, peek, recognize},
     multi::many0,
     sequence::{delimited, terminated},
@@ -42,6 +42,8 @@ pub const VAR_KEYWORD: &str = "var";
 pub const VAL_KEYWORD: &str = "val";
 pub const DEF_KEYWORD: &str = "def";
 pub const TEST_KEYWORD: &str = "test";
+pub const LAMBDA_KEYWORD: &str = "lambda";
+pub const RET_KEYWORD: &str = "return";
 
 // Operator and symbol constants
 pub const FUNCTION_ARROW: &str = "->";
@@ -65,35 +67,34 @@ pub const EQUALS_CHAR: char = '=';
 
 /// Accepts any character except '"' and control characters (like \n, \t)
 pub fn is_string_char(c: char) -> bool {
-    c != '"' && !c.is_control()
+    !c.is_control() && c != '"'
 }
 
+/// Parses a separator token surrounded by optional whitespace.
 pub fn separator<'a>(sep: &'static str) -> impl FnMut(&'a str) -> IResult<&'a str, &'a str> {
     delimited(multispace0, tag(sep), multispace0)
 }
 
-/// Parses a reserved keyword (e.g., "if") surrounded by optional spaces
-/// A implementação da função keyword foi alterada para que seja garantida que a keyword seja uma palavra completa e seja separada por um espaço
+/// Parses a reserved keyword (e.g., "if") surrounded by optional spaces.
+/// Guarantees the keyword is a whole word (not a prefix of an identifier).
 pub fn keyword<'a>(kw: &'static str) -> impl FnMut(&'a str) -> IResult<&'a str, &'a str> {
     delimited(
         multispace0,
         terminated(
             tag(kw),
-            // Ensure the keyword is not followed by an identifier character (letter, digit, or underscore)
+            // Ensure the keyword is not followed by an identifier character
             peek(not(identifier_start_or_continue)),
         ),
         multispace0,
     )
 }
 
-/// Parsers for identifiers.
+/// Parses an identifier that is not a reserved keyword.
 pub fn identifier(input: &str) -> IResult<&str, &str> {
-    let (input, _) = multispace0(input)?;
-
-    let (input, first_char) = identifier_start(input)?;
+    let (input, first) = identifier_start(input)?;
     let (input, rest) = identifier_continue(input)?;
 
-    let ident = format!("{}{}", first_char, rest);
+    let ident = format!("{}{}", first, rest);
 
     if KEYWORDS.contains(&ident.as_str()) {
         Err(nom::Err::Error(nom::error::Error::new(
@@ -101,7 +102,9 @@ pub fn identifier(input: &str) -> IResult<&str, &str> {
             nom::error::ErrorKind::Tag,
         )))
     } else {
-        Ok((input, Box::leak(ident.into_boxed_str())))
+        // Leak the identifier string to extend its lifetime to 'static, compatible with nom's API.
+        let leaked: &'static str = Box::leak(ident.into_boxed_str());
+        Ok((input, leaked))
     }
 }
 
@@ -117,5 +120,5 @@ fn identifier_continue(input: &str) -> IResult<&str, &str> {
 
 /// A single identifier character: alphanumeric or underscore
 fn identifier_start_or_continue(input: &str) -> IResult<&str, &str> {
-    recognize(alt((alpha1, tag("_"), nom::character::complete::digit1)))(input)
+    recognize(alt((alpha1, tag("_"), digit1)))(input)
 }

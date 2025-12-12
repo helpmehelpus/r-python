@@ -1,9 +1,9 @@
 use nom::{
     branch::alt,
     bytes::complete::tag,
-    character::complete::{char, multispace0},
-    combinator::map,
-    multi::{many1, separated_list0, separated_list1},
+    character::complete::{alpha1, char, digit1, multispace0},
+    combinator::{map, opt, recognize},
+    multi::{many0, many1, separated_list0, separated_list1},
     sequence::{preceded, tuple},
     IResult,
 };
@@ -101,7 +101,7 @@ fn parse_result_type(input: &str) -> IResult<&str, Type> {
     )(input)
 }
 
-fn parse_function_type(input: &str) -> IResult<&str, Type> {
+pub fn parse_function_type(input: &str) -> IResult<&str, Type> {
     map(
         tuple((
             preceded(multispace0, char(LEFT_PAREN)),
@@ -113,7 +113,7 @@ fn parse_function_type(input: &str) -> IResult<&str, Type> {
             preceded(multispace0, tag(FUNCTION_ARROW)),
             preceded(multispace0, parse_type),
         )),
-        |(_, t_args, _, _, t_ret)| Type::TFunction(Box::new(Some(t_ret)), t_args),
+        |(_, t_args, _, _, t_ret)| Type::TFunction(Box::new(t_ret), t_args),
     )(input)
 }
 
@@ -131,14 +131,28 @@ fn parse_adt_type(input: &str) -> IResult<&str, Type> {
 }
 
 fn parse_adt_cons(input: &str) -> IResult<&str, ValueConstructor> {
-    map(
-        tuple((
-            preceded(multispace0, char(PIPE_CHAR)),
-            preceded(multispace0, identifier),
-            separated_list0(multispace0, parse_type),
-        )),
-        |(_, name, types)| ValueConstructor::new(name.to_string(), types),
-    )(input)
+    // Constructor syntax: `| Name` or `| Name Type`
+    let (input, _) = preceded(multispace0, char(PIPE_CHAR))(input)?;
+    let (input, _) = multispace0(input)?;
+    // Use constructor_name instead of identifier to allow keywords like Just/Nothing
+    let (input, name) = constructor_name(input)?;
+    // Use parse_basic_types to avoid infinite recursion through parse_type -> parse_adt_type
+    let (input, maybe_type) = opt(preceded(multispace0, parse_basic_types))(input)?;
+
+    let types = match maybe_type {
+        Some(t) => vec![t],
+        None => Vec::new(),
+    };
+
+    Ok((input, ValueConstructor::new(name.to_string(), types)))
+}
+
+/// Parses a constructor name (allows keywords like Just, Nothing, Ok, Err)
+fn constructor_name(input: &str) -> IResult<&str, &str> {
+    recognize(tuple((
+        alt((alpha1, tag("_"))),
+        many0(alt((alpha1, tag("_"), digit1))),
+    )))(input)
 }
 
 #[cfg(test)]
@@ -192,16 +206,12 @@ mod tests {
             parse_function_type("(Int, Boolean) -> String"),
             Ok((
                 "",
-                Type::TFunction(
-                    Box::new(Some(Type::TString)),
-                    vec![Type::TInteger, Type::TBool]
-                )
+                Type::TFunction(Box::new(Type::TString), vec![Type::TInteger, Type::TBool])
             ))
         );
     }
 
     #[test]
-    #[ignore]
     fn test_parse_adt_type() {
         let input = "data Maybe:\n  | Just Int\n  | Nothing\nend";
         let expected = Type::TAlgebraicData(
