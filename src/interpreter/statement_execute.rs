@@ -393,7 +393,7 @@ pub fn execute(stmt: Statement, env: &Environment<Expression>) -> Result<Computa
                     Ok(Computation::Continue(new_env))
                 }
 
-                // Tupla (assumindo que você tem Expression::Tuple)
+                // Tupla
                 Expression::Tuple(items) => {
                     for item in items {
                         let prev = new_env.lookup(&var.clone());
@@ -415,7 +415,7 @@ pub fn execute(stmt: Statement, env: &Environment<Expression>) -> Result<Computa
                     Ok(Computation::Continue(new_env))
                 }
 
-                // Constructor (já existia)
+                // Constructor
                 Expression::Constructor(_, items) => {
                     for item_expr in items {
                         let item_value = *item_expr.clone();
@@ -1536,6 +1536,54 @@ mod tests {
             assert_eq!(r2.name, "test_two");
             assert!(!r2.result);
             assert_eq!(r2.error, Some("Variable 'x' not found".to_string())); // Erro é propagado de Expression::Var
+        }
+    }
+
+    // Escopo léxico entre funções (issue #44)
+    mod scoping_tests {
+        use super::*;
+
+        #[test]
+        fn top_level_function_cannot_see_caller_local_variable() {
+            let env = create_test_env();
+
+            // outer() tenta acessar a variável local `x`, que só existe dentro de inner()
+            let outer_func = Function {
+                name: "outer".to_string(),
+                kind: Type::TInteger,
+                params: vec![],
+                body: Some(Box::new(Statement::Block(vec![Statement::Return(
+                    Box::new(Expression::Var("x".to_string())),
+                )]))),
+            };
+
+            // inner() declara x localmente e chama outer()
+            let inner_func = Function {
+                name: "inner".to_string(),
+                kind: Type::TInteger,
+                params: vec![],
+                body: Some(Box::new(Statement::Block(vec![
+                    Statement::VarDeclaration("x".to_string(), Box::new(Expression::CInt(42))),
+                    Statement::Return(Box::new(Expression::FuncCall("outer".to_string(), vec![]))),
+                ]))),
+            };
+
+            let program = Statement::Block(vec![
+                Statement::FuncDef(outer_func),
+                Statement::FuncDef(inner_func),
+                // Executa inner(); durante a chamada, outer() não deve enxergar `x`
+                Statement::ExprStmt(Box::new(Expression::FuncCall("inner".to_string(), vec![]))),
+            ]);
+
+            let result = execute(program, &env);
+
+            // O cenário problemático descrito na issue #44 seria a chamada ter sucesso
+            // usando o valor de `x` definido em `inner` (escopo dinâmico).
+            // Aqui garantimos que a chamada falha (não há captura de `x`).
+            assert!(
+                result.is_err(),
+                "Programa deveria falhar por falta de escopo léxico"
+            );
         }
     }
 }
