@@ -69,11 +69,13 @@ pub fn print_builtin(env: &mut Environment<Expression>) -> Statement {
         .map(|(_, v)| v)
         .unwrap_or(Expression::CString("".to_string()));
     match value {
-        Expression::CString(s) => println!("{}", s),
-        Expression::CInt(i) => println!("{}", i),
-        Expression::CReal(f) => println!("{}", f),
-        _ => println!("{:?}", value),
+        Expression::CString(s) => print!("{}", s),
+        Expression::CInt(i) => print!("{}", i),
+        Expression::CReal(f) => print!("{}", f),
+        _ => print!("{:?}", value),
     }
+    use std::io::{self, Write};
+    io::stdout().flush().unwrap();
     Statement::Return(Box::new(Expression::CVoid))
 }
 
