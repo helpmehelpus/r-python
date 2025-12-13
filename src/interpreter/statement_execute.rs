@@ -327,6 +327,39 @@ pub fn execute(stmt: Statement, env: &Environment<Expression>) -> Result<Computa
             }
         }
 
+        Statement::IfChain {
+            branches,
+            else_branch,
+        } => {
+            for (cond, body) in branches {
+                let value = match eval(*cond, &new_env)? {
+                    ExpressionResult::Value(expr) => expr,
+                    ExpressionResult::Propagate(expr) => {
+                        return Ok(Computation::PropagateError(expr, new_env))
+                    }
+                };
+                match value {
+                    Expression::CTrue => {
+                        return match *body {
+                            Statement::Block(stmts) => execute_if_block(stmts, &new_env),
+                            _ => execute(*body, &new_env),
+                        };
+                    }
+                    Expression::CFalse => continue,
+                    _ => return Err("Condition must evaluate to a boolean".to_string()),
+                }
+            }
+            // No branch matched, try else
+            if let Some(else_stmt) = else_branch {
+                match *else_stmt {
+                    Statement::Block(stmts) => execute_if_block(stmts, &new_env),
+                    _ => execute(*else_stmt, &new_env),
+                }
+            } else {
+                Ok(Computation::Continue(new_env))
+            }
+        }
+
         Statement::Block(stmts) => {
             // new_env.push(); <- removing push()
             let result = execute_block(stmts, &new_env);

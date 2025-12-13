@@ -47,13 +47,15 @@ The language surface resembles Python to lower the barrier for students, while t
 ### Variables
 
 ```text
-val pi = 3.14159;          # immutable binding
-var counter = 0;           # mutable binding
-counter = counter + 1;     # reassignment allowed for var
+val pi = 3.14159;
+var counter = 0;
+counter = counter + 1;
 ```
 
 - `val` declares an immutable variable; reassignment is a compile-time error.
 - `var` declares a mutable variable.
+
+> **Note:** RPython does not support comments in source code. The examples in this README omit comments for accuracy.
 
 ### Literals
 
@@ -106,14 +108,14 @@ RPython uses explicit, static types for function parameters and return values. V
 ```text
 if score >= 90:
     grade = "A";
-elif score >= 80:
+end elif score >= 80:
     grade = "B";
-else:
+end else:
     grade = "C";
 end
 ```
 
-All branches must be terminated with `end`.
+Each branch in an if-chain has its own block terminated by `end`. The `elif` and `else` keywords follow the preceding `end`.
 
 ### Loops
 
@@ -142,13 +144,16 @@ Functions require type annotations for parameters and return type.
 def factorial(n: Int) -> Int:
     if n <= 1:
         return 1;
-    end
-    return n * factorial(n - 1);
+    end else:
+        return n * factorial(n - 1);
+    end;
 end;
 
 val result = factorial(5);
-asserttrue(result == 120, "5! should be 120");
+assertrue(result == 120, "5! should be 120");
 ```
+
+> **Syntax note:** Block statements (`if`, `while`, `for`, `def`) require a semicolon after the closing `end` when followed by additional statements at the same level.
 
 ### Lambdas
 
@@ -202,37 +207,21 @@ Metabuiltins are functions implemented in Rust and exposed to user code. They ha
 
 ## Error Handling
 
-RPython provides two monadic types for representing optional or fallible values.
+RPython provides two monadic types for representing optional or fallible values: `Maybe[T]` and `Result[Ok, Err]`.
 
-### `Maybe[T]`
+### Type Definitions
 
-```text
-val name = Just("Alice");
-val empty = Nothing;
+- `Maybe[T]` — Optional value: `Just(value)` or `Nothing`
+- `Result[Ok, Err]` — Success/failure: `Ok(value)` or `Err(error)`
 
-if isNothing(empty):
-    print("No value");
-end
+### Available Operations
 
-val unwrapped = name!;   # unwrap: panics if Nothing
-```
+- `isNothing(maybe)` — returns `True` if the value is `Nothing`
+- `isError(result)` — returns `True` if the value is `Err`
+- `unwrap(value)` — extracts the inner value (panics if `Nothing` or `Err`)
+- `tryUnwrap(value)` — extracts or propagates errors automatically
 
-### `Result[Ok, Err]`
-
-```text
-def divide(a: Int, b: Int) -> Result[Int, String]:
-    if b == 0:
-        return Err("division by zero");
-    end
-    return Ok(a / b);
-end;
-
-val result = divide(10, 2)?;  # propagate Err automatically
-```
-
-- `isError(result)` checks if a `Result` is an `Err`.
-- `isNothing(maybe)` checks if a `Maybe` is `Nothing`.
-- The `?` operator (propagate) returns early if the value is `Err`.
+> **Current limitation:** The parser does not yet support `Just()`, `Nothing`, `Ok()`, and `Err()` as expression syntax. These types exist in the AST and type system, and are used internally by the interpreter and type checker. Parser support for constructing these values from source code is planned for a future release.
 
 ---
 
@@ -350,9 +339,11 @@ The interpreter reads from stdin and writes to stdout, making it suitable for au
 
 1. **No module system:** all code lives in a single file.
 2. **No pattern matching:** ADT constructors can be built but not destructured.
-3. **No interactive REPL:** only file-based execution is supported.
-4. **Limited error messages:** parser and type checker errors are functional but not always user-friendly.
-5. **No tail-call optimization:** deep recursion may overflow the stack.
+3. **No comments:** the parser does not support `#` or any comment syntax.
+4. **No interactive REPL:** only file-based execution is supported.
+5. **Limited error messages:** parser and type checker errors are functional but not always user-friendly.
+6. **No tail-call optimization:** deep recursion may overflow the stack.
+7. **Maybe/Result constructors:** `Just()`, `Nothing`, `Ok()`, `Err()` cannot be parsed from source code yet.
 
 ---
 
