@@ -87,6 +87,10 @@ pub fn check_func_call(
 
     let func = env.lookup_function(&func_signature);
     if func.is_none() {
+        if let Some(res) = check_builtin_signature(&func_name, &actual_arg_types) {
+            return res;
+        }
+
         return Err(format!(
             "Function {:?} was called but never declared",
             func_signature
@@ -111,6 +115,118 @@ pub fn check_func_call(
         }
     }
     return Ok(func.kind.clone());
+}
+
+fn check_builtin_signature(
+    func_name: &str,
+    actual_arg_types: &[Type],
+) -> Option<Result<Type, ErrorMessage>> {
+    match func_name {
+        "print" | "print_line" => {
+            if actual_arg_types.len() != 1 {
+                return Some(Err(format!(
+                    "[Type Error] {} expects exactly 1 argument",
+                    func_name
+                )));
+            }
+            Some(Ok(Type::TVoid))
+        }
+        "input" => Some(Ok(Type::TString)),
+        "input_int" => Some(Ok(Type::TInteger)),
+        "input_real" => Some(Ok(Type::TReal)),
+        "to_string" => {
+            if actual_arg_types.len() != 1 {
+                return Some(Err(
+                    "[Type Error] to_string expects exactly 1 argument".to_string()
+                ));
+            }
+            Some(Ok(Type::TString))
+        }
+        "to_string_fixed" => {
+            if actual_arg_types.len() != 2 {
+                return Some(Err(
+                    "[Type Error] to_string_fixed expects exactly 2 arguments".to_string(),
+                ));
+            }
+            Some(Ok(Type::TString))
+        }
+        "str_concat" => {
+            if actual_arg_types.len() != 2 {
+                return Some(Err(
+                    "[Type Error] str_concat expects exactly 2 arguments".to_string()
+                ));
+            }
+            Some(Ok(Type::TString))
+        }
+        "open" => {
+            if actual_arg_types.is_empty() || actual_arg_types.len() > 3 {
+                return Some(Err("[Type Error] open expects 1 to 3 arguments".to_string()));
+            }
+            Some(Ok(Type::TAny))
+        }
+        "len" => {
+            if actual_arg_types.len() != 1 {
+                return Some(Err(
+                    "[Type Error] len expects exactly 1 argument".to_string()
+                ));
+            }
+            match &actual_arg_types[0] {
+                Type::TString | Type::TList(_) | Type::TTuple(_) | Type::TAny => {
+                    Some(Ok(Type::TInteger))
+                }
+                other => Some(Err(format!(
+                    "[Type Error] len expected string or list, found {:?}",
+                    other
+                ))),
+            }
+        }
+        "join" => {
+            if actual_arg_types.len() != 2 {
+                return Some(Err(
+                    "[Type Error] join expects exactly 2 arguments".to_string()
+                ));
+            }
+            let coll_type = &actual_arg_types[0];
+            let sep_type = &actual_arg_types[1];
+            let sep_ok = matches!(sep_type, Type::TString | Type::TAny);
+            let coll_ok = match coll_type {
+                Type::TList(inner) => **inner == Type::TString || **inner == Type::TAny,
+                Type::TAny => true,
+                _ => false,
+            };
+
+            if !coll_ok {
+                return Some(Err(format!(
+                    "[Type Error] join expects a list of strings as first argument, found {:?}",
+                    coll_type
+                )));
+            }
+            if !sep_ok {
+                return Some(Err(format!(
+                    "[Type Error] join expects a string separator, found {:?}",
+                    sep_type
+                )));
+            }
+            Some(Ok(Type::TString))
+        }
+        "to_int" => {
+            if actual_arg_types.len() != 1 {
+                return Some(Err(
+                    "[Type Error] to_int expects exactly 1 argument".to_string()
+                ));
+            }
+            Some(Ok(Type::TInteger))
+        }
+        "to_real" => {
+            if actual_arg_types.len() != 1 {
+                return Some(Err(
+                    "[Type Error] to_real expects exactly 1 argument".to_string()
+                ));
+            }
+            Some(Ok(Type::TReal))
+        }
+        _ => None,
+    }
 }
 
 fn check_var_name(name: Name, env: &Environment<Type>) -> Result<Type, ErrorMessage> {

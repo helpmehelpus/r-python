@@ -3,19 +3,19 @@ use nom::{
     bytes::complete::tag,
     character::complete::{char, multispace0},
     combinator::{map, opt},
-    error::Error,
+    error::{Error, ErrorKind},
     multi::separated_list0,
     sequence::{delimited, preceded, tuple},
-    IResult,
+    Err, IResult,
 };
 
-use crate::ir::ast::{FormalArgument, Function, Statement, Type};
+use crate::ir::ast::{Expression, FormalArgument, Function, Statement, Type};
 use crate::parser::parser_common::{
     identifier, keyword, ASSERTEQ_KEYWORD, ASSERTFALSE_KEYWORD, ASSERTNEQ_KEYWORD,
-    ASSERTTRUE_KEYWORD, ASSERT_KEYWORD, COLON_CHAR, COMMA_CHAR, DEF_KEYWORD, ELIF_KEYWORD,
-    ELSE_KEYWORD, END_KEYWORD, EQUALS_CHAR, FOR_KEYWORD, FUNCTION_ARROW, IF_KEYWORD, IN_KEYWORD,
-    LEFT_PAREN, RET_KEYWORD, RIGHT_PAREN, SEMICOLON_CHAR, TEST_KEYWORD, VAL_KEYWORD, VAR_KEYWORD,
-    WHILE_KEYWORD,
+    ASSERTTRUE_KEYWORD, ASSERT_KEYWORD, BREAK_KEYWORD, COLON_CHAR, COMMA_CHAR, CONTINUE_KEYWORD,
+    DEF_KEYWORD, ELIF_KEYWORD, ELSE_KEYWORD, END_KEYWORD, EQUALS_CHAR, FOR_KEYWORD, FUNCTION_ARROW,
+    IF_KEYWORD, IN_KEYWORD, LEFT_PAREN, RET_KEYWORD, RIGHT_PAREN, SEMICOLON_CHAR, TEST_KEYWORD,
+    VAL_KEYWORD, VAR_KEYWORD, WHILE_KEYWORD,
 };
 use crate::parser::parser_expr::parse_expression;
 use crate::parser::parser_type::parse_type;
@@ -37,8 +37,11 @@ pub fn parse_statement(input: &str) -> IResult<&str, Statement> {
         parse_test_function_definition_statement,
         parse_function_definition_statement,
         parse_return_statement,
-        // Fallback: generic assignment should be tried last
+        parse_break_statement,
+        parse_continue_statement,
+        // Fallbacks: assignment first, then bare expression statement
         parse_assignment_statement,
+        parse_expression_statement,
     ))(input)
 }
 
@@ -47,6 +50,26 @@ pub fn parse_return_statement(input: &str) -> IResult<&str, Statement> {
         tuple((keyword(RET_KEYWORD), multispace0, parse_expression)),
         |(_, _, expr)| Statement::Return(Box::new(expr)),
     )(input)
+}
+
+pub fn parse_break_statement(input: &str) -> IResult<&str, Statement> {
+    map(keyword(BREAK_KEYWORD), |_| Statement::Break)(input)
+}
+
+pub fn parse_continue_statement(input: &str) -> IResult<&str, Statement> {
+    map(keyword(CONTINUE_KEYWORD), |_| Statement::Continue)(input)
+}
+
+fn parse_expression_statement(input: &str) -> IResult<&str, Statement> {
+    let (rest, expr) = parse_expression(input)?;
+
+    if let Expression::Var(name) = &expr {
+        if matches!(name.as_str(), "end" | "else" | "elif") {
+            return Err(Err::Error(Error::new(input, ErrorKind::Tag)));
+        }
+    }
+
+    Ok((rest, Statement::ExprStmt(Box::new(expr))))
 }
 
 fn parse_var_declaration_statement(input: &str) -> IResult<&str, Statement> {

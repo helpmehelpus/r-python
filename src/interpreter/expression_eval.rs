@@ -472,6 +472,10 @@ pub fn eval_function_call(
                 Ok(Computation::Continue(_)) => Err("Function did not return a value".to_string()),
                 Ok(Computation::Return(value, _final_env)) => Ok(ExpressionResult::Value(value)),
                 Ok(Computation::PropagateError(value, _)) => Ok(ExpressionResult::Propagate(value)),
+                Ok(Computation::BreakLoop(_)) => Err("'break' used outside of a loop".to_string()),
+                Ok(Computation::ContinueLoop(_)) => {
+                    Err("'continue' used outside of a loop".to_string())
+                }
                 Err(e) => Err(e),
             }
         }
@@ -522,6 +526,256 @@ pub fn eval_function_call(
                         meta_env.map_variable("value".to_string(), false, val);
                         let _ = meta_fn(&mut meta_env);
                         Ok(ExpressionResult::Value(Expression::CVoid))
+                    }
+
+                    // input_int([prompt]) -> Integer or error string
+                    "input_int" => {
+                        if let Some(prompt_expr) = args.get(0) {
+                            let prompt_val = match eval(prompt_expr.clone(), env)? {
+                                ExpressionResult::Value(Expression::CString(s)) => {
+                                    Expression::CString(s)
+                                }
+                                ExpressionResult::Value(v) => {
+                                    Expression::CString(format!("{:?}", v))
+                                }
+                                ExpressionResult::Propagate(e) => {
+                                    return Ok(ExpressionResult::Propagate(e))
+                                }
+                            };
+                            meta_env.map_variable("prompt".to_string(), false, prompt_val);
+                        }
+
+                        let stmt = meta_fn(&mut meta_env);
+                        if let Statement::Return(expr) = stmt {
+                            Ok(ExpressionResult::Value(*expr))
+                        } else {
+                            Err("[Runtime Error] input_int builtin did not return a value".into())
+                        }
+                    }
+
+                    // input_real([prompt]) -> Real or error string
+                    "input_real" => {
+                        if let Some(prompt_expr) = args.get(0) {
+                            let prompt_val = match eval(prompt_expr.clone(), env)? {
+                                ExpressionResult::Value(Expression::CString(s)) => {
+                                    Expression::CString(s)
+                                }
+                                ExpressionResult::Value(v) => {
+                                    Expression::CString(format!("{:?}", v))
+                                }
+                                ExpressionResult::Propagate(e) => {
+                                    return Ok(ExpressionResult::Propagate(e))
+                                }
+                            };
+                            meta_env.map_variable("prompt".to_string(), false, prompt_val);
+                        }
+
+                        let stmt = meta_fn(&mut meta_env);
+                        if let Statement::Return(expr) = stmt {
+                            Ok(ExpressionResult::Value(*expr))
+                        } else {
+                            Err("[Runtime Error] input_real builtin did not return a value".into())
+                        }
+                    }
+
+                    // to_string(value) -> String
+                    "to_string" => {
+                        if args.len() != 1 {
+                            return Err(
+                                "[Runtime Error] to_string expects exactly 1 argument".into()
+                            );
+                        }
+
+                        let val = match eval(args[0].clone(), env)? {
+                            ExpressionResult::Value(v) => v,
+                            ExpressionResult::Propagate(e) => {
+                                return Ok(ExpressionResult::Propagate(e))
+                            }
+                        };
+                        meta_env.map_variable("value".to_string(), false, val);
+                        let stmt = meta_fn(&mut meta_env);
+                        if let Statement::Return(expr) = stmt {
+                            Ok(ExpressionResult::Value(*expr))
+                        } else {
+                            Err("[Runtime Error] to_string builtin did not return a value".into())
+                        }
+                    }
+
+                    // len(value) -> Int or error string
+                    "len" => {
+                        if args.len() != 1 {
+                            return Err("[Runtime Error] len expects exactly 1 argument".into());
+                        }
+
+                        let val = match eval(args[0].clone(), env)? {
+                            ExpressionResult::Value(v) => v,
+                            ExpressionResult::Propagate(e) => {
+                                return Ok(ExpressionResult::Propagate(e))
+                            }
+                        };
+
+                        meta_env.map_variable("value".to_string(), false, val);
+                        let stmt = meta_fn(&mut meta_env);
+                        if let Statement::Return(expr) = stmt {
+                            Ok(ExpressionResult::Value(*expr))
+                        } else {
+                            Err("[Runtime Error] len builtin did not return a value".into())
+                        }
+                    }
+
+                    // print_line(value) -> Unit
+                    "print_line" => {
+                        if args.len() != 1 {
+                            return Err(
+                                "[Runtime Error] print_line expects exactly 1 argument".into()
+                            );
+                        }
+                        let val = match eval(args[0].clone(), env)? {
+                            ExpressionResult::Value(v) => v,
+                            ExpressionResult::Propagate(e) => {
+                                return Ok(ExpressionResult::Propagate(e))
+                            }
+                        };
+                        meta_env.map_variable("value".to_string(), false, val);
+                        let _ = meta_fn(&mut meta_env);
+                        Ok(ExpressionResult::Value(Expression::CVoid))
+                    }
+
+                    // join(values, sep) -> String
+                    "join" => {
+                        if args.len() != 2 {
+                            return Err("[Runtime Error] join expects exactly 2 arguments".into());
+                        }
+
+                        let values_val = match eval(args[0].clone(), env)? {
+                            ExpressionResult::Value(v) => v,
+                            ExpressionResult::Propagate(e) => {
+                                return Ok(ExpressionResult::Propagate(e))
+                            }
+                        };
+                        let sep_val = match eval(args[1].clone(), env)? {
+                            ExpressionResult::Value(v) => v,
+                            ExpressionResult::Propagate(e) => {
+                                return Ok(ExpressionResult::Propagate(e))
+                            }
+                        };
+
+                        meta_env.map_variable("values".to_string(), false, values_val);
+                        meta_env.map_variable("sep".to_string(), false, sep_val);
+                        let stmt = meta_fn(&mut meta_env);
+                        if let Statement::Return(expr) = stmt {
+                            Ok(ExpressionResult::Value(*expr))
+                        } else {
+                            Err("[Runtime Error] join builtin did not return a value".into())
+                        }
+                    }
+
+                    // to_int(value) -> Int or error string
+                    "to_int" => {
+                        if args.len() != 1 {
+                            return Err("[Runtime Error] to_int expects exactly 1 argument".into());
+                        }
+
+                        let val = match eval(args[0].clone(), env)? {
+                            ExpressionResult::Value(v) => v,
+                            ExpressionResult::Propagate(e) => {
+                                return Ok(ExpressionResult::Propagate(e))
+                            }
+                        };
+                        meta_env.map_variable("value".to_string(), false, val);
+                        let stmt = meta_fn(&mut meta_env);
+                        if let Statement::Return(expr) = stmt {
+                            Ok(ExpressionResult::Value(*expr))
+                        } else {
+                            Err("[Runtime Error] to_int builtin did not return a value".into())
+                        }
+                    }
+
+                    // to_real(value) -> Real or error string
+                    "to_real" => {
+                        if args.len() != 1 {
+                            return Err("[Runtime Error] to_real expects exactly 1 argument".into());
+                        }
+
+                        let val = match eval(args[0].clone(), env)? {
+                            ExpressionResult::Value(v) => v,
+                            ExpressionResult::Propagate(e) => {
+                                return Ok(ExpressionResult::Propagate(e))
+                            }
+                        };
+                        meta_env.map_variable("value".to_string(), false, val);
+                        let stmt = meta_fn(&mut meta_env);
+                        if let Statement::Return(expr) = stmt {
+                            Ok(ExpressionResult::Value(*expr))
+                        } else {
+                            Err("[Runtime Error] to_real builtin did not return a value".into())
+                        }
+                    }
+
+                    // to_string_fixed(value, places) -> String
+                    "to_string_fixed" => {
+                        if args.len() != 2 {
+                            return Err(
+                                "[Runtime Error] to_string_fixed expects exactly 2 arguments"
+                                    .into(),
+                            );
+                        }
+
+                        let val = match eval(args[0].clone(), env)? {
+                            ExpressionResult::Value(v) => v,
+                            ExpressionResult::Propagate(e) => {
+                                return Ok(ExpressionResult::Propagate(e))
+                            }
+                        };
+                        let places = match eval(args[1].clone(), env)? {
+                            ExpressionResult::Value(v) => v,
+                            ExpressionResult::Propagate(e) => {
+                                return Ok(ExpressionResult::Propagate(e))
+                            }
+                        };
+
+                        meta_env.map_variable("value".to_string(), false, val);
+                        meta_env.map_variable("places".to_string(), false, places);
+                        let stmt = meta_fn(&mut meta_env);
+                        if let Statement::Return(expr) = stmt {
+                            Ok(ExpressionResult::Value(*expr))
+                        } else {
+                            Err(
+                                "[Runtime Error] to_string_fixed builtin did not return a value"
+                                    .into(),
+                            )
+                        }
+                    }
+
+                    // str_concat(left, right) -> String
+                    "str_concat" => {
+                        if args.len() != 2 {
+                            return Err(
+                                "[Runtime Error] str_concat expects exactly 2 arguments".into()
+                            );
+                        }
+
+                        let left_val = match eval(args[0].clone(), env)? {
+                            ExpressionResult::Value(v) => v,
+                            ExpressionResult::Propagate(e) => {
+                                return Ok(ExpressionResult::Propagate(e))
+                            }
+                        };
+                        let right_val = match eval(args[1].clone(), env)? {
+                            ExpressionResult::Value(v) => v,
+                            ExpressionResult::Propagate(e) => {
+                                return Ok(ExpressionResult::Propagate(e))
+                            }
+                        };
+
+                        meta_env.map_variable("left".to_string(), false, left_val);
+                        meta_env.map_variable("right".to_string(), false, right_val);
+                        let stmt = meta_fn(&mut meta_env);
+                        if let Statement::Return(expr) = stmt {
+                            Ok(ExpressionResult::Value(*expr))
+                        } else {
+                            Err("[Runtime Error] str_concat builtin did not return a value".into())
+                        }
                     }
 
                     // open(path, [mode], [content]) -> String ou Unit

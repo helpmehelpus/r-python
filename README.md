@@ -4,251 +4,361 @@
 [![GitHub issues](https://img.shields.io/github/issues/UnBCIC-TP2/r-python)](https://github.com/UnBCIC-TP2/r-python/issues)
 [![CI Status](https://img.shields.io/github/actions/workflow/status/UnBCIC-TP2/r-python/ci.yml?branch=main&label=ci-status&color=blue)](https://github.com/UnBCIC-TP2/r-python/actions)
 
-Um compilador/interpretador experimental escrito em Rust para uma linguagem com sintaxe inspirada no Python, mas com regras explícitas de tipagem estática e blocos delimitados por `end`. O projeto nasceu como ferramenta acadêmica para explorar conceitos de construção de compiladores e interpretação de linguagens.
+RPython is a statically typed, interpreted language with Python-inspired syntax. Unlike Python, it uses explicit `end` delimiters instead of indentation and requires type annotations on function signatures. The entire toolchain—lexer, parser, type checker, interpreter, and standard library—is implemented in Rust.
 
-> 🔎 Precisa copiar o README inteiro? A versão crua está disponível em `README.md`, bastando abrir o arquivo em modo *Raw* no GitHub ou executar `cat README.md` após clonar o repositório.
+> **Tip:** View `README.md` in *Raw* mode on GitHub to copy code snippets without HTML rendering.
 
-## 🧭 Índice
+---
 
-- [Visão Geral](#-visão-geral)
-- [Arquitetura em Alto Nível](#-arquitetura-em-alto-nível)
-- [Catálogo de Features da Linguagem](#-catálogo-de-features-da-linguagem)
-  - [Literais e Operações Numéricas](#literais-e-operações-numéricas)
-  - [Lógica Booleana e Comparações](#lógica-booleana-e-comparações)
-  - [Listas e Tuplas](#listas-e-tuplas)
-  - [Declarações `val`/`var` e Atribuições](#declarações-valvar-e-atribuições)
-  - [Controle de Fluxo (`if`/`elif`/`else`, `while`, `for`)](#controle-de-fluxo-ifelifelse-while-for)
-  - [Funções Tipadas, Retorno e Recursão](#funções-tipadas-retorno-e-recursão)
-  - [Assertions em Tempo de Execução](#assertions-em-tempo-de-execução)
-  - [Blocos de Teste Automatizado](#blocos-de-teste-automatizado)
-  - [Valores `Result` e Propagação de Erros](#valores-result-e-propagação-de-erros)
-  - [Valores `Maybe` (Opcionais)](#valores-maybe-opcionais)
-  - [Construtores de Tipos Algébricos (ADT)](#construtores-de-tipos-algébricos-adt)
-- [Guia Rápido](#-guia-rápido)
-- [Documentação Complementar](#-documentação-complementar)
-- [Contribuindo](#-contribuindo)
+## Table of Contents
 
-## 📋 Visão Geral
+1. [Motivation](#motivation)
+2. [Language Overview](#language-overview)
+3. [Type System](#type-system)
+4. [Control Flow](#control-flow)
+5. [Functions](#functions)
+6. [Standard Library (Metabuiltins)](#standard-library-metabuiltins)
+7. [Error Handling](#error-handling)
+8. [Algebraic Data Types](#algebraic-data-types)
+9. [Test Blocks](#test-blocks)
+10. [Project Architecture](#project-architecture)
+11. [Build & Test](#build--test)
+12. [Running Programs](#running-programs)
+13. [Current Limitations](#current-limitations)
+14. [Contributing](#contributing)
 
-RPython tem como foco:
+---
 
-- **Aprendizado de compiladores:** o código-fonte serve como laboratório para parsing, análise semântica, verificação de tipos e interpretação.
-- **Linguagem familiar:** a sintaxe lembra Python, mas inclui recursos clássicos de linguagens fortemente tipadas (anotações obrigatórias em funções, declarações `var`/`val`, ADTs em desenvolvimento).
-- **Ferramentas modernas:** todo o pipeline é escrito em Rust, aproveitando segurança de memória e uma rica base de testes automatizados.
+## Motivation
 
-## 🏗️ Arquitetura em Alto Nível
+RPython was created as a teaching tool for undergraduate courses on programming language implementation. The codebase demonstrates:
 
-- **Parser (`src/parser`)** – Constrói a Árvore de Sintaxe Abstrata (AST) a partir do código-fonte utilizando `nom`.
-- **IR/AST (`src/ir`)** – Define as estruturas centrais da linguagem (expressões, declarações, tipos e construtores).
-- **Environment (`src/environment`)** – Implementa pilha de escopos para variáveis, funções e tipos.
-- **Type Checker (`src/type_checker`)** – Analisa programas para garantir consistência de tipos antes da execução. (Algumas funcionalidades avançadas ainda estão em desenvolvimento.)
-- **Interpreter (`src/interpreter`)** – Avalia a AST produzindo resultados de execução.
-- **Pretty Printer (`src/pretty_print`)** – Gera representações legíveis da AST, útil para debugging e tooling.
+- **Parsing with combinators:** the parser uses `nom` to build an AST from source text.
+- **Scoped environments:** lexical scoping is implemented via a stack of symbol tables.
+- **Static type checking:** a type checker validates function signatures and expressions before execution.
+- **Tree-walking interpretation:** the interpreter directly evaluates the AST.
 
-## 🧪 Catálogo de Features da Linguagem
+The language surface resembles Python to lower the barrier for students, while the explicit block delimiters and mandatory type annotations expose concepts often hidden in dynamic languages.
 
-Os módulos de AST, parser, verificação de tipos e interpretador já oferecem um conjunto sólido de recursos — de operações aritméticas a estruturas de controle, passando por coleções, funções tipadas e tratamento de erros. Consulte `src/ir/ast.rs` e `src/parser/parser_stmt.rs` para ver a implementação completa de cada construção apresentada abaixo. A seguir reunimos exemplos autoexplicativos para cada feature disponível hoje.
+---
 
-### Literais e Operações Numéricas
+## Language Overview
+
+### Variables
 
 ```text
-val inteiro = 42;
-val real = 3.14;
-
-val soma = inteiro + 8;
-val mix = real * 2.0 - inteiro;
-val divisao = inteiro / 2;
+val pi = 3.14159;          # immutable binding
+var counter = 0;           # mutable binding
+counter = counter + 1;     # reassignment allowed for var
 ```
 
-<!-- -->
+- `val` declares an immutable variable; reassignment is a compile-time error.
+- `var` declares a mutable variable.
 
-### Lógica Booleana e Comparações
+### Literals
+
+| Type      | Example                        |
+|-----------|--------------------------------|
+| Integer   | `42`, `-7`                     |
+| Real      | `3.14`, `0.0`                  |
+| String    | `"hello"`, `"line\nbreak"`     |
+| Boolean   | `True`, `False`                |
+| List      | `[1, 2, 3]`                    |
+| Tuple     | `(1, "a", True)`               |
+
+### Operators
+
+| Category     | Operators                              |
+|--------------|----------------------------------------|
+| Arithmetic   | `+`, `-`, `*`, `/`                     |
+| Comparison   | `==`, `!=`, `<`, `>`, `<=`, `>=`       |
+| Logical      | `and`, `or`, `not`                     |
+
+---
+
+## Type System
+
+RPython uses explicit, static types for function parameters and return values. Variables infer their type from the initializer expression.
+
+### Built-in Types
+
+- `Int` — 32-bit signed integer
+- `Real` — 64-bit floating point
+- `Boolean` — `True` or `False`
+- `String` — UTF-8 text
+- `Unit` — returned by side-effect-only functions (equivalent to `void`)
+- `Any` — escape hatch; matches any type (used sparingly)
+
+### Composite Types
+
+- `List[T]` — homogeneous list of elements of type `T`
+- `Tuple[T1, T2, ...]` — fixed-size, heterogeneous tuple
+- `Maybe[T]` — optional value (`Just(value)` or `Nothing`)
+- `Result[Ok, Err]` — success/failure carrier (`Ok(value)` or `Err(error)`)
+- `fn(T1, T2) -> R` — first-class function type
+
+---
+
+## Control Flow
+
+### Conditionals
 
 ```text
-val idade = 20;
-val possui_autorizacao = False;
-
-val maior_de_idade = idade >= 18;
-val pode_participar = maior_de_idade or possui_autorizacao;
-val precisa_aviso = not maior_de_idade and possui_autorizacao == False;
-```
-
-### Listas e Tuplas
-
-```text
-val lista_vazia = [];
-val linguagens = ["RPython", "Rust", "Python"];
-val pares = [(1, "um"), (2, "dois")];
-val coordenada = (latitude, longitude, "Norte");
-```
-
-> ℹ️ Listas e tuplas aparecem como `ListValue` e `Tuple` na AST, garantindo suporte a coleções homogêneas e heterogêneas (veja `src/ir/ast.rs`).
-
-### Declarações `val`/`var` e Atribuições
-
-```text
-val nome = "RPython";      # imutável
-var contador = 0;          # mutável
-
-contador = contador + 1;
-val saudacao = "Olá, " + nome;
-```
-
-> ℹ️ Declarações `val`/`var` e reatribuições são modeladas por `Statement::ValDeclaration`, `Statement::VarDeclaration` e `Statement::Assignment` em `src/ir/ast.rs`.
-
-### Controle de Fluxo (`if`/`elif`/`else`, `while`, `for`)
-
-```text
-if nota >= 9:
-    conceito = "Excelente";
-elif nota >= 7:
-    conceito = "Bom";
+if score >= 90:
+    grade = "A";
+elif score >= 80:
+    grade = "B";
 else:
-    conceito = "Recuperação";
-end
-
-var total = 0;
-while total < 3:
-    total = total + 1;
-end
-
-val numeros = [1, 2, 3];
-var soma = 0;
-for n in numeros:
-    soma = soma + n;
+    grade = "C";
 end
 ```
 
-> ℹ️ O núcleo reconhece `if`/`elif`/`else`, laços `while` e `for` como variantes específicas da AST, preservando o bloco associado a cada controle de fluxo (implementações em `src/ir/ast.rs` e `src/parser/parser_stmt.rs`).
+All branches must be terminated with `end`.
 
-### Funções Tipadas, Retorno e Recursão
+### Loops
 
 ```text
-def fibonacci(n: Int) -> Int:
+var i = 0;
+while i < 5:
+    print(i);
+    i = i + 1;
+end
+
+for x in [1, 2, 3]:
+    print(x);
+end
+```
+
+- `break` exits the innermost loop immediately.
+- `continue` skips to the next iteration.
+
+---
+
+## Functions
+
+Functions require type annotations for parameters and return type.
+
+```text
+def factorial(n: Int) -> Int:
     if n <= 1:
-        return n;
+        return 1;
     end
-    return fibonacci(n - 1) + fibonacci(n - 2);
+    return n * factorial(n - 1);
 end;
 
-val resultado = fibonacci(10);
-asserttrue(resultado == 55, "Fib(10) deve ser 55");
+val result = factorial(5);
+asserttrue(result == 120, "5! should be 120");
 ```
 
-> ℹ️ Funções são representadas por `Function` + `Statement::FuncDef`, com anotações obrigatórias de tipos de parâmetros e retorno (`src/ir/ast.rs` e `src/parser/parser_stmt.rs`).
+### Lambdas
 
-### Assertions em Tempo de Execução
+Anonymous functions can be assigned to variables or passed as arguments.
 
 ```text
-asserttrue(condicao, "Mensagem de sucesso");
-assertfalse(condicao, "Mensagem de erro");
-asserteq(resultado, esperado, "Valores devem ser iguais");
-assertneq(id_atual, ultimo_id, "IDs não podem coincidir");
+val add = lambda (a: Int, b: Int) -> Int: a + b end;
+val sum = add(2, 3);
 ```
 
-> ℹ️ Há variantes dedicadas para cada assertiva (`Assert`, `AssertTrue`, `AssertFalse`, `AssertEQ`, `AssertNEQ`) que permitem mensagens customizadas e integração com o runner de testes (detalhes em `src/ir/ast.rs`).
+---
 
-### Blocos de Teste Automatizado
+## Standard Library (Metabuiltins)
+
+Metabuiltins are functions implemented in Rust and exposed to user code. They handle I/O, type conversions, and common operations.
+
+### I/O
+
+| Function                  | Description                                      |
+|---------------------------|--------------------------------------------------|
+| `input(prompt?)`          | Read a line from stdin; optional prompt string.  |
+| `input_int(prompt?)`      | Read and parse an integer from stdin.            |
+| `input_real(prompt?)`     | Read and parse a real number from stdin.         |
+| `print(value)`            | Print `value` without trailing newline.          |
+| `print_line(value)`       | Print `value` followed by a newline.             |
+
+### Conversion
+
+| Function                         | Description                                       |
+|----------------------------------|---------------------------------------------------|
+| `to_string(value)`               | Convert any value to its string representation.   |
+| `to_string_fixed(value, places)` | Format a number with fixed decimal places.        |
+| `to_int(value)`                  | Convert a string or real to an integer.           |
+| `to_real(value)`                 | Convert a string or integer to a real.            |
+
+### Strings & Collections
+
+| Function                          | Description                                                |
+|-----------------------------------|------------------------------------------------------------|
+| `str_concat(left, right)`         | Concatenate two strings.                                   |
+| `join(values: List[String], sep)` | Join a list of strings with a separator.                   |
+| `len(value)`                      | Return the length of a string, list, or tuple.             |
+
+### Files
+
+| Function                      | Description                                                       |
+|-------------------------------|-------------------------------------------------------------------|
+| `open(path, mode?, content?)` | Open a file. Modes: `r` (read), `w` (write), `a` (append).        |
+
+---
+
+## Error Handling
+
+RPython provides two monadic types for representing optional or fallible values.
+
+### `Maybe[T]`
 
 ```text
-test soma_basica():
-    val resultado = 2 + 3;
-    asserttrue(resultado == 5, "2 + 3 deve ser 5");
+val name = Just("Alice");
+val empty = Nothing;
+
+if isNothing(empty):
+    print("No value");
 end
+
+val unwrapped = name!;   # unwrap: panics if Nothing
 ```
 
-> ℹ️ O interpretador expõe `Statement::TestDef` para registrar casos de teste e executá-los isoladamente com coleta de resultados (veja `src/ir/ast.rs` e `src/interpreter/statement_execute.rs`).
-
-### Valores `Result` e Propagação de Erros
+### `Result[Ok, Err]`
 
 ```text
-def dividir(a: Int, b: Int) -> Result[Int, String]:
+def divide(a: Int, b: Int) -> Result[Int, String]:
     if b == 0:
-        return Err("Divisão por zero");
+        return Err("division by zero");
     end
     return Ok(a / b);
 end;
 
-def dividir_e_incrementar(a: Int, b: Int, inc: Int) -> Result[Int, String]:
-    val quociente = dividir(a, b)?;   # Propaga Err automaticamente
-    return Ok(quociente + inc);
-end;
-
-val resultado = dividir_e_incrementar(10, 2, 1);
-assertfalse(is_error(resultado), "Esperávamos um Ok");
+val result = divide(10, 2)?;  # propagate Err automatically
 ```
 
-> ℹ️ Resultado de erros utiliza as variantes `COk`, `CErr`, `Propagate`, `IsError` e `Unwrap` dentro da AST e do interpretador, cobrindo desde a construção até a propagação de falhas (`src/ir/ast.rs` e `src/interpreter/expression_eval.rs`).
+- `isError(result)` checks if a `Result` is an `Err`.
+- `isNothing(maybe)` checks if a `Maybe` is `Nothing`.
+- The `?` operator (propagate) returns early if the value is `Err`.
 
-### Valores `Maybe` (Opcionais)
+---
+
+## Algebraic Data Types
+
+ADTs can be declared with multiple constructors. Pattern matching is not yet implemented; values are constructed and passed around opaquely.
 
 ```text
-val nome = Just("RPython");
-
-if is_nothing(nome):
-    assertfalse(True, "Nome não deveria ser Nothing");
+data Shape:
+    | Circle Int
+    | Rectangle Int Int
 end
 
-val texto = nome!;  # unwrap: lança erro se for Nothing
+val c = Circle(5);
+val r = Rectangle(3, 4);
 ```
 
-> ℹ️ Valores opcionais contam com `CJust`, `CNothing`, `IsNothing` e `Unwrap`, permitindo presença ou ausência de dados com verificação estática (consulte `src/ir/ast.rs` e `src/type_checker/expression_type_checker.rs`).
+---
 
-### Construtores de Tipos Algébricos (ADT)
+## Test Blocks
+
+Inline test definitions allow embedding unit tests directly in source files.
 
 ```text
-data Forma:
-    | Circulo Int
-    | Retangulo Int Int
+test addition_works():
+    val result = 2 + 2;
+    asserttrue(result == 4, "2 + 2 should be 4");
 end
-
-val figura = Circulo(5);
 ```
 
-> ℹ️ Tipos algébricos são descritos por `Type::TAlgebraicData` e `ValueConstructor`, habilitando construtores nomeados com múltiplos campos (`src/ir/ast.rs`).
+Assertions:
 
-> 💡 A sintaxe usa `;` para separar instruções dentro de blocos e a palavra-chave `end` para finalizar estruturas de controle e definições.
+| Function                          | Description                                 |
+|-----------------------------------|---------------------------------------------|
+| `assert(cond, msg)`               | Fail with `msg` if `cond` is false.         |
+| `asserttrue(cond, msg)`           | Same as `assert`.                           |
+| `assertfalse(cond, msg)`          | Fail if `cond` is true.                     |
+| `asserteq(a, b, msg)`             | Fail if `a != b`.                           |
+| `assertneq(a, b, msg)`            | Fail if `a == b`.                           |
 
-## ⚙️ Guia Rápido
+---
 
-### Pré-requisitos
+## Project Architecture
 
-- Rust (última versão estável)
-- Cargo (já incluído na instalação padrão do Rust)
-- Git
+```
+src/
+├── ir/              # AST definitions (expressions, statements, types)
+├── parser/          # nom-based parsers for expressions, statements, types
+├── type_checker/    # Static type checking for expressions and statements
+├── interpreter/     # Tree-walking interpreter and test runner
+├── stdlib/          # Metabuiltins table and implementations
+├── pretty_print/    # AST → readable source formatter
+├── environment/     # Scoped symbol tables (variables, functions, types)
+└── main.rs          # Entry point (currently test-driven)
+```
 
-### Clonando o repositório
+### Key Modules
+
+- **`ir/ast.rs`** — Defines `Expression`, `Statement`, `Type`, `Function`, and ADT structures.
+- **`parser/parser_stmt.rs`** — Parses statements (`if`, `while`, `for`, `def`, `break`, `continue`, etc.).
+- **`parser/parser_expr.rs`** — Parses expressions (literals, operators, function calls).
+- **`type_checker/`** — Validates types; checks function signatures and return types.
+- **`interpreter/statement_execute.rs`** — Executes statements; handles loops with `break`/`continue`.
+- **`interpreter/expression_eval.rs`** — Evaluates expressions; dispatches metabuiltin calls.
+- **`stdlib/standard_library.rs`** — Implements 13 metabuiltins.
+
+---
+
+## Build & Test
+
+### Prerequisites
+
+- Rust (stable toolchain)
+- Cargo (bundled with Rust)
+
+### Commands
 
 ```bash
+# Clone the repository
 git clone https://github.com/UnBCIC-TP2/r-python.git
 cd r-python
-```
 
-### Compilação e testes
-
-```bash
-# Compilar o projeto
+# Build the project
 cargo build
 
-# Executar a suíte de testes
+# Run all tests
 cargo test
+
+# Run tests with output (useful for debugging)
+cargo test -- --nocapture
 ```
 
-### Executando exemplos
+The test suite currently includes 270+ unit tests covering the parser, type checker, interpreter, and standard library.
 
-Você pode experimentar trechos da linguagem utilizando `cargo test -- --nocapture` para observar os programas de exemplo instrumentados no `main`. Em breve disponibilizaremos uma CLI dedicada para avaliar arquivos `.rpy` diretamente.
+---
 
-## 📚 Documentação Complementar
+## Running Programs
 
-- **[Environment Module](docs/environment.md)** – Escopos, tabelas de símbolos e política de resolução de nomes.
-- **[Parser Component](docs/parser.md)** – Estratégias de parsing com `nom`, gramática suportada e exemplos de AST.
-- **[Type Checker Module](docs/type_checker.md)** – Regras de tipagem, tipos suportados e roadmap do verificador. *(Em evolução)*
+RPython includes a CLI to execute `.rpy` files directly:
 
-## 🤝 Contribuindo
+```bash
+# Run a program
+cargo run -- path/to/program.rpy
 
-Contribuições são muito bem-vindas! Antes de abrir issues ou enviar pull requests, consulte nossos guias:
+# Or build first, then run the binary
+cargo build --release
+./target/release/r-python path/to/program.rpy
+```
 
-- [Guia de Contribuição em Português](CONTRIBUTING_pt.md)
-- [Contributing Guidelines in English](CONTRIBUTING_en.md)
+The interpreter reads from stdin and writes to stdout, making it suitable for automated judging systems like beecrowd.
 
-Fique à vontade para sugerir melhorias na linguagem, adicionar novos exemplos ou expandir a documentação.
+---
+
+## Current Limitations
+
+1. **No module system:** all code lives in a single file.
+2. **No pattern matching:** ADT constructors can be built but not destructured.
+3. **No interactive REPL:** only file-based execution is supported.
+4. **Limited error messages:** parser and type checker errors are functional but not always user-friendly.
+5. **No tail-call optimization:** deep recursion may overflow the stack.
+
+---
+
+## Contributing
+
+Contributions are welcome! Please read the contribution guides before submitting issues or pull requests:
+
+- [Contributing Guidelines (English)](CONTRIBUTING_en.md)
+- [Guia de Contribuição (Português)](CONTRIBUTING_pt.md)

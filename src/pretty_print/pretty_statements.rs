@@ -120,6 +120,8 @@ impl ToDoc for Statement {
                     ),
                 ),
             ),
+            Statement::Break => concat(text("break"), text(";")),
+            Statement::Continue => concat(text("continue"), text(";")),
             // Delega a formatação da definição de função para a implementação `ToDoc` de `Function`.
             Statement::FuncDef(func) => func.to_doc(),
 

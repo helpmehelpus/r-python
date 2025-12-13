@@ -8,6 +8,8 @@ pub enum Computation {
     Continue(Environment<Expression>),
     Return(Expression, Environment<Expression>),
     PropagateError(Expression, Environment<Expression>),
+    BreakLoop(Environment<Expression>),
+    ContinueLoop(Environment<Expression>),
 }
 
 pub fn _execute_with_env_(
@@ -18,6 +20,8 @@ pub fn _execute_with_env_(
         Ok(Computation::Continue(new_env)) => Ok(new_env),
         Ok(Computation::Return(_, new_env)) => Ok(new_env), // For backward compatibility
         Ok(Computation::PropagateError(_, new_env)) => Ok(new_env), // For backward compatibility
+        Ok(Computation::BreakLoop(_)) => Err("'break' used outside of a loop".to_string()),
+        Ok(Computation::ContinueLoop(_)) => Err("'continue' used outside of a loop".to_string()),
         Err(e) => Err(e),
     }
 }
@@ -31,6 +35,8 @@ pub fn run(
         Ok(Computation::Continue(new_env)) => Ok(new_env),
         Ok(Computation::Return(_, new_env)) => Ok(new_env),
         Ok(Computation::PropagateError(_, new_env)) => Ok(new_env),
+        Ok(Computation::BreakLoop(_)) => Err("'break' used outside of a loop".to_string()),
+        Ok(Computation::ContinueLoop(_)) => Err("'continue' used outside of a loop".to_string()),
         Err(e) => Err(e),
     }
 }
@@ -57,15 +63,29 @@ pub fn run_tests(stmt: &Statement) -> Result<Vec<TestResult>, String> {
             Ok(Computation::Continue(_)) | Ok(Computation::Return(_, _)) => {
                 results.push(TestResult::new(test.name.clone(), true, None));
             }
-            Err(e) => {
-                results.push(TestResult::new(test.name.clone(), false, Some(e)));
-            }
             Ok(Computation::PropagateError(e, _)) => {
                 results.push(TestResult::new(
                     test.name.clone(),
                     false,
                     Some(format!("Propagated error: {:?}", e)),
                 ));
+            }
+            Ok(Computation::BreakLoop(_)) => {
+                results.push(TestResult::new(
+                    test.name.clone(),
+                    false,
+                    Some("'break' used outside of a loop".to_string()),
+                ));
+            }
+            Ok(Computation::ContinueLoop(_)) => {
+                results.push(TestResult::new(
+                    test.name.clone(),
+                    false,
+                    Some("'continue' used outside of a loop".to_string()),
+                ));
+            }
+            Err(e) => {
+                results.push(TestResult::new(test.name.clone(), false, Some(e)));
             }
         }
         test_env.pop();
@@ -338,6 +358,10 @@ pub fn execute(stmt: Statement, env: &Environment<Expression>) -> Result<Computa
                             Computation::PropagateError(expr, env) => {
                                 return Ok(Computation::PropagateError(expr, env))
                             }
+                            Computation::BreakLoop(env) => return Ok(Computation::Continue(env)),
+                            Computation::ContinueLoop(env) => {
+                                new_env = env;
+                            }
                         }
                         value = match eval(*cond.clone(), &new_env)? {
                             ExpressionResult::Value(expr) => expr,
@@ -376,6 +400,11 @@ pub fn execute(stmt: Statement, env: &Environment<Expression>) -> Result<Computa
                             Computation::PropagateError(expr, env) => {
                                 return Ok(Computation::PropagateError(expr, env))
                             }
+                            Computation::BreakLoop(env) => return Ok(Computation::Continue(env)),
+                            Computation::ContinueLoop(env) => {
+                                new_env = env;
+                                continue;
+                            }
                         }
                         // Restore previous binding after each iteration
                         let _ = new_env.remove_variable(&var.clone());
@@ -400,6 +429,11 @@ pub fn execute(stmt: Statement, env: &Environment<Expression>) -> Result<Computa
                             Computation::PropagateError(expr, env) => {
                                 return Ok(Computation::PropagateError(expr, env))
                             }
+                            Computation::BreakLoop(env) => return Ok(Computation::Continue(env)),
+                            Computation::ContinueLoop(env) => {
+                                new_env = env;
+                                continue;
+                            }
                         }
                         let _ = new_env.remove_variable(&var.clone());
                         if let Some((was_mut, old_val)) = prev {
@@ -421,6 +455,11 @@ pub fn execute(stmt: Statement, env: &Environment<Expression>) -> Result<Computa
                             }
                             Computation::PropagateError(expr, env) => {
                                 return Ok(Computation::PropagateError(expr, env))
+                            }
+                            Computation::BreakLoop(env) => return Ok(Computation::Continue(env)),
+                            Computation::ContinueLoop(env) => {
+                                new_env = env;
+                                continue;
                             }
                         }
                         let _ = new_env.remove_variable(&var.clone());
@@ -445,6 +484,11 @@ pub fn execute(stmt: Statement, env: &Environment<Expression>) -> Result<Computa
                             Computation::PropagateError(expr, env) => {
                                 return Ok(Computation::PropagateError(expr, env))
                             }
+                            Computation::BreakLoop(env) => return Ok(Computation::Continue(env)),
+                            Computation::ContinueLoop(env) => {
+                                new_env = env;
+                                continue;
+                            }
                         }
                         let _ = new_env.remove_variable(&var.clone());
                         if let Some((was_mut, old_val)) = prev {
@@ -465,6 +509,8 @@ pub fn execute(stmt: Statement, env: &Environment<Expression>) -> Result<Computa
                 Computation::PropagateError(expr, env) => {
                     return Ok(Computation::PropagateError(expr, env))
                 }
+                Computation::BreakLoop(env) => return Ok(Computation::BreakLoop(env)),
+                Computation::ContinueLoop(env) => return Ok(Computation::ContinueLoop(env)),
             }
             execute(*s2, &new_env)
         }
@@ -501,6 +547,10 @@ pub fn execute(stmt: Statement, env: &Environment<Expression>) -> Result<Computa
             ExpressionResult::Propagate(expr) => Ok(Computation::PropagateError(expr, new_env)),
         },
 
+        Statement::Break => Ok(Computation::BreakLoop(new_env)),
+
+        Statement::Continue => Ok(Computation::ContinueLoop(new_env)),
+
         Statement::MetaStmt(ref name) => {
             let table = get_metabuiltins_table();
             if let Some(f) = table.get(name) {
@@ -530,6 +580,8 @@ pub fn execute_block(
             Computation::PropagateError(expr, new_env) => {
                 return Ok(Computation::PropagateError(expr, new_env))
             }
+            Computation::BreakLoop(env) => return Ok(Computation::BreakLoop(env)),
+            Computation::ContinueLoop(env) => return Ok(Computation::ContinueLoop(env)),
         }
     }
 
@@ -551,6 +603,8 @@ pub fn execute_if_block(
             Computation::PropagateError(expr, new_env) => {
                 return Ok(Computation::PropagateError(expr, new_env))
             }
+            Computation::BreakLoop(env) => return Ok(Computation::BreakLoop(env)),
+            Computation::ContinueLoop(env) => return Ok(Computation::ContinueLoop(env)),
         }
     }
     Ok(Computation::Continue(current_env))
@@ -570,6 +624,8 @@ mod tests {
             Computation::Continue(env) => env,
             Computation::Return(_, env) => env,
             Computation::PropagateError(_, env) => env,
+            Computation::BreakLoop(env) => env,
+            Computation::ContinueLoop(env) => env,
         }
     }
 
@@ -1143,9 +1199,11 @@ mod tests {
             assert!(result.is_err(), "Assert with false condition should fail");
             //assert_eq!(result.unwrap_err(), "fail msg");
             let computation = match execute(stmt, &env) {
-                Ok(Computation::Continue(_)) => "error".to_string(),
-                Ok(Computation::Return(_, _)) => "error".to_string(),
-                Ok(Computation::PropagateError(_, _)) => "error".to_string(),
+                Ok(Computation::Continue(_))
+                | Ok(Computation::Return(_, _))
+                | Ok(Computation::PropagateError(_, _))
+                | Ok(Computation::BreakLoop(_))
+                | Ok(Computation::ContinueLoop(_)) => "error".to_string(),
                 Err(e) => e.to_string(),
             };
             assert_eq!(computation, "fail msg".to_string());
@@ -1179,9 +1237,11 @@ mod tests {
             //assert_eq!(result.unwrap_err(), "eq fail");
 
             let computation = match execute(stmt, &env) {
-                Ok(Computation::Continue(_)) => "error".to_string(),
-                Ok(Computation::Return(_, _)) => "error".to_string(),
-                Ok(Computation::PropagateError(_, _)) => "error".to_string(),
+                Ok(Computation::Continue(_))
+                | Ok(Computation::Return(_, _))
+                | Ok(Computation::PropagateError(_, _))
+                | Ok(Computation::BreakLoop(_))
+                | Ok(Computation::ContinueLoop(_)) => "error".to_string(),
                 Err(e) => e.to_string(),
             };
             assert_eq!(computation, "eq fail".to_string());
@@ -1215,9 +1275,11 @@ mod tests {
             //assert_eq!(result.unwrap_err(), "neq fail");
 
             let computation = match execute(stmt, &env) {
-                Ok(Computation::Continue(_)) => "error".to_string(),
-                Ok(Computation::Return(_, _)) => "error".to_string(),
-                Ok(Computation::PropagateError(_, _)) => "error".to_string(),
+                Ok(Computation::Continue(_))
+                | Ok(Computation::Return(_, _))
+                | Ok(Computation::PropagateError(_, _))
+                | Ok(Computation::BreakLoop(_))
+                | Ok(Computation::ContinueLoop(_)) => "error".to_string(),
                 Err(e) => e.to_string(),
             };
             assert_eq!(computation, "neq fail".to_string());
@@ -1252,9 +1314,11 @@ mod tests {
             //assert_eq!(result.unwrap_err(), "asserttrue fail");
 
             let computation = match execute(stmt, &env) {
-                Ok(Computation::Continue(_)) => "error".to_string(),
-                Ok(Computation::Return(_, _)) => "error".to_string(),
-                Ok(Computation::PropagateError(_, _)) => "error".to_string(),
+                Ok(Computation::Continue(_))
+                | Ok(Computation::Return(_, _))
+                | Ok(Computation::PropagateError(_, _))
+                | Ok(Computation::BreakLoop(_))
+                | Ok(Computation::ContinueLoop(_)) => "error".to_string(),
                 Err(e) => e.to_string(),
             };
             assert_eq!(computation, "asserttrue fail".to_string());
@@ -1288,9 +1352,11 @@ mod tests {
             );
             //assert_eq!(result.unwrap_err(), "assertfalse fail");
             let computation = match execute(stmt, &env) {
-                Ok(Computation::Continue(_)) => "error".to_string(),
-                Ok(Computation::Return(_, _)) => "error".to_string(),
-                Ok(Computation::PropagateError(_, _)) => "error".to_string(),
+                Ok(Computation::Continue(_))
+                | Ok(Computation::Return(_, _))
+                | Ok(Computation::PropagateError(_, _))
+                | Ok(Computation::BreakLoop(_))
+                | Ok(Computation::ContinueLoop(_)) => "error".to_string(),
                 Err(e) => e.to_string(),
             };
             assert_eq!(computation, "assertfalse fail".to_string());

@@ -178,6 +178,19 @@ mod statement_tests {
     }
 
     #[test]
+    fn test_expression_statement() {
+        let input = "print(1)";
+        let expected = Statement::ExprStmt(Box::new(Expression::FuncCall(
+            "print".to_string(),
+            vec![Expression::CInt(1)],
+        )));
+
+        let (rest, result) = parse_statement(input).unwrap();
+        assert_eq!(rest, "");
+        assert_eq!(result, expected);
+    }
+
+    #[test]
     #[ignore]
     fn test_if_statements() {
         let input = "if x > 0: y = 1; end";

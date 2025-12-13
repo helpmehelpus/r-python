@@ -30,18 +30,8 @@ pub fn check_stmt(
         Statement::TypeDeclaration(name, cons) => check_adt_declarations_stmt(name, cons, env),
         Statement::Block(statements_vector) => check_block_statement(statements_vector, env),
         Statement::Return(exp) => check_return_stmt(exp, env),
-
-        // Blocos no nível de statement: empilham escopo e checam internamente.
-        Statement::Block(stmts) => {
-            let mut block_env = env.clone();
-            block_env.push();
-
-            for s in stmts {
-                block_env = check_stmt(s, &block_env)?;
-            }
-            block_env.pop();
-            Ok(block_env)
-        }
+        Statement::Break => Ok(env.clone()),
+        Statement::Continue => Ok(env.clone()),
 
         Statement::Assert(expr1, errmsg) => check_assert(expr1, errmsg, env),
         Statement::AssertTrue(expr1, errmsg) => check_assert_true(expr1, errmsg, env),
@@ -427,7 +417,7 @@ fn check_return_stmt(
     if ret_type != current_func.kind {
         return Err(format!(
             "Error in function {}:
-        Actual return type cannot be different from formal return type \n 
+        Actual return type cannot be different from formal return type \n
         Actual return type: {:?} \n
         Formal return type: {:?}",
             env.current_func, ret_type, current_func.kind

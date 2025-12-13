@@ -226,6 +226,8 @@ pub enum Statement {
     },
     While(Box<Expression>, Box<Statement>),
     For(Name, Box<Expression>, Box<Statement>),
+    Break,
+    Continue,
     Block(Vec<Statement>),
     Sequence(Box<Statement>, Box<Statement>),
     Assert(Box<Expression>, Box<Expression>), //Segundo expression deve ser String

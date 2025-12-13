@@ -17,6 +17,34 @@ pub fn get_metabuiltins_table() -> &'static HashMap<String, MetaBuiltinStmt> {
         table.insert("input".to_string(), input_builtin as MetaBuiltinStmt);
         table.insert("print".to_string(), print_builtin as MetaBuiltinStmt);
         table.insert("open".to_string(), open_builtin as MetaBuiltinStmt);
+        table.insert(
+            "input_int".to_string(),
+            input_int_builtin as MetaBuiltinStmt,
+        );
+        table.insert(
+            "input_real".to_string(),
+            input_real_builtin as MetaBuiltinStmt,
+        );
+        table.insert(
+            "to_string".to_string(),
+            to_string_builtin as MetaBuiltinStmt,
+        );
+        table.insert(
+            "to_string_fixed".to_string(),
+            to_string_fixed_builtin as MetaBuiltinStmt,
+        );
+        table.insert(
+            "str_concat".to_string(),
+            str_concat_builtin as MetaBuiltinStmt,
+        );
+        table.insert("len".to_string(), len_builtin as MetaBuiltinStmt);
+        table.insert(
+            "print_line".to_string(),
+            print_line_builtin as MetaBuiltinStmt,
+        );
+        table.insert("join".to_string(), join_builtin as MetaBuiltinStmt);
+        table.insert("to_int".to_string(), to_int_builtin as MetaBuiltinStmt);
+        table.insert("to_real".to_string(), to_real_builtin as MetaBuiltinStmt);
         table
     })
 }
@@ -47,6 +75,211 @@ pub fn print_builtin(env: &mut Environment<Expression>) -> Statement {
         _ => println!("{:?}", value),
     }
     Statement::Return(Box::new(Expression::CVoid))
+}
+
+pub fn input_int_builtin(env: &mut Environment<Expression>) -> Statement {
+    let prompt = match env.lookup(&"prompt".to_string()) {
+        Some((_, Expression::CString(s))) => s.clone(),
+        _ => "".to_string(),
+    };
+    print!("{}", prompt);
+    use std::io::{self, Write};
+    io::stdout().flush().unwrap();
+    let mut input = String::new();
+    io::stdin().read_line(&mut input).unwrap();
+    let trimmed = input.trim_end_matches(['\n', '\r']);
+    match trimmed.parse::<i32>() {
+        Ok(v) => Statement::Return(Box::new(Expression::CInt(v))),
+        Err(e) => Statement::Return(Box::new(Expression::CString(format!(
+            "input_int: failed to parse integer: {}",
+            e
+        )))),
+    }
+}
+
+pub fn input_real_builtin(env: &mut Environment<Expression>) -> Statement {
+    let prompt = match env.lookup(&"prompt".to_string()) {
+        Some((_, Expression::CString(s))) => s.clone(),
+        _ => "".to_string(),
+    };
+    print!("{}", prompt);
+    use std::io::{self, Write};
+    io::stdout().flush().unwrap();
+    let mut input = String::new();
+    io::stdin().read_line(&mut input).unwrap();
+    let trimmed = input.trim_end_matches(['\n', '\r']);
+    match trimmed.parse::<f64>() {
+        Ok(v) => Statement::Return(Box::new(Expression::CReal(v))),
+        Err(e) => Statement::Return(Box::new(Expression::CString(format!(
+            "input_real: failed to parse real: {}",
+            e
+        )))),
+    }
+}
+
+fn expr_to_string(expr: &Expression) -> String {
+    match expr {
+        Expression::CString(s) => s.clone(),
+        Expression::CInt(i) => i.to_string(),
+        Expression::CReal(f) => f.to_string(),
+        Expression::CTrue => "True".to_string(),
+        Expression::CFalse => "False".to_string(),
+        Expression::CVoid => "".to_string(),
+        other => format!("{:?}", other),
+    }
+}
+
+pub fn to_string_builtin(env: &mut Environment<Expression>) -> Statement {
+    let value = env
+        .lookup(&"value".to_string())
+        .map(|(_, v)| v)
+        .unwrap_or(Expression::CVoid);
+    Statement::Return(Box::new(Expression::CString(expr_to_string(&value))))
+}
+
+pub fn str_concat_builtin(env: &mut Environment<Expression>) -> Statement {
+    let left = env
+        .lookup(&"left".to_string())
+        .map(|(_, v)| v)
+        .unwrap_or(Expression::CString("".to_string()));
+    let right = env
+        .lookup(&"right".to_string())
+        .map(|(_, v)| v)
+        .unwrap_or(Expression::CString("".to_string()));
+
+    let res = format!("{}{}", expr_to_string(&left), expr_to_string(&right));
+    Statement::Return(Box::new(Expression::CString(res)))
+}
+
+pub fn len_builtin(env: &mut Environment<Expression>) -> Statement {
+    let value = env.lookup(&"value".to_string()).map(|(_, v)| v);
+
+    let result = match value {
+        Some(Expression::CString(s)) => Expression::CInt(s.chars().count() as i32),
+        Some(Expression::ListValue(items)) => Expression::CInt(items.len() as i32),
+        Some(Expression::Tuple(items)) => Expression::CInt(items.len() as i32),
+        Some(other) => Expression::CString(format!("len: unsupported type {:?}", other)),
+        None => Expression::CString("len: missing argument 'value'".to_string()),
+    };
+
+    Statement::Return(Box::new(result))
+}
+
+pub fn print_line_builtin(env: &mut Environment<Expression>) -> Statement {
+    let value = env
+        .lookup(&"value".to_string())
+        .map(|(_, v)| v)
+        .unwrap_or(Expression::CString("".to_string()));
+
+    match value {
+        Expression::CString(s) => println!("{}", s),
+        Expression::CInt(i) => println!("{}", i),
+        Expression::CReal(f) => println!("{}", f),
+        _ => println!("{:?}", value),
+    }
+
+    Statement::Return(Box::new(Expression::CVoid))
+}
+
+pub fn join_builtin(env: &mut Environment<Expression>) -> Statement {
+    let values = env.lookup(&"values".to_string()).map(|(_, v)| v);
+    let sep = env.lookup(&"sep".to_string()).map(|(_, v)| v);
+
+    match (values, sep) {
+        (Some(Expression::ListValue(items)), Some(Expression::CString(sep_str))) => {
+            let mut parts = Vec::with_capacity(items.len());
+            for item in items.iter() {
+                match item {
+                    Expression::CString(s) => parts.push(s.clone()),
+                    other => {
+                        return Statement::Return(Box::new(Expression::CString(format!(
+                            "join: expected list of strings, found {:?}",
+                            other
+                        ))))
+                    }
+                }
+            }
+            let joined = parts.join(&sep_str);
+            Statement::Return(Box::new(Expression::CString(joined)))
+        }
+        (Some(_), Some(other_sep)) => Statement::Return(Box::new(Expression::CString(format!(
+            "join: separator must be a string, found {:?}",
+            other_sep
+        )))),
+        (None, _) => Statement::Return(Box::new(Expression::CString(
+            "join: missing argument 'values'".to_string(),
+        ))),
+        (_, None) => Statement::Return(Box::new(Expression::CString(
+            "join: missing argument 'sep'".to_string(),
+        ))),
+    }
+}
+
+pub fn to_int_builtin(env: &mut Environment<Expression>) -> Statement {
+    let value = env
+        .lookup(&"value".to_string())
+        .map(|(_, v)| v)
+        .unwrap_or(Expression::CVoid);
+
+    let result = match value {
+        Expression::CInt(i) => Expression::CInt(i),
+        Expression::CReal(f) => Expression::CInt(f as i32),
+        Expression::CString(s) => match s.trim().parse::<i32>() {
+            Ok(v) => Expression::CInt(v),
+            Err(e) => Expression::CString(format!("to_int: failed to parse integer: {}", e)),
+        },
+        other => Expression::CString(format!("to_int: unsupported type {:?}", other)),
+    };
+
+    Statement::Return(Box::new(result))
+}
+
+pub fn to_real_builtin(env: &mut Environment<Expression>) -> Statement {
+    let value = env
+        .lookup(&"value".to_string())
+        .map(|(_, v)| v)
+        .unwrap_or(Expression::CVoid);
+
+    let result = match value {
+        Expression::CReal(f) => Expression::CReal(f),
+        Expression::CInt(i) => Expression::CReal(i as f64),
+        Expression::CString(s) => match s.trim().parse::<f64>() {
+            Ok(v) => Expression::CReal(v),
+            Err(e) => Expression::CString(format!("to_real: failed to parse real: {}", e)),
+        },
+        other => Expression::CString(format!("to_real: unsupported type {:?}", other)),
+    };
+
+    Statement::Return(Box::new(result))
+}
+
+pub fn to_string_fixed_builtin(env: &mut Environment<Expression>) -> Statement {
+    let value = env
+        .lookup(&"value".to_string())
+        .map(|(_, v)| v)
+        .unwrap_or(Expression::CVoid);
+    let places = env
+        .lookup(&"places".to_string())
+        .map(|(_, v)| v)
+        .unwrap_or(Expression::CInt(0));
+
+    let places_u32 = match places {
+        Expression::CInt(i) if i >= 0 => i as usize,
+        Expression::CReal(f) if f >= 0.0 => f as usize,
+        _ => {
+            return Statement::Return(Box::new(Expression::CString(
+                "to_string_fixed: places must be a non-negative number".to_string(),
+            )))
+        }
+    };
+
+    let formatted = match value {
+        Expression::CInt(i) => format!("{:.prec$}", i as f64, prec = places_u32),
+        Expression::CReal(f) => format!("{:.prec$}", f, prec = places_u32),
+        other => format!("{:.prec$}", expr_to_string(&other), prec = places_u32),
+    };
+
+    Statement::Return(Box::new(Expression::CString(formatted)))
 }
 
 pub fn open_builtin(env: &mut Environment<Expression>) -> Statement {
@@ -185,7 +418,11 @@ mod tests {
     #[test]
     fn test_meta_stmt_table_has_correct_size() {
         let table = get_metabuiltins_table();
-        assert_eq!(table.len(), 3, "The table must contain exactly 3 functions");
+        assert_eq!(
+            table.len(),
+            13,
+            "The table must contain exactly 13 functions"
+        );
     }
 
     #[test]
@@ -205,7 +442,17 @@ mod tests {
             keys.contains(&&"open".to_string()),
             "The table must contain the key 'open'"
         );
-        assert_eq!(keys.len(), 3, "The table must contain only 3 keys");
+        assert!(keys.contains(&&"input_int".to_string()));
+        assert!(keys.contains(&&"input_real".to_string()));
+        assert!(keys.contains(&&"to_string".to_string()));
+        assert!(keys.contains(&&"to_string_fixed".to_string()));
+        assert!(keys.contains(&&"str_concat".to_string()));
+        assert!(keys.contains(&&"len".to_string()));
+        assert!(keys.contains(&&"print_line".to_string()));
+        assert!(keys.contains(&&"join".to_string()));
+        assert!(keys.contains(&&"to_int".to_string()));
+        assert!(keys.contains(&&"to_real".to_string()));
+        assert_eq!(keys.len(), 13, "The table must contain only 13 keys");
     }
 
     #[test]
@@ -240,6 +487,93 @@ mod tests {
     }
 
     #[test]
+    fn test_input_real_builtin_function_signature() {
+        let _func: MetaBuiltinStmt = input_real_builtin;
+        assert!(true, "input_real_builtin has the correct signature");
+    }
+
+    #[test]
+    fn test_len_builtin_on_string() {
+        let mut env: Environment<Expression> = Environment::new();
+        env.map_variable(
+            "value".to_string(),
+            false,
+            Expression::CString("abc".to_string()),
+        );
+        let result = len_builtin(&mut env);
+        match result {
+            Statement::Return(expr) => assert_eq!(*expr, Expression::CInt(3)),
+            _ => panic!("len_builtin must return Statement::Return"),
+        }
+    }
+
+    #[test]
+    fn test_len_builtin_on_list() {
+        let mut env: Environment<Expression> = Environment::new();
+        env.map_variable(
+            "value".to_string(),
+            false,
+            Expression::ListValue(vec![Expression::CInt(1), Expression::CInt(2)]),
+        );
+        let result = len_builtin(&mut env);
+        match result {
+            Statement::Return(expr) => assert_eq!(*expr, Expression::CInt(2)),
+            _ => panic!("len_builtin must return Statement::Return"),
+        }
+    }
+
+    #[test]
+    fn test_join_builtin() {
+        let mut env: Environment<Expression> = Environment::new();
+        env.map_variable(
+            "values".to_string(),
+            false,
+            Expression::ListValue(vec![
+                Expression::CString("a".to_string()),
+                Expression::CString("b".to_string()),
+            ]),
+        );
+        env.map_variable(
+            "sep".to_string(),
+            false,
+            Expression::CString("-".to_string()),
+        );
+        let result = join_builtin(&mut env);
+        match result {
+            Statement::Return(expr) => {
+                assert_eq!(*expr, Expression::CString("a-b".to_string()));
+            }
+            _ => panic!("join_builtin must return Statement::Return"),
+        }
+    }
+
+    #[test]
+    fn test_to_int_from_string() {
+        let mut env: Environment<Expression> = Environment::new();
+        env.map_variable(
+            "value".to_string(),
+            false,
+            Expression::CString("42".to_string()),
+        );
+        let result = to_int_builtin(&mut env);
+        match result {
+            Statement::Return(expr) => assert_eq!(*expr, Expression::CInt(42)),
+            _ => panic!("to_int_builtin must return Statement::Return"),
+        }
+    }
+
+    #[test]
+    fn test_to_real_from_int() {
+        let mut env: Environment<Expression> = Environment::new();
+        env.map_variable("value".to_string(), false, Expression::CInt(2));
+        let result = to_real_builtin(&mut env);
+        match result {
+            Statement::Return(expr) => assert_eq!(*expr, Expression::CReal(2.0)),
+            _ => panic!("to_real_builtin must return Statement::Return"),
+        }
+    }
+
+    #[test]
     fn test_print_builtin_function_signature() {
         // Checks if the print_builtin function can be called with an Environment
         let mut env: Environment<Expression> = Environment::new();
@@ -253,6 +587,20 @@ mod tests {
         match result {
             Statement::Return(_) => (), // Expected
             _ => panic!("print_builtin must return Statement::Return"),
+        }
+    }
+
+    #[test]
+    fn test_to_string_fixed_formats_real() {
+        let mut env: Environment<Expression> = Environment::new();
+        env.map_variable("value".to_string(), false, Expression::CReal(3.14159));
+        env.map_variable("places".to_string(), false, Expression::CInt(2));
+        let result = to_string_fixed_builtin(&mut env);
+        match result {
+            Statement::Return(expr) => {
+                assert_eq!(*expr, Expression::CString("3.14".to_string()));
+            }
+            _ => panic!("to_string_fixed must return a CString"),
         }
     }
 
@@ -432,17 +780,17 @@ fn main() {{
     let mut env1 = Environment::new();
     env1.map_variable("value".to_string(), false, Expression::CString("Hello World".to_string()));
     print_builtin(&mut env1);
-    
+
     // Test 2: Integer value
     let mut env2 = Environment::new();
     env2.map_variable("value".to_string(), false, Expression::CInt(42));
     print_builtin(&mut env2);
-    
+
     // Test 3: Float value
     let mut env3 = Environment::new();
     env3.map_variable("value".to_string(), false, Expression::CReal(3.14));
     print_builtin(&mut env3);
-    
+
     // Test 4: No value (should print empty string)
     let mut env4 = Environment::new();
     print_builtin(&mut env4);"#;
@@ -457,17 +805,17 @@ fn main() {{
     let mut env1 = Environment::new();
     env1.map_variable("value".to_string(), false, Expression::CString("Hello\nWorld".to_string()));
     print_builtin(&mut env1);
-    
+
     // Test string with tabs
     let mut env2 = Environment::new();
     env2.map_variable("value".to_string(), false, Expression::CString("Hello\tWorld".to_string()));
     print_builtin(&mut env2);
-    
+
     // Test empty string
     let mut env3 = Environment::new();
     env3.map_variable("value".to_string(), false, Expression::CString("".to_string()));
     print_builtin(&mut env3);
-    
+
     // Test string with special characters
     let mut env4 = Environment::new();
     env4.map_variable("value".to_string(), false, Expression::CString("Olá, 世界! 🌍".to_string()));
@@ -531,7 +879,7 @@ fn main() {{
     let mut env = Environment::new();
     env.map_variable("prompt".to_string(), false, Expression::CString("Enter your name: ".to_string()));
     let result = input_builtin(&mut env);
-    
+
     match result {
         Statement::Return(expr) => {
             if let Expression::CString(input) = *expr {
@@ -555,7 +903,7 @@ fn main() {{
     // Test without prompt (empty environment)
     let mut env = Environment::new();
     let result = input_builtin(&mut env);
-    
+
     match result {
         Statement::Return(expr) => {
             if let Expression::CString(input) = *expr {
@@ -580,7 +928,7 @@ fn main() {{
     let mut env = Environment::new();
     env.map_variable("prompt".to_string(), false, Expression::CString("Press Enter: ".to_string()));
     let result = input_builtin(&mut env);
-    
+
     match result {
         Statement::Return(expr) => {
             if let Expression::CString(input) = *expr {
@@ -605,7 +953,7 @@ fn main() {{
     let mut env = Environment::new();
     env.map_variable("prompt".to_string(), false, Expression::CString("Enter text: ".to_string()));
     let result = input_builtin(&mut env);
-    
+
     match result {
         Statement::Return(expr) => {
             if let Expression::CString(input) = *expr {

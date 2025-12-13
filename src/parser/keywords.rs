@@ -9,6 +9,8 @@ pub const KEYWORDS: &[&str] = &[
     "val",
     "var",
     "return",
+    "break",
+    "continue",
     "lambda",
     "Ok",
     "Err",
