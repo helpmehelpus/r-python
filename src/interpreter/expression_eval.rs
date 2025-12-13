@@ -273,25 +273,27 @@ fn eval_eq(
         } else {
             Expression::CFalse
         })),
-        (Expression::CInt(v1), Expression::CReal(v2)) => Ok(ExpressionResult::Value(
-            if (v1 as f64) == v2 {
+        (Expression::CInt(v1), Expression::CReal(v2)) => {
+            Ok(ExpressionResult::Value(if (v1 as f64) == v2 {
                 Expression::CTrue
             } else {
                 Expression::CFalse
-            },
-        )),
-        (Expression::CReal(v1), Expression::CInt(v2)) => Ok(ExpressionResult::Value(
-            if v1 == (v2 as f64) {
+            }))
+        }
+        (Expression::CReal(v1), Expression::CInt(v2)) => {
+            Ok(ExpressionResult::Value(if v1 == (v2 as f64) {
                 Expression::CTrue
             } else {
                 Expression::CFalse
-            },
-        )),
-        (Expression::CReal(v1), Expression::CReal(v2)) => Ok(ExpressionResult::Value(if v1 == v2 {
-            Expression::CTrue
-        } else {
-            Expression::CFalse
-        })),
+            }))
+        }
+        (Expression::CReal(v1), Expression::CReal(v2)) => {
+            Ok(ExpressionResult::Value(if v1 == v2 {
+                Expression::CTrue
+            } else {
+                Expression::CFalse
+            }))
+        }
         (Expression::CString(v1), Expression::CString(v2)) => {
             Ok(ExpressionResult::Value(if v1 == v2 {
                 Expression::CTrue
@@ -327,25 +329,27 @@ fn eval_neq(
         } else {
             Expression::CFalse
         })),
-        (Expression::CInt(v1), Expression::CReal(v2)) => Ok(ExpressionResult::Value(
-            if (v1 as f64) != v2 {
+        (Expression::CInt(v1), Expression::CReal(v2)) => {
+            Ok(ExpressionResult::Value(if (v1 as f64) != v2 {
                 Expression::CTrue
             } else {
                 Expression::CFalse
-            },
-        )),
-        (Expression::CReal(v1), Expression::CInt(v2)) => Ok(ExpressionResult::Value(
-            if v1 != (v2 as f64) {
+            }))
+        }
+        (Expression::CReal(v1), Expression::CInt(v2)) => {
+            Ok(ExpressionResult::Value(if v1 != (v2 as f64) {
                 Expression::CTrue
             } else {
                 Expression::CFalse
-            },
-        )),
-        (Expression::CReal(v1), Expression::CReal(v2)) => Ok(ExpressionResult::Value(if v1 != v2 {
-            Expression::CTrue
-        } else {
-            Expression::CFalse
-        })),
+            }))
+        }
+        (Expression::CReal(v1), Expression::CReal(v2)) => {
+            Ok(ExpressionResult::Value(if v1 != v2 {
+                Expression::CTrue
+            } else {
+                Expression::CFalse
+            }))
+        }
         (Expression::CString(v1), Expression::CString(v2)) => {
             Ok(ExpressionResult::Value(if v1 != v2 {
                 Expression::CTrue
@@ -357,7 +361,9 @@ fn eval_neq(
         (Expression::CFalse, Expression::CFalse) => Ok(ExpressionResult::Value(Expression::CFalse)),
         (Expression::CTrue, Expression::CFalse) => Ok(ExpressionResult::Value(Expression::CTrue)),
         (Expression::CFalse, Expression::CTrue) => Ok(ExpressionResult::Value(Expression::CTrue)),
-        _ => Err("inequality '(!=)' is only defined for numbers, strings and booleans.".to_string()),
+        _ => {
+            Err("inequality '(!=)' is only defined for numbers, strings and booleans.".to_string())
+        }
     }
 }
 
