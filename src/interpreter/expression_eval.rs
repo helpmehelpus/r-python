@@ -258,19 +258,53 @@ fn eval_eq(
     rhs: Expression,
     env: &Environment<Expression>,
 ) -> Result<ExpressionResult, String> {
-    eval_binary_rel_op(
-        lhs,
-        rhs,
-        env,
-        |a, b| {
-            if a == b {
+    let v1 = match eval(lhs, env)? {
+        ExpressionResult::Value(expr) => expr,
+        ExpressionResult::Propagate(expr) => return Ok(ExpressionResult::Propagate(expr)),
+    };
+    let v2 = match eval(rhs, env)? {
+        ExpressionResult::Value(expr) => expr,
+        ExpressionResult::Propagate(expr) => return Ok(ExpressionResult::Propagate(expr)),
+    };
+
+    match (v1, v2) {
+        (Expression::CInt(v1), Expression::CInt(v2)) => Ok(ExpressionResult::Value(if v1 == v2 {
+            Expression::CTrue
+        } else {
+            Expression::CFalse
+        })),
+        (Expression::CInt(v1), Expression::CReal(v2)) => Ok(ExpressionResult::Value(
+            if (v1 as f64) == v2 {
                 Expression::CTrue
             } else {
                 Expression::CFalse
-            }
-        },
-        "equality '(==)' is only defined for numbers (integers and real).",
-    )
+            },
+        )),
+        (Expression::CReal(v1), Expression::CInt(v2)) => Ok(ExpressionResult::Value(
+            if v1 == (v2 as f64) {
+                Expression::CTrue
+            } else {
+                Expression::CFalse
+            },
+        )),
+        (Expression::CReal(v1), Expression::CReal(v2)) => Ok(ExpressionResult::Value(if v1 == v2 {
+            Expression::CTrue
+        } else {
+            Expression::CFalse
+        })),
+        (Expression::CString(v1), Expression::CString(v2)) => {
+            Ok(ExpressionResult::Value(if v1 == v2 {
+                Expression::CTrue
+            } else {
+                Expression::CFalse
+            }))
+        }
+        (Expression::CTrue, Expression::CTrue) => Ok(ExpressionResult::Value(Expression::CTrue)),
+        (Expression::CFalse, Expression::CFalse) => Ok(ExpressionResult::Value(Expression::CTrue)),
+        (Expression::CTrue, Expression::CFalse) => Ok(ExpressionResult::Value(Expression::CFalse)),
+        (Expression::CFalse, Expression::CTrue) => Ok(ExpressionResult::Value(Expression::CFalse)),
+        _ => Err("equality '(==)' is only defined for numbers, strings and booleans.".to_string()),
+    }
 }
 
 fn eval_neq(
@@ -278,19 +312,53 @@ fn eval_neq(
     rhs: Expression,
     env: &Environment<Expression>,
 ) -> Result<ExpressionResult, String> {
-    eval_binary_rel_op(
-        lhs,
-        rhs,
-        env,
-        |a, b| {
-            if a != b {
+    let v1 = match eval(lhs, env)? {
+        ExpressionResult::Value(expr) => expr,
+        ExpressionResult::Propagate(expr) => return Ok(ExpressionResult::Propagate(expr)),
+    };
+    let v2 = match eval(rhs, env)? {
+        ExpressionResult::Value(expr) => expr,
+        ExpressionResult::Propagate(expr) => return Ok(ExpressionResult::Propagate(expr)),
+    };
+
+    match (v1, v2) {
+        (Expression::CInt(v1), Expression::CInt(v2)) => Ok(ExpressionResult::Value(if v1 != v2 {
+            Expression::CTrue
+        } else {
+            Expression::CFalse
+        })),
+        (Expression::CInt(v1), Expression::CReal(v2)) => Ok(ExpressionResult::Value(
+            if (v1 as f64) != v2 {
                 Expression::CTrue
             } else {
                 Expression::CFalse
-            }
-        },
-        "inequality '(!=)' is only defined for numbers (integers and real).",
-    )
+            },
+        )),
+        (Expression::CReal(v1), Expression::CInt(v2)) => Ok(ExpressionResult::Value(
+            if v1 != (v2 as f64) {
+                Expression::CTrue
+            } else {
+                Expression::CFalse
+            },
+        )),
+        (Expression::CReal(v1), Expression::CReal(v2)) => Ok(ExpressionResult::Value(if v1 != v2 {
+            Expression::CTrue
+        } else {
+            Expression::CFalse
+        })),
+        (Expression::CString(v1), Expression::CString(v2)) => {
+            Ok(ExpressionResult::Value(if v1 != v2 {
+                Expression::CTrue
+            } else {
+                Expression::CFalse
+            }))
+        }
+        (Expression::CTrue, Expression::CTrue) => Ok(ExpressionResult::Value(Expression::CFalse)),
+        (Expression::CFalse, Expression::CFalse) => Ok(ExpressionResult::Value(Expression::CFalse)),
+        (Expression::CTrue, Expression::CFalse) => Ok(ExpressionResult::Value(Expression::CTrue)),
+        (Expression::CFalse, Expression::CTrue) => Ok(ExpressionResult::Value(Expression::CTrue)),
+        _ => Err("inequality '(!=)' is only defined for numbers, strings and booleans.".to_string()),
+    }
 }
 
 fn eval_gt(

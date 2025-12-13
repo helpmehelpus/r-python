@@ -73,8 +73,11 @@ counter = counter + 1;
 | Category     | Operators                              |
 |--------------|----------------------------------------|
 | Arithmetic   | `+`, `-`, `*`, `/`                     |
-| Comparison   | `==`, `!=`, `<`, `>`, `<=`, `>=`       |
+| Equality     | `==`, `!=`                             |
+| Ordering     | `<`, `>`, `<=`, `>=`                   |
 | Logical      | `and`, `or`, `not`                     |
+
+> **Note:** Equality operators support numbers, strings, and booleans. Ordering operators are currently limited to numbers.
 
 ---
 
