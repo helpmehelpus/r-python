@@ -3032,21 +3032,35 @@ mod tests {
         }
 
         #[test]
-        fn test_relational_operators_error_with_strings() {
+        fn test_relational_operators_with_strings() {
             let env = create_test_env();
-            let expr = Expression::EQ(
+
+            // Test string equality - equal strings
+            let expr_eq = Expression::EQ(
+                Box::new(Expression::CString("hello".to_string())),
+                Box::new(Expression::CString("hello".to_string())),
+            );
+            let result = eval(expr_eq, &env);
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), ExpressionResult::Value(Expression::CTrue));
+
+            // Test string equality - unequal strings
+            let expr_neq = Expression::EQ(
                 Box::new(Expression::CString("hello".to_string())),
                 Box::new(Expression::CString("world".to_string())),
             );
+            let result = eval(expr_neq, &env);
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), ExpressionResult::Value(Expression::CFalse));
 
-            let result = eval(expr, &env);
-
-            assert!(result.is_err());
-            let error = result.unwrap_err();
-            assert_eq!(
-                error,
-                "equality '(==)' is only defined for numbers (integers and real)."
+            // Test string inequality
+            let expr_neq2 = Expression::NEQ(
+                Box::new(Expression::CString("hello".to_string())),
+                Box::new(Expression::CString("world".to_string())),
             );
+            let result = eval(expr_neq2, &env);
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), ExpressionResult::Value(Expression::CTrue));
         }
 
         #[test]
