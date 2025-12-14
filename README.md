@@ -206,7 +206,7 @@ Metabuiltins are functions implemented in Rust and exposed to user code. They ha
 
 | Function                      | Description                                                       |
 |-------------------------------|-------------------------------------------------------------------|
-| `open(path, mode?, content?)` | Open a file. Modes: `r` (read), `w` (write), `a` (append).        |
+| `open(path, mode, content)` | Open a file. Modes: `r` (read), `w` (write), `a` (append).        |
 
 ---
 

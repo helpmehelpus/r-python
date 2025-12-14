@@ -152,4 +152,15 @@ asserteq(5 * 5, 25, "5 * 5 should equal 25");
 assertneq(10, 20, "10 should not equal 20");
 var _ = print_line("All assertions passed!");
 
+var _ = print_line("=== 15. File I/O ===");
+val test_file = "examples/rpython_test.txt";
+var _ = open(test_file, "w", "Hello from RPython!");
+var _ = print("Wrote to file. Reading back: ");
+val contents = open(test_file, "r");
+var _ = print_line(contents);
+var _ = open(test_file, "a", "Appended line.");
+val contents2 = open(test_file, "r");
+var _ = print("After append: ");
+var _ = print_line(contents2);
+
 var _ = print_line("=== Demo Complete ===");
