@@ -12,6 +12,16 @@ fn join(sep: Rc<Doc>, docs: Vec<Rc<Doc>>) -> Rc<Doc> {
         .unwrap_or_else(nil)
 }
 
+/// Formats an inner block (without the trailing `end`).
+/// Used for if/elif/else branches where only one `end` closes the entire construct.
+fn inner_block_to_doc(stmts: &[Statement]) -> Rc<Doc> {
+    let stmts_doc: Vec<Rc<Doc>> = stmts.iter().map(|s| s.to_doc()).collect();
+    concat(
+        text(" :"),
+        nest(4, concat(hardline(), join(hardline(), stmts_doc))),
+    )
+}
+
 /// Implementa a conversão de nós de `Statement` da AST para a representação `Doc`.
 /// Cada variante do `enum Statement` é mapeada para um layout de formatação específico.
 impl ToDoc for Statement {
@@ -63,42 +73,80 @@ impl ToDoc for Statement {
                 )
             }
             // Formata estruturas `if-then-else`.
+            // Uses inner blocks (no `end`) and adds one `end` at the very end.
             Statement::IfThenElse(cond, then_branch, else_branch) => {
+                // Extract statements from the then block
+                let then_stmts = match then_branch.as_ref() {
+                    Statement::Block(stmts) => stmts,
+                    _ => return concat(text("if "), concat(cond.to_doc(), then_branch.to_doc())),
+                };
+
                 let mut doc = concat(
                     text("if "),
-                    concat(cond.to_doc(), concat(text(" "), then_branch.to_doc())),
+                    concat(cond.to_doc(), inner_block_to_doc(then_stmts)),
                 );
+
                 // Adiciona a cláusula `else` apenas se ela existir.
                 if let Some(else_b) = else_branch {
-                    doc = concat(doc, concat(text(" else "), else_b.to_doc()));
+                    let else_stmts = match else_b.as_ref() {
+                        Statement::Block(stmts) => stmts,
+                        _ => return concat(doc, concat(hardline(), text("end"))),
+                    };
+                    doc = concat(
+                        doc,
+                        concat(
+                            concat(hardline(), text("else")),
+                            inner_block_to_doc(else_stmts),
+                        ),
+                    );
                 }
-                doc
+                // Add the final `end`
+                concat(doc, concat(hardline(), text("end")))
             }
             // Cadeia de if/elif/else: branches: Vec<(cond, bloco)>, else_branch opcional
+            // Uses inner blocks and adds one `end` at the very end.
             Statement::IfChain {
                 branches,
                 else_branch,
             } => {
+                // Helper to extract statements from a block
+                fn get_stmts(block: &Statement) -> &[Statement] {
+                    match block {
+                        Statement::Block(stmts) => stmts,
+                        _ => &[],
+                    }
+                }
+
                 // Primeiro branch usa 'if', subsequentes usam 'elif'
                 let mut iter = branches.iter();
                 if let Some((first_cond, first_block)) = iter.next() {
+                    let first_stmts = get_stmts(first_block.as_ref());
                     let mut acc = concat(
                         text("if "),
-                        concat(first_cond.to_doc(), concat(text(" "), first_block.to_doc())),
+                        concat(first_cond.to_doc(), inner_block_to_doc(first_stmts)),
                     );
                     for (cond, block) in iter {
+                        let block_stmts = get_stmts(block.as_ref());
                         acc = concat(
                             acc,
                             concat(
-                                text(" elif "),
-                                concat(cond.to_doc(), concat(text(" "), block.to_doc())),
+                                concat(hardline(), text("elif ")),
+                                concat(cond.to_doc(), inner_block_to_doc(block_stmts)),
                             ),
                         );
                     }
                     if let Some(else_b) = else_branch {
-                        acc = concat(acc, concat(text(" else "), else_b.to_doc()));
+                        let else_stmts = get_stmts(else_b.as_ref());
+                        acc = concat(
+                            acc,
+                            concat(
+                                concat(hardline(), text("else")),
+                                inner_block_to_doc(else_stmts),
+                            ),
+                        );
                     }
-                    acc
+                    // Add the final `end`
+                    concat(acc, concat(hardline(), text("end")))
                 } else {
                     // Sem branches: devolve bloco vazio
                     text("")

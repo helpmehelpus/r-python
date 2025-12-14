@@ -210,8 +210,8 @@ mod statement_tests {
         assert_eq!(rest, "");
         assert_eq!(result, expected);
 
-        // Test with else
-        let input = "if x > 0: y = 1; end else: y = 2; end";
+        // Test with else (new syntax: one `end` at the very end)
+        let input = "if x > 0: y = 1; else: y = 2; end";
         let expected = Statement::IfThenElse(
             Box::new(Expression::GT(
                 Box::new(Expression::Var("x".to_string())),

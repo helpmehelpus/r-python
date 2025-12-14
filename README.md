@@ -111,14 +111,14 @@ RPython uses explicit, static types for function parameters and return values. V
 ```text
 if score >= 90:
     grade = "A";
-end elif score >= 80:
+elif score >= 80:
     grade = "B";
-end else:
+else:
     grade = "C";
 end
 ```
 
-Each branch in an if-chain has its own block terminated by `end`. The `elif` and `else` keywords follow the preceding `end`.
+A single `end` closes the entire if-chain. The `elif` and `else` keywords introduce new branches without requiring separate `end` markers.
 
 ### Loops
 
@@ -147,7 +147,7 @@ Functions require type annotations for parameters and return type.
 def factorial(n: Int) -> Int:
     if n <= 1:
         return 1;
-    end else:
+    else:
         return n * factorial(n - 1);
     end;
 end;

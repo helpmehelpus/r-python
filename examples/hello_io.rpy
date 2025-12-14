@@ -45,11 +45,11 @@ val score = 85;
 var _ = print("Score 85 gets grade: ");
 if score >= 90:
     var _ = print_line("A");
-end elif score >= 80:
+elif score >= 80:
     var _ = print_line("B");
-end elif score >= 70:
+elif score >= 70:
     var _ = print_line("C");
-end else:
+else:
     var _ = print_line("F");
 end;
 
@@ -89,9 +89,9 @@ var _ = print("Skip evens: ");
 for k in [0, 1, 2, 3, 4, 5]:
     if k == 0:
         continue;
-    end elif k == 2:
+    elif k == 2:
         continue;
-    end elif k == 4:
+    elif k == 4:
         continue;
     end;
     var _ = print(k);
@@ -103,7 +103,7 @@ var _ = print_line("=== 9. Functions ===");
 def factorial(n: Int) -> Int:
     if n <= 1:
         return 1;
-    end else:
+    else:
         return n * factorial(n - 1);
     end;
 end;
