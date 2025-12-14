@@ -125,13 +125,13 @@ A single `end` closes the entire if-chain. The `elif` and `else` keywords introd
 ```text
 var i = 0;
 while i < 5:
-    print(i);
+    var _ = print_line(to_string(i));
     i = i + 1;
-end
+end;
 
 for x in [1, 2, 3]:
-    print(x);
-end
+    var _ = print_line(to_string(x));
+end;
 ```
 
 - `break` exits the innermost loop immediately.
@@ -153,7 +153,7 @@ def factorial(n: Int) -> Int:
 end;
 
 val result = factorial(5);
-assertrue(result == 120, "5! should be 120");
+asserttrue(result == 120, "5! should be 120");
 ```
 
 > **Syntax note:** Block statements (`if`, `while`, `for`, `def`) require a semicolon after the closing `end` when followed by additional statements at the same level.
@@ -163,9 +163,11 @@ assertrue(result == 120, "5! should be 120");
 Anonymous functions can be assigned to variables or passed as arguments.
 
 ```text
-val add = lambda (a: Int, b: Int) -> Int: a + b end;
+val add = lambda (a: Int, b: Int) -> Int: return a + b end;
 val sum = add(2, 3);
 ```
+
+> **Current limitation:** Lambdas are parsed correctly but not yet fully implemented in the interpreter.
 
 ---
 
@@ -232,6 +234,8 @@ RPython provides two monadic types for representing optional or fallible values:
 
 ADTs can be declared with multiple constructors. Pattern matching is not yet implemented; values are constructed and passed around opaquely.
 
+> **Current limitation:** ADT declarations are parsed as types but cannot yet be declared as top-level statements. The syntax shown below is the planned syntax; it is not yet functional.
+
 ```text
 data Shape:
     | Circle Int
@@ -290,6 +294,32 @@ src/
 - **`interpreter/statement_execute.rs`** — Executes statements; handles loops with `break`/`continue`.
 - **`interpreter/expression_eval.rs`** — Evaluates expressions; dispatches metabuiltin calls.
 - **`stdlib/standard_library.rs`** — Implements 13 metabuiltins.
+- **`pretty_print/`** — AST-to-source formatter (see below).
+
+### Pretty Printer
+
+The `pretty_print` module converts parsed AST nodes back into readable RPython source code. It is primarily used for:
+
+- **Testing round-trip correctness:** parse → pretty-print → compare.
+- **Debugging:** inspect how the parser understood your code.
+- **Future tooling:** code formatters, IDE integrations.
+
+The pretty printer is **not invoked during normal program execution**. It is available via the `prelude` module for programmatic use:
+
+```rust
+use r_python::prelude::{pretty, ToDoc};
+// pretty(80, &statement.to_doc()) → formatted String
+```
+
+Optional feature flags enable performance instrumentation:
+
+```bash
+# Timing metrics
+cargo run --features pp-timing --example pp_timing
+
+# Profile counters
+cargo run --features pp-profile --example pp_bench
+```
 
 ---
 
@@ -347,6 +377,12 @@ The interpreter reads from stdin and writes to stdout, making it suitable for au
 5. **Limited error messages:** parser and type checker errors are functional but not always user-friendly.
 6. **No tail-call optimization:** deep recursion may overflow the stack.
 7. **Maybe/Result constructors:** `Just()`, `Nothing`, `Ok()`, `Err()` cannot be parsed from source code yet.
+8. **Small standard library:** only a small set of metabuiltins is available (basic I/O, conversions, simple string/list helpers); there are no rich libraries for math, dates/times, networking, etc.
+9. **No exceptions:** there is no `try`/`catch` mechanism or exception hierarchy; errors are represented via `Maybe`/`Result` types or abort execution with an error message.
+10. **No objects or methods:** there are no classes, interfaces, or method calls; programs are written with functions, lists/tuples, and algebraic data types.
+11. **No concurrency or async:** the language has no built-in support for threads, async/await, or parallel execution.
+12. **Interpreter-only, unoptimized:** execution is performed by a tree-walking interpreter without bytecode/JIT or optimization passes, so performance is below production-grade VMs/compilers.
+13. **Minimal tooling:** beyond the CLI and internal pretty printer, there is no dedicated debugger, formatter binary, or IDE integration yet.
 
 ---
 

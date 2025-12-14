@@ -2,7 +2,7 @@ use nom::{
     branch::alt,
     bytes::complete::{tag, take_while},
     character::complete::{char, digit1, multispace0},
-    combinator::{map, map_res, opt, value, verify},
+    combinator::{map, map_res, opt, value},
     error::Error,
     multi::{fold_many0, separated_list0},
     sequence::{delimited, pair, preceded, terminated, tuple},
@@ -483,5 +483,18 @@ mod tests {
         } else {
             panic!("Expected ListValue expression");
         }
+    }
+}
+
+#[cfg(test)]
+mod lambda_tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_lambda_simple() {
+        let input = "lambda (x: Int) -> Int: return x end";
+        let result = parse_lambda(input);
+        println!("{:?}", result);
+        assert!(result.is_ok());
     }
 }

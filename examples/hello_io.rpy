@@ -33,10 +33,14 @@ var _ = print("5 == 5: ");
 var _ = print_line(5 == 5);
 var _ = print("10 > 3: ");
 var _ = print_line(10 > 3);
+var _ = print("2 < 1: ");
+var _ = print_line(2 < 1);
 var _ = print("True and True: ");
 var _ = print_line(True and True);
 var _ = print("False or True: ");
 var _ = print_line(False or True);
+var _ = print("not True: ");
+var _ = print_line(not True);
 var _ = print("not False: ");
 var _ = print_line(not False);
 
